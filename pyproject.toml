@@ -1,0 +1,102 @@
+[build-system]
+requires = [
+    "hatchling >= 1.26",
+    "hatch-vcs==0.3.0"
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "python_template"
+description = "Template repository for python projects"
+readme.content-type = "text/markdown"
+readme.file = "README.md"
+dynamic = [ "version" ]
+authors = [
+    {name = "Cristian Ordonez", email = "cristianordonezrd@gmail.com"},
+]
+urls.Repository = "https://github.com/cristianordonez/python_template.git"
+requires-python = ">= 3.12"
+scripts.cli = "python_template.presentation.cli.app:main"
+dependencies = [
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.11.0",
+]
+
+
+[dependency-groups]
+dev = [
+    { include-group = "test" },
+    { include-group = "docs" },
+    { include-group = "fix" },
+]
+test = [
+    "pytest>=8.4.2",
+    "pytest-cov"
+]
+docs = [
+    "sphinx>=7.4.7",
+    "sphinx-argparse"
+]
+fix = [
+    "pre-commit-uv"
+]
+
+
+[tool.hatch]
+version.source = "vcs"
+build.hooks.vcs.version-file = "src/python_template/_version.py"
+build.dev-mode-dirs = [
+  "src",
+]
+build.targets.sdist.include = [ 
+    "src",
+    "/tests",
+    "/tox.toml"
+]
+build.targets.wheel.packages = [ "src/python_template" ]
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+unsafe-fixes = false
+exclude = [
+    ".git",
+    ".venv",
+    ".ruff_cache",
+    ".tox",
+    ".vscode",
+    "dist"
+]
+lint.ignore = [] # Avoid enforcing specific violations
+lint.fixable = ["ALL"] # Allow fix for all enabled rules (when `--fix`) is provided.
+lint.unfixable = [ "F401" ] # Disables automatic or removal of unused imports, will still fail ruff checks
+lint.per-file-ignores."!src/**.py" = [ "D" ] # don't care about documentation in non package files
+lint.flake8-errmsg.max-string-length = 30 # max length of string literal in error message
+lint.flake8-import-conventions.banned-from = [ "typing" ]
+lint.isort = { known-first-party = [
+    "tox", "tests"
+], required-imports = [
+    "from __future__ import annotations"
+]}
+format.docstring-code-line-length = "dynamic"
+format.skip-magic-trailing-comma = false
+format.line-ending = "auto"
+format.quote-style = "double"
+format.docstring-code-format = true
+format.indent-style = "space"
+
+[tool.ty]
+environment.python-version = "3.14"
+environment.root = ["./src"]
+src.include = [
+    "src",
+    "tests",
+]
+
+[tool.codespell]
+count = true
+quiet-level = 3
+
+# [tool.pytest]
+
+# [tool.coverage]

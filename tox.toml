@@ -1,0 +1,57 @@
+requires = [ "tox>=4.54" ]
+env_list = [
+    "3.15",
+    "3.14",
+    "3.13",
+    "3.12",
+    "docs",
+    "fix"
+]
+skip_missing_interpreters = true
+
+[env_run_base]
+description = "Run pytest for python package"
+package = "wheel"
+dependency_groups = [ "test" ]
+set_env.COVERAGE_FILE = { replace = "env", name = "COVERAGE_FILE", default = "{work_dir}{/}.coverage.{env_name}" }
+commands = [
+  [
+    "pytest",
+    { replace = "posargs", default = [
+      "--durations",
+      "0",
+      "--durations-min",
+      "0.5",
+      "--junitxml",
+      "{work_dir}{/}junit.{env_name}.xml",
+      "--cov-report",
+      "html:{env_tmp_dir}{/}htmlcov",
+      "--cov-report",
+      "xml:{work_dir}{/}coverage.{env_name}.xml",
+      "tests",
+    ], extend = true },
+  ],
+  [
+    "diff-cover",
+    "--compare-branch",
+    { replace = "env", name = "DIFF_AGAINST", default = "origin/main" },
+    "{work_dir}{/}coverage.{env_name}.xml",
+  ],
+]
+uv_seed = true
+
+[env.docs]
+description = "build the docs"
+dependency_groups = [ "docs" ]
+
+[env.fix]
+description = "format and type check the code base and complain about what we cannot do automatically"
+skip_install = true
+dependency_groups = [ "fix" ]
+commands = [ [
+    "pre-commit", 
+    "run", 
+    "--all-files", 
+    "--show-diff-on-failure", 
+    { replace = "posargs", extend = true } 
+] ]

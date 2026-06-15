@@ -1,0 +1,16 @@
+repos:
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+  # update uv.lock
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.10.11
+    hooks:
+      - id: uv-lock
+  # run linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
