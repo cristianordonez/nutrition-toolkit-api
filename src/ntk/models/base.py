@@ -14,7 +14,7 @@ from pydantic_settings import (
 
 
 def get_env_file() -> Path:
-    env_file = os.getenv("PYTHON_TEMPLATE_CONFIG_FILE", None)
+    env_file = os.getenv("NUTRITION_CONFIG_FILE", None)
     if env_file is not None:
         return Path(env_file)
     return Path().cwd() / "config.ini"

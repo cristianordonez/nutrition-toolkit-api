@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, TypeVar
 
-from python_template.models.base import AppSettings
+from ntk.models.base import AppSettings
 
 if TYPE_CHECKING:
     import argparse

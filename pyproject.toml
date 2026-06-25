@@ -6,7 +6,7 @@ requires = [
 build-backend = "hatchling.build"
 
 [project]
-name = "python_template"
+name = "ntk"
 description = "Template repository for python projects"
 readme.content-type = "text/markdown"
 readme.file = "README.md"
@@ -14,14 +14,15 @@ dynamic = [ "version" ]
 authors = [
     {name = "Cristian Ordonez", email = "cristianordonezrd@gmail.com"},
 ]
-urls.Repository = "https://github.com/cristianordonez/python_template.git"
+urls.Repository = "https://github.com/cristianordonez/nutrition-toolkit-cli.git"
 requires-python = ">= 3.12"
-scripts.cli = "python_template.presentation.cli.app:main"
 dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
 ]
 
+[project.scripts]
+ntk = "ntk.presentation.cli.app:main"
 
 [dependency-groups]
 dev = [
@@ -44,7 +45,7 @@ fix = [
 
 [tool.hatch]
 version.source = "vcs"
-build.hooks.vcs.version-file = "src/python_template/_version.py"
+build.hooks.vcs.version-file = "src/ntk/_version.py"
 build.dev-mode-dirs = [
   "src",
 ]
@@ -53,7 +54,7 @@ build.targets.sdist.include = [
     "/tests",
     "/tox.toml"
 ]
-build.targets.wheel.packages = [ "src/python_template" ]
+build.targets.wheel.packages = [ "src/ntk" ]
 
 [tool.ruff]
 line-length = 88

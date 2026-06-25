@@ -6,10 +6,10 @@ import argparse
 import pathlib
 import sys
 
-from python_template import VERSION
-from python_template.commands import load_commands
-from python_template.commands.registry import COMMAND_REGISTRY
-from python_template.logger import setup_logging
+from ntk import VERSION
+from ntk.commands import load_commands
+from ntk.commands.registry import COMMAND_REGISTRY
+from ntk.logger import setup_logging
 
 
 def main(args: list[str] | None = None) -> None:
@@ -18,9 +18,8 @@ def main(args: list[str] | None = None) -> None:
         args: list[str] = sys.argv[1:]
     root = create_root_parser()
     subparser = root.add_subparsers(dest="command", required=True)
-    load_commands("python_template.commands")
+    load_commands("ntk.commands")
     commands = COMMAND_REGISTRY.values()
-    print("commands: ", commands)
     for command in commands:
         cmd_instance = command()
         cmd_instance.register(subparser)
@@ -31,8 +30,9 @@ def main(args: list[str] | None = None) -> None:
         options.log_file_interval,
         options.log_file_backup_count,
     )
-    logger.info(f"Options: {options}")
-    logger.info(f"args: {args}")
+    logger.debug(f"Commands: {commands}")
+    logger.debug(f"Options: {options}")
+    logger.debug(f"args: {args}")
     raise SystemExit(options.func(options))
 
 
@@ -41,9 +41,7 @@ def create_root_parser() -> argparse.ArgumentParser:
 
     :return: ArgumentParser
     """
-    parser = argparse.ArgumentParser(
-        prog="python_template", description="Application description"
-    )
+    parser = argparse.ArgumentParser(prog="ntk", description="Application description")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument(
         "--log-file-interval",

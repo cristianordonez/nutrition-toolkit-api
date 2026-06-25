@@ -47,9 +47,10 @@ Template repository for creating extendable and modern python cli and gui applic
 pyenv versions
 ```
 
-- Virtual environments are managed with uv. Install new python versions with the following command:
+- Virtual environments are managed with uv. Create new virtual environment and install new python versions with the following command:
 
 ```bash
+uv venv
 uv python install <version>
 ```
 
@@ -74,7 +75,13 @@ uv sync
 - Run application
 
 ```bash
-uv run python -m python_template
+uv run python -m ntk
+```
+
+- Or source .venv and run as normal:
+
+```bash
+source .venv/bin/activate
 ```
 
 - To add packages to repository, use following command from the root of the repository:

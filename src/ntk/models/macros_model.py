@@ -10,7 +10,7 @@ from pydantic import (
 from .base import AppSettings
 
 
-class RunTestModel(AppSettings):
+class MacrosModel(AppSettings):
     auth_key: str = Field(description="Authentication key")
     api_key: str = Field(description="API key")
     pg_dsn: PostgresDsn = Field(
