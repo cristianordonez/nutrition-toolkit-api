@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from ntk.commands.base import BaseCommand
+from ntk.controllers.base import BaseController
 from ntk.models.macros_model import MacrosModel
 
 if TYPE_CHECKING:
@@ -12,11 +12,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class MacrosSubCommand(BaseCommand):
+class MacrosController(BaseController):
     name = "macros"
-    help = "macros subcommand"
+    help = "macros command"
     options = MacrosModel
 
     def run(self, args: argparse.Namespace) -> int:
         logger.info("Calculating macronutrient needs")
+        print("args: ", args)
         return 0

@@ -4,11 +4,11 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
-    from .base import BaseCommand
+    from .base import BaseController
 
-T = TypeVar("T", bound="BaseCommand")
+T = TypeVar("T", bound="BaseController")
 
-COMMAND_REGISTRY: dict[str, type[BaseCommand]] = {}
+COMMAND_REGISTRY: dict[str, type[BaseController]] = {}
 
 
 def register_command() -> Callable[[type[T]], type[T]]:

@@ -7,8 +7,8 @@ import pathlib
 import sys
 
 from ntk import VERSION
-from ntk.commands import load_commands
-from ntk.commands.registry import COMMAND_REGISTRY
+from ntk.controllers import load_commands
+from ntk.controllers.registry import COMMAND_REGISTRY
 from ntk.logger import setup_logging
 
 
@@ -18,7 +18,7 @@ def main(args: list[str] | None = None) -> None:
         args: list[str] = sys.argv[1:]
     root = create_root_parser()
     subparser = root.add_subparsers(dest="command", required=True)
-    load_commands("ntk.commands")
+    load_commands("ntk.controllers")
     commands = COMMAND_REGISTRY.values()
     for command in commands:
         cmd_instance = command()
