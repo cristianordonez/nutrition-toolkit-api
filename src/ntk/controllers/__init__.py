@@ -1,4 +1,4 @@
-"""Contains all CLI command and command groups"""
+"""Contains all CLI command and command groups."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ def load_commands(package_name: str) -> None:
     """
     package = importlib.import_module(package_name)
     for _, module_name, _ in pkgutil.walk_packages(
-        package.__path__, package.__name__ + "."
+        package.__path__,
+        package.__name__ + ".",
     ):
         importlib.import_module(module_name)

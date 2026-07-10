@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import logging
+import typing
 from logging.handlers import TimedRotatingFileHandler
-from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from typing import Literal
+if typing.TYPE_CHECKING:
+    from pathlib import Path
 
 
 def setup_logging(
-    debug: bool = False,
     log_file: Path | None = None,
     interval: int | None = None,
     backup_count: int | None = None,
+    *,
+    debug: bool = False,
 ) -> logging.Logger:
     """Set up root logger when app is initialized.
 
@@ -33,7 +33,7 @@ def setup_logging(
     return logger
 
 
-def _setup_stdout_handler(level: Literal[10, 20]) -> logging.StreamHandler:
+def _setup_stdout_handler(level: typing.Literal[10, 20]) -> logging.StreamHandler:
     handler = logging.StreamHandler()
     handler.setLevel(level)
     handler.setFormatter(fmt=_get_formatter())
@@ -41,12 +41,15 @@ def _setup_stdout_handler(level: Literal[10, 20]) -> logging.StreamHandler:
 
 
 def _setup_file_handler(
-    log_file: Path, interval: int | None, backup_count: int | None
+    log_file: Path,
+    interval: int | None,
+    backup_count: int | None,
 ) -> TimedRotatingFileHandler:
     interval = 1 if interval is None else interval
     backup_count = 30 if backup_count is None else backup_count
     if log_file.exists() is False:
-        raise FileNotFoundError(f"Log file not found: {log_file}")
+        msg = f"Log file not found: {log_file}"
+        raise FileNotFoundError(msg)
     handler = TimedRotatingFileHandler(
         filename=log_file,
         when="midnight",
@@ -59,8 +62,7 @@ def _setup_file_handler(
 
 
 def _get_formatter() -> logging.Formatter:
-    formatter = logging.Formatter(
+    return logging.Formatter(
         fmt="%(levelname)s | %(asctime)s | %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    return formatter

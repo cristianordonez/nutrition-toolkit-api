@@ -1,16 +1,8 @@
-# python-template
+# Nutrition Toolkit API
 
-Template repository for creating extendable and modern python cli and gui applications. Well documented configuration files so it can be edited to match projects needs.
+FastAPI interface for the nutrition toolkit application with CLI tool support.
 
 ## TODO
-
-- generate command line options using pydantic models
-
-- add config.ini support for command line options
-
-- update AUTHORS file
-
-- add config.ini support for arguments
 
 - run and configure test suite for python 3.12, 3.13, and 3.14
 
@@ -28,16 +20,15 @@ Template repository for creating extendable and modern python cli and gui applic
 
 - set up github actions - lint, format, type check, build, test, deploy package to github packages
 
-
 - create workflow to update version in __version__.py, consider using uv or hatch to release new version
+
+- publish to pypi
 
 - add branch protection rules on repository
 
 - Update README.md
 
-- For practice app, create mcp server that pulls in official academy of nutrition and dietetics textbooks for context
-
-# Development
+## Development
 
 - System python is available at /usr/bin/python3
 
@@ -75,13 +66,7 @@ uv sync
 - Run application
 
 ```bash
-uv run python -m ntk
-```
-
-- Or source .venv and run as normal:
-
-```bash
-source .venv/bin/activate
+uv run ntk
 ```
 
 - To add packages to repository, use following command from the root of the repository:
@@ -90,12 +75,12 @@ source .venv/bin/activate
 uv add pydantic
 ```
 
-# Pre-Commit
+## Pre-Commit
 
 - Install pre-commit with uv
 
 ```bash
-uv tool install pre-commit
+uv tool install pre-commit --with pre-commit-uv
 ```
 
 - Install git-hooks scripts
@@ -104,7 +89,7 @@ uv tool install pre-commit
 pre-commit install
 ```
 
-# Testing
+## Testing
 
 - Install tox with uv
 
@@ -112,7 +97,13 @@ pre-commit install
 uv tool install tox --with tox-uv
 ```
 
-# References
+- Using the tox command will run all pre-commit hooks which include linting, formatting and type checking the code base. To run a single pre commit hook use the following command:
+
+```bash
+pre-commit run <hook-id>
+```
+
+## References
 
 [uv](https://docs.astral.sh/uv/concepts/tools/#tool-versions)
 [tox-uv](https://github.com/tox-dev/tox-uv)

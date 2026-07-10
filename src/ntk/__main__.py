@@ -1,4 +1,4 @@
-"""Template repository for creating extendable and modern python cli and gui applications"""
+"""Execution context when calling package directly."""
 
 from __future__ import annotations
 

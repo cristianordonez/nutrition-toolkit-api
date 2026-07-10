@@ -31,15 +31,22 @@ dev = [
     { include-group = "fix" },
 ]
 test = [
+    "covdefaults>=2.3.0",
+    "coverage>=7.14.1",
+    "diff-cover>=10.3.0",
     "pytest>=8.4.2",
-    "pytest-cov"
+    "pytest-cov",
 ]
 docs = [
     "sphinx>=7.4.7",
-    "sphinx-argparse"
+    "sphinx-argparse-cli>=1.21.4",
 ]
 fix = [
+    "pre-commit>=4.6.0",
     "pre-commit-uv"
+]
+type = [
+    "ty>=0.0.57",
 ]
 
 
@@ -68,11 +75,17 @@ exclude = [
     ".vscode",
     "dist"
 ]
-lint.ignore = [] # Avoid enforcing specific violations
-lint.fixable = ["ALL"] # Allow fix for all enabled rules (when `--fix`) is provided.
+lint.select = [ "ALL" ] # Select which linting rules to use
+lint.ignore = [
+    "D100", # Ignore missing docstring in public modules
+    "D104", # Missing docstring in public package
+    "D203", # incorrect blank line before class, conflicts with D211
+    "D213" # multi line summary second line, conflicts with D212
+] # Avoid enforcing specific violations
+lint.fixable = [ "ALL" ] # Allow fix for all enabled rules (when `--fix`) is provided.
 lint.unfixable = [ "F401" ] # Disables automatic or removal of unused imports, will still fail ruff checks
-lint.per-file-ignores."!src/**.py" = [ "D" ] # don't care about documentation in non package files
-lint.flake8-errmsg.max-string-length = 30 # max length of string literal in error message
+lint.per-file-ignores."!src/**.py" = [ "D" ] # Don't care about documentation in non package files
+lint.flake8-errmsg.max-string-length = 30 # Max length of string literal in error message
 lint.flake8-import-conventions.banned-from = [ "typing" ]
 lint.isort = { known-first-party = [
     "tox", "tests"
@@ -98,6 +111,26 @@ src.include = [
 count = true
 quiet-level = 3
 
-# [tool.pytest]
+[tool.pytest]
+ini_options.testpaths = [
+  "tests",
+]
 
-# [tool.coverage]
+
+[tool.coverage]
+run.parallel = true
+run.plugins = [
+  "covdefaults",
+]
+paths.source = [
+  "src",
+  ".tox*/*/lib/python*/site-packages",
+  ".tox*/pypy*/site-packages",
+  ".tox*\\*\\Lib\\site-packages",
+  "*/src",
+  "*\\src",
+]
+report.fail_under = 88
+report.omit = []
+html.show_contexts = true
+html.skip_covered = false

@@ -1,4 +1,4 @@
-"""Base Model will be pydantic class that grabs default values from environment or config.ini"""
+"""Base Model will be pydantic class that grabs default values from environment."""
 
 from __future__ import annotations
 
@@ -14,13 +14,16 @@ from pydantic_settings import (
 
 
 def get_env_file() -> Path:
+    """Get path to env file."""
     env_file = os.getenv("NUTRITION_CONFIG_FILE", None)
     if env_file is not None:
         return Path(env_file)
     return Path().cwd() / "config.ini"
 
 
-class AppSettings(BaseSettings):
+class CustomBaseSettings(BaseSettings):
+    """Base Model used for Controller options."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -37,7 +40,8 @@ class AppSettings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ):
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Set priority that default values obtained from."""
         return (
             init_settings,  # CLI overrides
             env_settings,  # Environment variables
