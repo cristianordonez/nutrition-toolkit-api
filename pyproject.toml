@@ -49,7 +49,6 @@ type = [
     "ty>=0.0.57",
 ]
 
-
 [tool.hatch]
 version.source = "vcs"
 build.hooks.vcs.version-file = "src/ntk/_version.py"
