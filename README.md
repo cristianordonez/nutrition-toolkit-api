@@ -105,10 +105,18 @@ pre-commit run <hook-id>
 
 ## References
 
-[uv](https://docs.astral.sh/uv/concepts/tools/#tool-versions)
-[tox-uv](https://github.com/tox-dev/tox-uv)
-[ruff](https://docs.astral.sh/ruff/)
-[ty](https://docs.astral.sh/ty/)
+- [Customizaition][customization]
+- [MCP Server][mcp-server]
+- [Documentation with Readthedocs][readthedocs]
+- [uv][uv]
+- [Using Tox with UV][tox-uv]
+- [Ruff integration][ruff]
+- [Ty type checking][ty]
 
-- [Customization](https://code.visualstudio.com/docs/copilot/concepts/customization)
-- [mcp-server](https://modelcontextprotocol.io/extensions/apps/build#manual-setup)
+[customization]: https://code.visualstudio.com/docs/copilot/concepts/customization
+[mcp-server]: https://modelcontextprotocol.io/extensions/apps/build#manual-setup
+[readthedocs]: https://app.readthedocs.org/projects/nutrition-toolkit-api/
+[uv]: https://docs.astral.sh/uv/concepts/tools/#tool-versions
+[tox-uv]: https://github.com/tox-dev/tox-uv
+[ruff]: https://docs.astral.sh/ruff/
+[ty]: https://docs.astral.sh/ty/
