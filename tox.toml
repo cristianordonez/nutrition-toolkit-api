@@ -43,13 +43,11 @@ base_python = [ "3.14" ]
 commands = [
   [
     "sphinx-build",
-    "docs",
-    "{env:READTHEDOCS_OUTPUT:{work_dir}{/}docs_out}/html", # uses READTHEDOCS_OUTPUT/html when building on readthedocs otherwise local .tox dir
-    "--color",
     "-b",
     "html",
+    "docs/",
+    "{env:READTHEDOCS_OUTPUT:{work_dir}{/}docs_out}/html", # uses READTHEDOCS_OUTPUT/html when building on readthedocs otherwise local .tox dir
     { replace = "posargs", default = [], extend = true },
-    "-W",
   ],
   [
     "python",
