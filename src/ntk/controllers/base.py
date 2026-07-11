@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import types
 import typing
 from abc import ABC, abstractmethod
 from types import GenericAlias
@@ -45,15 +46,16 @@ class BaseController[T](ABC):
         if self.options_model is not None:
             for name, field in self.options_model.model_fields.items():
                 annotation = field.annotation
+                origin = typing.get_origin(annotation)
                 required = not field.default is not PydanticUndefined
                 kwargs = {"help": field.description, "required": required}
                 kwargs["default"] = field.default
                 if annotation is bool:
                     kwargs["action"] = "store_true"
-                elif typing.get_origin(annotation) is typing.Literal:
+                elif origin is typing.Literal:
                     kwargs["choices"] = typing.get_args(annotation)
                 elif (
-                    typing.get_origin(annotation) is typing.Union
+                    origin is typing.Union or origin is types.UnionType
                 ):  # account for None type
                     default_args = typing.get_args(annotation)
                     if isinstance(

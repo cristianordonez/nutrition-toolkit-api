@@ -19,6 +19,7 @@ requires-python = ">= 3.12"
 dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
@@ -114,6 +115,9 @@ quiet-level = 3
 [tool.pytest]
 ini_options.testpaths = [
   "tests",
+]
+ini_options.filterwarnings = [
+    "ignore:unclosed database in <sqlite3.Connection object at:ResourceWarning",
 ]
 
 

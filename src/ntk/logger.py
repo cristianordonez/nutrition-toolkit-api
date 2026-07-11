@@ -29,7 +29,7 @@ def setup_logging(
         file_handler = _setup_file_handler(log_file, interval, backup_count)
         logger.addHandler(hdlr=file_handler)
     logger.addHandler(stdout_handler)
-    logger.setLevel(debug)
+    logger.setLevel(level)
     return logger
 
 

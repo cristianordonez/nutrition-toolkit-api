@@ -424,6 +424,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -463,6 +464,7 @@ type = [
 requires-dist = [
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [package.metadata.requires-dev]

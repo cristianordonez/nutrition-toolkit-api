@@ -65,6 +65,7 @@ class EnergyController(BaseController):
             gender=options.gender,
             age=options.age,
             activity_level=options.activity_level,
+            amputation=options.amputation,
         )
         self.results: dict[str, int | float | str] = {
             "BMI": calc.bmi,
