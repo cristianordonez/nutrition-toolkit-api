@@ -7,4 +7,4 @@ build:
     - pip install uv
     - uv venv -p 3.14
     - uv pip install tox-uv ntk@.
-    - .venv/bin/tox --verbose -e docs
+    - tox --verbose -e docs
