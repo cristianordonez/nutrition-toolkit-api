@@ -112,6 +112,7 @@ pre-commit run <hook-id>
 - [Using Tox with UV][tox-uv]
 - [Ruff integration][ruff]
 - [Ty type checking][ty]
+- [Sphinx][sphinx-rtd]
 
 [customization]: https://code.visualstudio.com/docs/copilot/concepts/customization
 [mcp-server]: https://modelcontextprotocol.io/extensions/apps/build#manual-setup
@@ -119,4 +120,5 @@ pre-commit run <hook-id>
 [uv]: https://docs.astral.sh/uv/concepts/tools/#tool-versions
 [tox-uv]: https://github.com/tox-dev/tox-uv
 [ruff]: https://docs.astral.sh/ruff/
+[sphinx-rtd]: https://sphinx-rtd-tutorial.readthedocs.io/en/latest/sphinx-config.html
 [ty]: https://docs.astral.sh/ty/

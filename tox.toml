@@ -44,7 +44,7 @@ commands = [
   [
     "sphinx-build",
     "docs",
-    "{env:READTHEDOCS_OUTPUT:{tox_root}{/}docs{/}_build}/html",
+    "{env:READTHEDOCSOUTPUT:{work_dir}{/}docs_out}/html", # uses READTHEDOCSOUTPUT/html when building on readthedocs otherwise local .tox dir
     "--color",
     "-b",
     "html",
@@ -54,7 +54,7 @@ commands = [
   [
     "python",
     "-c",
-    'print(r"documentation available under file://{tox_root}{/}docs{/}_build{/}html{/}index.html")',
+    'print(r"documentation available under file://{work_dir}{/}docs_out{/}html{/}index.html")',
   ]
 ]
 
