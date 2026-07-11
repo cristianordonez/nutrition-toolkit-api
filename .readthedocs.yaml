@@ -8,4 +8,4 @@ build:
     - uv venv -p 3.14
     - uv pip install tox tox-uv sphinx sphinx-rtd-theme
     - mkdir -p $READTHEDOCS_OUTPUT/html/
-    - ./venv/bin/sphinx-build -b html docs/ $READTHEDOCS_OUTPUT/html/
+    - .venv/bin/sphinx-build -b html docs/ $READTHEDOCS_OUTPUT/html/
