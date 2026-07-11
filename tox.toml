@@ -44,8 +44,7 @@ commands = [
   [
     "sphinx-build",
     "docs",
-    "{env:READTHEDOCSOUTPUT}/html", # uses READTHEDOCSOUTPUT/html when building on readthedocs otherwise local .tox dir
-    #"{env:READTHEDOCSOUTPUT:{work_dir}{/}docs_out}/html", # uses READTHEDOCSOUTPUT/html when building on readthedocs otherwise local .tox dir
+    "{env:READTHEDOCS_OUTPUT:{work_dir}{/}docs_out}/html", # uses READTHEDOCS_OUTPUT/html when building on readthedocs otherwise local .tox dir
     "--color",
     "-b",
     "html",
