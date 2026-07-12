@@ -17,13 +17,16 @@ authors = [
 urls.Repository = "https://github.com/cristianordonez/nutrition-toolkit-cli.git"
 requires-python = ">= 3.12"
 dependencies = [
+    "fastapi>=0.139.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
     "pyyaml>=6.0.3",
+    "uvicorn>=0.51.0",
 ]
 
 [project.scripts]
 ntk = "ntk.presentation.cli.app:main"
+ntk-start = "ntk.presentation.api.main:start"
 
 [dependency-groups]
 dev = [
