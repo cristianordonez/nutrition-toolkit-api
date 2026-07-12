@@ -21,6 +21,9 @@ jobs:
           echo "Creating annotated tag: ${{ inputs.version }}"
           git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }} via GitHub Actions"
           git push origin "${{ inputs.version }}"
+      - name: Create Release
+        run: |
+          gh release create "${{ inputs.version }}" --title "Release ${{ inputs.version }}" --notes "Release ${{ inputs.version }} via GitHub Actions"
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       - name: Install Python 3.14
