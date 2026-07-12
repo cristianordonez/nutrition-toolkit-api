@@ -103,6 +103,10 @@ uv tool install tox --with tox-uv
 pre-commit run <hook-id>
 ```
 
+## Known Issues
+
+- Due to issues with using Ty with pre-commit due to the tox-uv integration, the type checking tox command must be separated from the linting and formatting check command
+
 ## References
 
 - [Customizaition][customization]

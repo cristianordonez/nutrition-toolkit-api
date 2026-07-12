@@ -17,7 +17,7 @@ jobs:
         - uses: actions/checkout@v6
         - name: Run tox test suites
           run: |
-            tox -e py312,py313,py314, py315
+            tox -e py312,py313,py314,py315
 
   check:
     runs-on: ubuntu-latest
