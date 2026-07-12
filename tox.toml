@@ -5,7 +5,8 @@ env_list = [
     "3.13",
     "3.12",
     "docs",
-    "fix"
+    "fix",
+    "type"
 ]
 skip_missing_interpreters = true
 
@@ -18,14 +19,9 @@ commands = [
   [
     "pytest",
     { replace = "posargs", default = [
-      "--durations",
-      "0",
-      "--durations-min",
-      "0.5",
-      "--junitxml",
-      "{work_dir}{/}junit.{env_name}.xml",
+      "--cov=ntk",
       "--cov-report",
-      "html:{env_tmp_dir}{/}htmlcov",
+      "term-missing",
       "--cov-report",
       "xml:{work_dir}{/}coverage.{env_name}.xml",
       "tests",
@@ -43,9 +39,25 @@ uv_seed = true
 [env.docs]
 description = "build the docs"
 dependency_groups = [ "docs" ]
+base_python = [ "3.14" ]
+commands = [
+  [
+    "sphinx-build",
+    "-b",
+    "html",
+    "docs/",
+    "{env:READTHEDOCS_OUTPUT:{work_dir}{/}docs_out}/html", # uses READTHEDOCS_OUTPUT/html when building on readthedocs otherwise local .tox dir
+    { replace = "posargs", default = [], extend = true },
+  ],
+  [
+    "python",
+    "-c",
+    'print(r"documentation available under file://{work_dir}{/}docs_out{/}html{/}index.html")',
+  ]
+]
 
 [env.fix]
-description = "format and type check the code base and complain about what we cannot do automatically"
+description = "lint and format check the code base and complain about what we cannot do automatically"
 skip_install = true
 dependency_groups = [ "fix" ]
 commands = [ [
@@ -53,5 +65,15 @@ commands = [ [
     "run", 
     "--all-files", 
     "--show-diff-on-failure", 
+    { replace = "posargs", extend = true } 
+] ]
+
+[env.type]
+description = "type check the code base"
+skip_install = false
+dependency_groups = [ "type", "test" ]
+commands = [ [
+    "ty", 
+    "check", 
     { replace = "posargs", extend = true } 
 ] ]

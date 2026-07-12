@@ -1,16 +1,8 @@
-# python-template
+# Nutrition Toolkit API
 
-Template repository for creating extendable and modern python cli and gui applications. Well documented configuration files so it can be edited to match projects needs.
+FastAPI interface for the nutrition toolkit application with CLI tool support.
 
 ## TODO
-
-- generate command line options using pydantic models
-
-- add config.ini support for command line options
-
-- update AUTHORS file
-
-- add config.ini support for arguments
 
 - run and configure test suite for python 3.12, 3.13, and 3.14
 
@@ -28,16 +20,15 @@ Template repository for creating extendable and modern python cli and gui applic
 
 - set up github actions - lint, format, type check, build, test, deploy package to github packages
 
-
 - create workflow to update version in __version__.py, consider using uv or hatch to release new version
+
+- publish to pypi
 
 - add branch protection rules on repository
 
 - Update README.md
 
-- For practice app, create mcp server that pulls in official academy of nutrition and dietetics textbooks for context
-
-# Development
+## Development
 
 - System python is available at /usr/bin/python3
 
@@ -47,9 +38,10 @@ Template repository for creating extendable and modern python cli and gui applic
 pyenv versions
 ```
 
-- Virtual environments are managed with uv. Install new python versions with the following command:
+- Virtual environments are managed with uv. Create new virtual environment and install new python versions with the following command:
 
 ```bash
+uv venv
 uv python install <version>
 ```
 
@@ -74,7 +66,7 @@ uv sync
 - Run application
 
 ```bash
-uv run python -m python_template
+uv run ntk
 ```
 
 - To add packages to repository, use following command from the root of the repository:
@@ -83,12 +75,12 @@ uv run python -m python_template
 uv add pydantic
 ```
 
-# Pre-Commit
+## Pre-Commit
 
 - Install pre-commit with uv
 
 ```bash
-uv tool install pre-commit
+uv tool install pre-commit --with pre-commit-uv
 ```
 
 - Install git-hooks scripts
@@ -97,7 +89,7 @@ uv tool install pre-commit
 pre-commit install
 ```
 
-# Testing
+## Testing
 
 - Install tox with uv
 
@@ -105,12 +97,32 @@ pre-commit install
 uv tool install tox --with tox-uv
 ```
 
-# References
+- Using the tox command will run all pre-commit hooks which include linting, formatting and type checking the code base. To run a single pre commit hook use the following command:
 
-[uv](https://docs.astral.sh/uv/concepts/tools/#tool-versions)
-[tox-uv](https://github.com/tox-dev/tox-uv)
-[ruff](https://docs.astral.sh/ruff/)
-[ty](https://docs.astral.sh/ty/)
+```bash
+pre-commit run <hook-id>
+```
 
-- [Customization](https://code.visualstudio.com/docs/copilot/concepts/customization)
-- [mcp-server](https://modelcontextprotocol.io/extensions/apps/build#manual-setup)
+## Known Issues
+
+- Due to issues with using Ty with pre-commit due to the tox-uv integration, the type checking tox command must be separated from the linting and formatting check command
+
+## References
+
+- [Customizaition][customization]
+- [MCP Server][mcp-server]
+- [Documentation with Readthedocs][readthedocs]
+- [uv][uv]
+- [Using Tox with UV][tox-uv]
+- [Ruff integration][ruff]
+- [Ty type checking][ty]
+- [Sphinx][sphinx-rtd]
+
+[customization]: https://code.visualstudio.com/docs/copilot/concepts/customization
+[mcp-server]: https://modelcontextprotocol.io/extensions/apps/build#manual-setup
+[readthedocs]: https://app.readthedocs.org/projects/nutrition-toolkit-api/
+[uv]: https://docs.astral.sh/uv/concepts/tools/#tool-versions
+[tox-uv]: https://github.com/tox-dev/tox-uv
+[ruff]: https://docs.astral.sh/ruff/
+[sphinx-rtd]: https://sphinx-rtd-tutorial.readthedocs.io/en/latest/sphinx-config.html
+[ty]: https://docs.astral.sh/ty/

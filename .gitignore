@@ -207,4 +207,4 @@ marimo/_lsp/
 __marimo__/
 
 # hatch
-src/python_template/_version.py
+src/*/_version.py

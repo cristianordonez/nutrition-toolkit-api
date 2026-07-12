@@ -1,0 +1,1 @@
+"""Domain generate business logic."""
