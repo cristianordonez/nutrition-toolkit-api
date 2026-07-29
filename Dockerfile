@@ -1,23 +1,62 @@
-FROM python:3.14
+# BUILD
+# First, build the application in the `/app` directory
+FROM ghcr.io/astral-sh/uv:trixie-slim AS builder
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+# Omit development dependencies
+ENV UV_NO_DEV=1
+
+# Configure the Python directory so it is consistent
+ENV UV_PYTHON_INSTALL_DIR=/python
+
+# Only use the managed Python version
+ENV UV_PYTHON_PREFERENCE=only-managed
+
+# Install Python before the project for caching
+RUN uv python install 3.14
+
+# Install git so that SCM tag can be detected when package is built
+RUN apt-get update && apt-get install -y git
+
+# Install dependencies from pyproject.toml and uv.lock first, but not package
+# This is so docker does not reinstall all deps unless pyproject.toml or uv.lock changes
+WORKDIR /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --extra api
+COPY . /app
+COPY .git ./.git/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --extra api
 
 
-WORKDIR /code
+# PRODUCTION
+# Then, use a final image without uv
+FROM debian:trixie-slim
 
-#   - name: Install uv
-#     uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-#   - name: Install Python 3.14
-#     run: uv python install 3.14
-#   - name: Build
-#     run: uv build
+# Setup a non-root user
+RUN groupadd --system --gid 999 nonroot \
+    && useradd --system --gid 999 --uid 999 --create-home nonroot
 
+# Copy the Python version
+COPY --from=builder /python /python
 
-COPY ./requirements.txt /code/requirements.txt
+# Copy the application from the builder
+COPY --from=builder --chown=nonroot:nonroot /app /app
 
+# Place executables in the environment at the front of the path
+ENV PATH="/app/.venv/bin:$PATH"
 
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+# Keeps Python from buffering stdout and stderr to avoid situations where
+# the application crashes without emitting any logs due to buffering.
+ENV PYTHONUNBUFFERED=1
 
+# Use the non-root user to run our application
+USER nonroot
 
-COPY ./app /code/app
+# Use `/app` as the working directory
+WORKDIR /app
 
-
-CMD ["fastapi", "run", "app/main.py", "--port", "80"]
+# Run the FastAPI application by default
+CMD ["ntk-api", "--port", "3000"]

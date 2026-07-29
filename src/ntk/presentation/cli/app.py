@@ -37,7 +37,7 @@ def main(args: list[str] | None = None) -> None:
     options = parsed.options_model.model_validate(vars(parsed))
     output = parsed.func(options)
     if output.exit_code == 0:
-        _pretty(output.result)
+        _pretty(output.result.model_dump())
     raise SystemExit(output.exit_code)
 
 
@@ -82,7 +82,10 @@ def _pretty(obj: typing.Any, indent: int = 0) -> None:  # noqa: ANN401
     if isinstance(obj, dict):
         print(f"{pad}{{")  # noqa: T201
         for k, v in obj.items():
-            print(f"{pad}  {k}: ", end="")  # noqa: T201
+            if v is None:
+                continue
+            key = k.replace("_", " ")
+            print(f"{pad}  {key}: ", end="")  # noqa: T201
             _pretty(v, indent + 2)
         print(f"{pad}}}")  # noqa: T201
     elif isinstance(obj, list):

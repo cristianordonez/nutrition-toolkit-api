@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from ntk.domain.calculator import BMICategory, Calculator, WeightBasis
+from ntk.services.calculator import BMICategory, Calculator, WeightBasis
 
 # ruff: noqa: S101
 _TEST_WEIGHT = 220.0

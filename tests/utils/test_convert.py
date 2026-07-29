@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ntk.domain.convert import Convert
+from ntk.utils.convert import Convert
 
 # ruff: noqa: S101
 

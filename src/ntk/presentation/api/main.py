@@ -4,9 +4,13 @@ import os
 import sys
 import typing
 
-import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+try:
+    import uvicorn
+    from fastapi import Depends, FastAPI, HTTPException, status
+    from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+except ImportError as err:
+    msg = ("The API is not install. Install it with: pip install 'ntk[api]'",)
+    raise SystemExit(msg) from err
 
 from ntk.presentation.cli.app import create_root_parser
 
@@ -15,6 +19,12 @@ from .routers import calculate
 app = FastAPI()
 
 security_sheme = HTTPBearer()
+
+ntk_api_token = os.getenv("NTK_API_TOKEN")
+
+if ntk_api_token is None:
+    msg = "No environment variable for ntk api found."
+    raise RuntimeError(msg)
 
 
 def verify_token(

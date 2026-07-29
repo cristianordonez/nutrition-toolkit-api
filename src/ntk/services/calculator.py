@@ -4,7 +4,7 @@ import logging
 import typing
 from enum import Enum
 
-from ntk.domain.convert import Convert
+from ntk.utils.convert import Convert
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class WeightBasis(Enum):
     AIBW = "Ideal Body Weight Adjusted for Obesity"
 
 
-class Calculator:
+class CalculatorService:
     """Handles nutrition calculations."""
 
     def __init__(  # noqa: PLR0913

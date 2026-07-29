@@ -1,0 +1,30 @@
+name: Check Release Tag
+on:
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  check-tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Check if tag already exists
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          echo "Checking for tag: $TAG"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag '$TAG' already exists."
+            exit 1
+          fi
+          echo "Tag '$TAG' does not exist."

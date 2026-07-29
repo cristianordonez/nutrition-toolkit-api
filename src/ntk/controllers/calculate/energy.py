@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import typing
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
-from ntk.domain.calculator import Calculator
-from ntk.domain.convert import Convert
 from ntk.models.base import CustomBaseSettings
 from ntk.models.output import Output
+from ntk.services.calculator import CalculatorService
+from ntk.utils.convert import Convert
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,20 @@ class EnergyOptions(CustomBaseSettings):
     )
 
 
+class EnergyResponse(BaseModel):
+    bmi: int | float
+    cbw: int | float
+    mifflin: int | float
+    ibw: int | float
+    kcal: str
+    protein: str
+    fluid: str
+    adjusted_ideal_body_weight: int | float
+    bmi_adjusted_for_amputation: int | float | None = None
+    ibw_adjusted_for_amputation: int | float | None = None
+    calculation_weight: str
+
+
 class EnergyController(BaseController):
     """Controller for calculating energy needs."""
 
@@ -49,17 +63,9 @@ class EnergyController(BaseController):
     help = "Calculate energy"
     options_model = EnergyOptions
 
-    def __init__(self) -> None:
-        """Initialize EnergyController."""
-        self.results = {}
-
-    def run(self, options: EnergyOptions) -> Output:
-        """Run Energy workflow.
-
-        :param options: pydantic basemodel instance holding options
-        :return: Output model
-        """
-        calc = Calculator(
+    @staticmethod
+    def _create_calculator(options: EnergyOptions) -> CalculatorService:
+        return CalculatorService(
             height=options.height,
             weight=options.weight,
             gender=options.gender,
@@ -67,35 +73,61 @@ class EnergyController(BaseController):
             activity_level=options.activity_level,
             amputation=options.amputation,
         )
-        self.results: dict[str, int | float | str] = {
-            "BMI": calc.bmi,
-            "CBW": options.weight,
-            "Mifflin": calc.mifflin,
-            "IBW": calc.ibw,
-        }
+
+    @staticmethod
+    def _build_base_results(
+        calc: CalculatorService,
+        options: EnergyOptions,
+    ) -> EnergyResponse:
+        return EnergyResponse(
+            bmi=calc.bmi,
+            cbw=options.weight,
+            mifflin=calc.mifflin,
+            ibw=calc.ibw,
+            adjusted_ideal_body_weight=calc.aibw,
+            kcal="",
+            protein="",
+            fluid="",
+            calculation_weight="",
+        )
+
+    @staticmethod
+    def _add_amputation_results(
+        results: EnergyResponse,
+        calc: CalculatorService,
+        options: EnergyOptions,
+    ) -> None:
         if options.amputation:
-            self.results["BMI Adjusted for Amputation"] = (
-                calc.bmi_adjusted_for_amputation
-            )
-            self.results["IBW Adjusted for Amputation"] = (
-                calc.ibw_adjusted_for_amputation
-            )
+            results.bmi_adjusted_for_amputation = calc.bmi_adjusted_for_amputation
+            results.ibw_adjusted_for_amputation = calc.ibw_adjusted_for_amputation
+
+    def _add_estimated_needs(
+        self,
+        results: EnergyResponse,
+        calc: CalculatorService,
+        options: EnergyOptions,
+    ) -> None:
         energy_needs = options.energy_needs or (25, 30)
         protein_needs = self._get_protein_needs(options)
-        calc_wt = self._get_calculation_wt(calc)
+        calc_wt = self._get_calculation_wt(results, calc)
         calc_wt_in_kg = Convert.to_kg(calc_wt)
         kcal_range = calc.get_range(calc_wt_in_kg, energy_needs)
         protein_range = calc.get_range(calc_wt_in_kg, protein_needs)
-        self.results["kcal"] = (
-            f"{kcal_range[0]}-{kcal_range[1]} kcal ({energy_needs[0]}-{energy_needs[1]} kcal/kg)"  # noqa: E501
-        )
-        self.results["protein"] = (
-            f"{protein_range[0]}-{protein_range[1]} g ({protein_needs[0]}-{protein_needs[1]} g/kg)"  # noqa: E501
-        )
-        self.results["fluid"] = (
-            f"{kcal_range[0]}-{kcal_range[1]} mL ({energy_needs[0]}-{energy_needs[1]} mL/kg)"  # noqa: E501
-        )
-        return Output(result=self.results, controller=self.name, exit_code=0)
+        results.kcal = f"{kcal_range[0]}-{kcal_range[1]} kcal ({energy_needs[0]}-{energy_needs[1]} kcal/kg)"  # noqa: E501
+        results.protein = f"{protein_range[0]}-{protein_range[1]} g ({protein_needs[0]}-{protein_needs[1]} g/kg)"  # noqa: E501
+        results.fluid = f"{kcal_range[0]}-{kcal_range[1]} mL ({energy_needs[0]}-{energy_needs[1]} mL/kg)"  # noqa: E501
+
+    def run(self, options: EnergyOptions) -> Output:
+        """Run Energy workflow.
+
+        :param options: pydantic basemodel instance holding options
+        :return: Output model
+        """
+        calc = self._create_calculator(options)
+        results = self._build_base_results(calc, options)
+        self._add_amputation_results(results, calc, options)
+        self._add_estimated_needs(results, calc, options)
+        return Output(result=results, controller=self.name, exit_code=0)
 
     @staticmethod
     def _get_protein_needs(options: EnergyOptions) -> tuple[float, float]:
@@ -112,9 +144,13 @@ class EnergyController(BaseController):
             protein_needs = (1.0, 1.2)
         return protein_needs
 
-    def _get_calculation_wt(self, calc: Calculator) -> float:
+    def _get_calculation_wt(
+        self,
+        results: EnergyResponse,
+        calc: CalculatorService,
+    ) -> float:
         weight_basis = calc.determine_weight_basis()
         calc_weight = calc.get_weight(weight_basis)
         msg = f"{weight_basis.value} ({calc_weight}#)"
-        self.results["Calculations done using"] = msg
+        results.calculation_weight = msg
         return calc_weight

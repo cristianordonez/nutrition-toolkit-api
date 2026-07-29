@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # ruff: noqa: S101
 from ntk.controllers.calculate.energy import EnergyController, EnergyOptions
-from ntk.domain.calculator import Calculator
+from ntk.services.calculator import Calculator
 
 _TEST_WEIGHT = 180.0
 _TEST_HEIGHT = 70

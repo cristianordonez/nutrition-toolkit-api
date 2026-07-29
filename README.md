@@ -31,6 +31,12 @@ uv python list
 uv pip install -e .
 ```
 
+- Make sure to include optional dependencies to start fastAPI server:
+
+```bash
+uv pip install -e ".[api]"
+```
+
 - Update uv.lock
 
 ```bash
@@ -77,12 +83,19 @@ uv tool install tox --with tox-uv
 pre-commit run <hook-id>
 ```
 
-## Server
+## Deployment
 
 - Use the ntk-start command to run uvicorn on FastAPI app
 
 ```bash
 uv run ntk-start
+```
+
+- containerize the REST API using Docker:
+
+```bash
+docker build -t ntk-api-image .
+docker run -d --env database_host=host.docker.internal --add-host=host.docker.internal:host-gateway -p 3000:3000 --name ntk-api ntk-api-image
 ```
 
 ## Known Issues

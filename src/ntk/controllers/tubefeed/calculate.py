@@ -16,7 +16,7 @@ if typing.TYPE_CHECKING:
     from ntk.models.formula import Formula
 
 
-class TubefeedOptions(CustomBaseSettings):
+class CalculateTubefeedOptions(CustomBaseSettings):
     """Options for Tubefeed workflow."""
 
     energy_needs: tuple[int, int] | None = Field(
@@ -38,18 +38,20 @@ class TubefeedOptions(CustomBaseSettings):
     )
 
 
-class TubefeedController(BaseController):
+class CalculateTubefeedResponse(CustomBaseSettings):
+    """Response for CalculateTubefeed controller."""
+
+    energy_needs: str
+
+
+class CalculateTubefeedController(BaseController):
     """Handles running tubefeed command."""
 
-    name = "tubefeed"
+    name = "calculate"
     help = "Calculate tubefeed recommendations"
-    options_model = TubefeedOptions
+    options_model = CalculateTubefeedOptions
 
-    def __init__(self) -> None:
-        """Init tube feed controller class."""
-        self.results = {}
-
-    def run(self, options: TubefeedOptions) -> Output:
+    def run(self, options: CalculateTubefeedOptions) -> Output:
         """Run tubefeed workflow.
 
         :param options: pydantic basemodel TubefeedOptions instance
@@ -57,10 +59,11 @@ class TubefeedController(BaseController):
         """
         try:
             logger.debug("Options: %s", options)
+            result = CalculateTubefeedResponse(energy_needs="")
             ec = 0
         except ValueError:
             ec = 1
-        return Output(controller=self.name, exit_code=ec, result=self.results)
+        return Output(controller=self.name, exit_code=ec, result=result)
 
     @staticmethod
     def _get_formula_info(formula: str, density: float, *, bolus: bool) -> Formula:

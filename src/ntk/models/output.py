@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import typing
-
 from pydantic import BaseModel
 
 
@@ -11,5 +9,5 @@ class Output(BaseModel):
     """Output to the run method of controllers."""
 
     controller: str
-    result: typing.Any
+    result: BaseModel
     exit_code: int
