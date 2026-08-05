@@ -10,56 +10,49 @@ logger = logging.getLogger(__name__)
 
 MIN_HEIGHT = 60.0
 
-GERIATRIC_AGE = 75
+GERIATRIC_AGE = 70
 
 
 class BMICategory(Enum):
-    """Contains BMI ranges."""
+    UNDERWEIGHT = "Underweight"
+    NORMAL = "Normal"
+    OVERWEIGHT = "Overweight"
+    OBESE = "Obese"
+    MORBIDLY_OBESE = "Morbidly Obese"
 
-    UNDERWEIGHT = (0.0, 18.5)
-    NORMAL = (18.5, 25.0)
-    OVERWEIGHT = (25.0, 30.0)
-    OBESE = (30.0, 40.0)
-    MORBIDLY_OBESE = (40.0, float("inf"))
-    # Recommended BMI range for adults >75 years
-    GERIATRIC_RECOMMENDED = (23.0, 28.0)
 
-    def __init__(self, lower: float, upper: float) -> None:
-        """Init instance.
+STANDARD_BMI_RANGES = {
+    BMICategory.UNDERWEIGHT: (0.0, 18.5),
+    BMICategory.NORMAL: (18.5, 25.0),
+    BMICategory.OVERWEIGHT: (25.0, 30.0),
+    BMICategory.OBESE: (30.0, 40.0),
+    BMICategory.MORBIDLY_OBESE: (40.0, float("inf")),
+}
 
-        :param lower: min bmi range
-        :param upper: max bmi range
-        """
-        self.lower = lower
-        self.upper = upper
+GERIATRIC_BMI_RANGES = {
+    BMICategory.UNDERWEIGHT: (0.0, 23.0),
+    BMICategory.NORMAL: (23.0, 28.0),
+    BMICategory.OVERWEIGHT: (28.0, 30.0),
+    BMICategory.OBESE: (30.0, 40.0),
+    BMICategory.MORBIDLY_OBESE: (40.0, float("inf")),
+}
 
-    def contains(self, bmi: float) -> bool:
-        """Check if BMI is within current range.
 
-        :param bmi: BMI float
-        :return: True if within range
-        """
-        return self.lower <= bmi < self.upper
+def get_bmi_category(
+    bmi: float,
+    ranges: dict[BMICategory, tuple[float, float]],
+) -> BMICategory:
+    """Get BMI category based on BMI and age.
 
-    @classmethod
-    def classify(cls, bmi: float) -> BMICategory:
-        """Return the standard BMI classification."""
-        for category in (
-            cls.UNDERWEIGHT,
-            cls.NORMAL,
-            cls.OVERWEIGHT,
-            cls.OBESE,
-            cls.MORBIDLY_OBESE,
-        ):
-            if category.contains(bmi):
-                return category
-        msg = f"Invalid BMI: {bmi}"
-        raise ValueError(msg)
-
-    @classmethod
-    def is_geriatric_recommended(cls, bmi: float) -> bool:
-        """Return True if BMI is within the recommended range for adults >75."""
-        return cls.GERIATRIC_RECOMMENDED.contains(bmi)
+    :param bmi: Calculated BMI float
+    :param ranges: Dictionary of BMI ranges
+    :return: BMICategory enum value
+    """
+    for range_category, (lower, upper) in ranges.items():
+        if lower <= bmi < upper:
+            return range_category
+    msg = f"Invalid BMI: {bmi}"
+    raise ValueError(msg)
 
 
 class WeightBasis(Enum):
@@ -249,15 +242,10 @@ class CalculatorService:
             bmi = self.bmi_adjusted_for_amputation
         else:
             bmi = self.bmi
-        bmi_class = BMICategory.classify(bmi)
-        if self.age >= GERIATRIC_AGE and BMICategory.is_geriatric_recommended(bmi):
-            logger.info(
-                "Age is %s and BMI is %s, using Geriatric BMI limit",
-                self.age,
-                bmi,
-            )
-            bmi_class = BMICategory.NORMAL
-        return bmi_class
+        ranges = (
+            GERIATRIC_BMI_RANGES if self.age >= GERIATRIC_AGE else STANDARD_BMI_RANGES
+        )
+        return get_bmi_category(bmi, ranges)
 
     def _determine_weight_basis(self, bmi_category: BMICategory) -> WeightBasis:
         """Determine weight basis based on BMI.

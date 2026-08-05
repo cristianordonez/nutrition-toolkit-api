@@ -62,5 +62,6 @@ class RevokeController(BaseController):
             results = RevokeResponse(revoked_key=revoked_key)
             ec = 0
         except ValueError:
+            logger.exception("Error revoking API key")
             ec = 1
         return Output(controller=self.name, exit_code=ec, result=results)

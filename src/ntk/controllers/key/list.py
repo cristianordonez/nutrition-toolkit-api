@@ -1,5 +1,3 @@
-"""List Controller handles listing API tokens."""
-
 from __future__ import annotations
 
 import logging

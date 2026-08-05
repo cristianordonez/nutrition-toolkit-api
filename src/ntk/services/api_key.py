@@ -50,6 +50,46 @@ class ApiKeyService:
             return [api_key] if api_key else []
         return list(self.api_key_repo.get_all())
 
+    def revoke_permission(self, api_key: ApiKey, permission: str) -> None:
+        """Revoke permission from api key.
+
+        :param api_key: api key model
+        :param permission: permission name to revoke
+        """
+        permission_model = self.permission_repo.get_by_name(permission)
+        if not permission_model:
+            msg = f"Permission '{permission}' not found in database."
+            raise ValueError(msg)
+        logger.info(
+            "Revoking permission '%s' from api key '%s'",
+            permission,
+            api_key.name,
+        )
+        self.permission_repo.remove_permission_from_api_key(
+            api_key.id,
+            permission_model.id,
+        )
+
+    def grant_permission(self, api_key: ApiKey, permission: str) -> None:
+        """Grant permission to api key.
+
+        :param api_key: api key model
+        :param permission: permission name to grant
+        """
+        permission_model = self.permission_repo.get_by_name(permission)
+        if not permission_model:
+            msg = f"Permission '{permission}' not found in database."
+            raise ValueError(msg)
+        logger.info(
+            "Granting permission '%s' to api key '%s'",
+            permission,
+            api_key.name,
+        )
+        self.permission_repo.add_permission_to_api_key(
+            api_key.id,
+            permission_model.id,
+        )
+
     def create(
         self,
         name: str,

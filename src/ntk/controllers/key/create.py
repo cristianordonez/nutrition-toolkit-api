@@ -1,5 +1,3 @@
-"""Create Controller handles creating new api tokens."""
-
 from __future__ import annotations
 
 import logging
