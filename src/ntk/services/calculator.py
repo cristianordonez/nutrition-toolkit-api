@@ -8,7 +8,7 @@ from ntk.utils.convert import Convert
 
 logger = logging.getLogger(__name__)
 
-MIN_HEIGHT = 60
+MIN_HEIGHT = 60.0
 
 GERIATRIC_AGE = 75
 
@@ -75,12 +75,15 @@ class CalculatorService:
 
     def __init__(  # noqa: PLR0913
         self,
-        height: int,
+        height: float,
         weight: float,
         gender: typing.Literal["m", "f"],
         age: int,
         activity_level: float = 1.2,
         amputation: float | None = None,
+        goal: typing.Literal["lose", "maintain", "gain"] = "maintain",
+        *,
+        dialysis: bool = False,
     ) -> None:
         """Initialize calculator class.
 
@@ -90,6 +93,8 @@ class CalculatorService:
         :param age: age in years
         :param activity_level: how active user is, usually 1 - 1.9
         :param amputation: percentage of limb removed or none
+        :param goal: desired outcome for energy needs
+        :param dialysis: if user is on dialysis
         """
         self.height = height
         self.weight = weight
@@ -97,6 +102,72 @@ class CalculatorService:
         self.age = age
         self.activity_level = activity_level
         self.amputation = amputation
+        self.goal = goal
+        self.dialysis = dialysis
+
+    def get_goals(
+        self,
+        protein_needs: tuple[float, float] | None = None,
+        energy_needs: tuple[int, int] | None = None,
+    ) -> dict[str, tuple[int | float, int | float] | str | int | float]:
+        """Get nutrition goals based on weight and activity level.
+
+        :return: dict of nutrition goals
+        """
+        bmi_category = self._determine_bmi_category()
+        weight_basis = self._determine_weight_basis(bmi_category)
+        weight = self.get_weight(weight_basis)
+        calc_wt_in_kg = Convert.to_kg(weight)
+        protein_factor = self._get_protein_needs(
+            protein_needs,
+            dialysis=self.dialysis,
+        )
+        energy_factor = self._get_energy_needs(energy_needs)
+        return {
+            "bmi_category": bmi_category.name,
+            "calculations_done_using": weight_basis.value,
+            "calculation_weight": weight,
+            "weight_used_for_calculations_in_kg": calc_wt_in_kg,
+            "calorie_factor": energy_factor,
+            "protein_factor": protein_factor,
+            "fluid_factor": energy_factor,
+            "calories": self.get_range(calc_wt_in_kg, energy_factor),
+            "fluids": self.get_range(calc_wt_in_kg, energy_factor),
+            "protein": self.get_range(calc_wt_in_kg, protein_factor),
+        }
+
+    def _get_energy_needs(
+        self,
+        energy_needs: tuple[int, int] | None = None,
+    ) -> tuple[int, int]:
+        """Get energy needs for current run.
+
+        :return: range of kcal needs
+        """
+        if energy_needs is not None:
+            return energy_needs
+        if self.goal == "lose":
+            return (20, 25)
+        if self.goal == "gain":
+            return (30, 35)
+        return (25, 30)
+
+    @staticmethod
+    def _get_protein_needs(
+        protein_needs: tuple[float, float] | None = None,
+        *,
+        dialysis: bool = False,
+    ) -> tuple[float, float]:
+        """Get protein needs for current run.
+
+        :param options: EnergyOptions instance
+        :return: range of protein needs
+        """
+        if protein_needs is not None:
+            return protein_needs
+        if dialysis:
+            return (1.2, 1.5)
+        return (1.0, 1.2)
 
     @property
     def mifflin(self) -> float:
@@ -168,9 +239,16 @@ class CalculatorService:
         adjusted = self.aibw * (self.amputation * 0.01)
         return self.aibw - adjusted
 
-    def determine_bmi_category(self) -> BMICategory:
+    def _determine_bmi_category(self) -> BMICategory:
         """Determine BMI category."""
-        bmi = self.bmi
+        if self.amputation is not None:
+            logger.info(
+                "Amputation provided, using BMI adjusted for amputation: %s",
+                self.bmi_adjusted_for_amputation,
+            )
+            bmi = self.bmi_adjusted_for_amputation
+        else:
+            bmi = self.bmi
         bmi_class = BMICategory.classify(bmi)
         if self.age >= GERIATRIC_AGE and BMICategory.is_geriatric_recommended(bmi):
             logger.info(
@@ -181,13 +259,12 @@ class CalculatorService:
             bmi_class = BMICategory.NORMAL
         return bmi_class
 
-    def determine_weight_basis(self) -> WeightBasis:
+    def _determine_weight_basis(self, bmi_category: BMICategory) -> WeightBasis:
         """Determine weight basis based on BMI.
 
         :raises ValueError: bmi not accounted for
         :return: weight basis name to use for calculations
         """
-        bmi_category = self.determine_bmi_category()
         match bmi_category:
             case BMICategory.UNDERWEIGHT:
                 return WeightBasis.CBW

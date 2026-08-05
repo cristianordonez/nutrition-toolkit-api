@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 import typing
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
-from ntk.models.base import CustomBaseSettings
+from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 from ntk.repositories.formulas import OTHER_FORMULAS, READY_TO_HANG_FORMULAS
 
@@ -16,7 +16,7 @@ if typing.TYPE_CHECKING:
     from ntk.models.formula import Formula
 
 
-class CalculateTubefeedOptions(CustomBaseSettings):
+class CalculateTubefeedOptions(BaseModel):
     """Options for Tubefeed workflow."""
 
     energy_needs: tuple[int, int] | None = Field(
@@ -38,10 +38,14 @@ class CalculateTubefeedOptions(CustomBaseSettings):
     )
 
 
-class CalculateTubefeedResponse(CustomBaseSettings):
+class CalculateTubefeedResponse(ConsoleRenderableModel):
     """Response for CalculateTubefeed controller."""
 
     energy_needs: str
+
+    def to_console(self) -> str:
+        """Return a string representation of the model for console output."""
+        return f"Energy Needs: {self.energy_needs}"
 
 
 class CalculateTubefeedController(BaseController):
@@ -63,7 +67,11 @@ class CalculateTubefeedController(BaseController):
             ec = 0
         except ValueError:
             ec = 1
-        return Output(controller=self.name, exit_code=ec, result=result)
+        return Output(
+            controller=self.name,
+            exit_code=ec,
+            result=result,
+        )
 
     @staticmethod
     def _get_formula_info(formula: str, density: float, *, bolus: bool) -> Formula:

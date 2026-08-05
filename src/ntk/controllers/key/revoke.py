@@ -2,22 +2,35 @@ from __future__ import annotations
 
 import logging
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
-from ntk.models.base import CustomBaseSettings
+from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 
 logger = logging.getLogger(__name__)
 
 
-class RevokeOptions(CustomBaseSettings):
+class RevokeOptions(BaseModel):
     """Options for Rm workflow."""
 
     energy_needs: tuple[int, int] | None = Field(
         description="Manually set kcal range",
         default=None,
     )
+
+
+class RevokeResponse(ConsoleRenderableModel):
+    """Response for Rm workflow."""
+
+    energy_needs: tuple[int, int] | None = Field(
+        description="Manually set kcal range",
+        default=None,
+    )
+
+    def to_console(self) -> str:
+        """Return a string representation of the model for console output."""
+        return f"Energy Needs: {self.energy_needs}"
 
 
 class RevokeController(BaseController):
@@ -34,7 +47,7 @@ class RevokeController(BaseController):
         :return: Output model
         """
         try:
-            results = {}
+            results = RevokeResponse(energy_needs=(2000, 2500))
             logger.debug("Options: %s", options)
             ec = 0
         except ValueError:

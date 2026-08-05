@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
 from ntk.database.db import get_session
-from ntk.models.base import CustomBaseSettings
+from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 from ntk.repositories.api_key import ApiKeyRepository
 from ntk.repositories.permission import PermissionRepository
@@ -17,17 +17,25 @@ from ntk.services.api_key import ApiKeyService
 logger = logging.getLogger(__name__)
 
 
-class CreateKeyOptions(CustomBaseSettings):
+class CreateKeyOptions(BaseModel):
     """Settings for create controller."""
 
     permissions: list[str] = Field(description="List of permissions to give API key")
     name: str
 
 
-class CreateKeyResponse(BaseModel):
-    key: str
-    name: str
-    permissions: list[str]
+class CreateKeyResponse(ConsoleRenderableModel):
+    plaintext_key: str
+    api_key_name: str
+    api_key_permissions: list[str]
+
+    def to_console(self) -> str:
+        """Return a string representation of the model for console output."""
+        return (
+            f"API Key Name: {self.api_key_name}\n"
+            f"API Key Permissions: {', '.join(self.api_key_permissions)}\n"
+            f"Plaintext API Key (use this to authenticate): {self.plaintext_key}"
+        )
 
 
 class CreateController(BaseController):
@@ -46,16 +54,11 @@ class CreateController(BaseController):
         session = next(get_session())
         repo = ApiKeyRepository(session)
         permission_repo = PermissionRepository(session)
-        service = ApiKeyService(repo)
-        permissions = permission_repo.get_by_names(options.permissions)
-        logger.debug("Matching Permissions: %s", permissions)
-        if len(permissions) == 0:
-            msg = f"Provided permissions not found in database: {options.permissions}"
-            raise ValueError(msg)
-        api_key = service.create(options, permissions)
+        service = ApiKeyService(repo, permission_repo)
+        plaintext_key = service.create(options.name, options.permissions)
         response = CreateKeyResponse(
-            key=api_key,
-            name=options.name,
-            permissions=options.permissions,
+            plaintext_key=plaintext_key,
+            api_key_name=options.name,
+            api_key_permissions=options.permissions,
         )
         return Output(result=response, controller=self.name, exit_code=0)

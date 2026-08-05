@@ -38,4 +38,6 @@ class ApiKey(SQLModel, table=True):
     permissions: list["Permission"] = Relationship(
         back_populates="api_keys",
         link_model=ApiKeyPermission,
+        # always load permissions when loading api keys to avoid lazy loading issues
+        sa_relationship_kwargs={"lazy": "selectin"},  # codespell:ignore-line
     )

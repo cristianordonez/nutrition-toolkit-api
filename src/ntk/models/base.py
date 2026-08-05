@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+from abc import ABC, abstractmethod
 from pathlib import Path
 
+from pydantic import BaseModel
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -49,3 +51,12 @@ class CustomBaseSettings(BaseSettings):
             YamlConfigSettingsSource(settings_cls),  # config.yaml
             file_secret_settings,  # Docker/K8s secrets
         )
+
+
+class ConsoleRenderableModel(BaseModel, ABC):
+    """Base model for responses that can be rendered to the console."""
+
+    @abstractmethod
+    def to_console(self) -> str:
+        """Return a human-readable console representation."""
+        raise NotImplementedError
