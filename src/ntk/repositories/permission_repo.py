@@ -6,7 +6,7 @@ import typing
 from sqlmodel import Session, delete, select
 
 from ntk.defaults import DEFAULT_PERMISSIONS
-from ntk.models import ApiKeyPermission, Permission
+from ntk.models import APIKeyPermission, Permission
 
 if typing.TYPE_CHECKING:
     from uuid import UUID
@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class PermissionRepository:
+class PermissionRepo:
     def __init__(self, session: Session) -> None:
         """Handle API key permissions.
 
@@ -84,9 +84,9 @@ class PermissionRepository:
         :param api_key_id: UUID for API key from which to remove permission
         :param permission_id: UUID for permission to remove
         """
-        statement = delete(ApiKeyPermission).where(
-            ApiKeyPermission.api_key_id == api_key_id,  # ty: ignore[invalid-argument-type]
-            ApiKeyPermission.permission_id == permission_id,  # ty: ignore[invalid-argument-type]
+        statement = delete(APIKeyPermission).where(
+            APIKeyPermission.api_key_id == api_key_id,  # ty: ignore[invalid-argument-type]
+            APIKeyPermission.permission_id == permission_id,  # ty: ignore[invalid-argument-type]
         )
         self.session.exec(statement)
         self.session.commit()
@@ -101,9 +101,9 @@ class PermissionRepository:
         :param api_key_id: UUID for API key to which to add permission
         :param permission_id: UUID for permission to add
         """
-        statement = select(ApiKeyPermission).where(
-            ApiKeyPermission.api_key_id == api_key_id,
-            ApiKeyPermission.permission_id == permission_id,
+        statement = select(APIKeyPermission).where(
+            APIKeyPermission.api_key_id == api_key_id,
+            APIKeyPermission.permission_id == permission_id,
         )
         existing = self.session.exec(statement).first()
         if existing:
@@ -113,7 +113,7 @@ class PermissionRepository:
                 api_key_id,
             )
             return
-        api_key_permission = ApiKeyPermission(
+        api_key_permission = APIKeyPermission(
             api_key_id=api_key_id,
             permission_id=permission_id,
         )

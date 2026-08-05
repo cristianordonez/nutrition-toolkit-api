@@ -3,13 +3,16 @@ from __future__ import annotations
 # ruff: noqa: S101,SLF001
 import pytest
 
-from ntk.controllers.calculate.tubefeed import TubefeedController, TubefeedOptions
-from ntk.repositories.formulas import OTHER_FORMULAS, READY_TO_HANG_FORMULAS
+from ntk.controllers.tubefeed.calculate import (
+    CalculateTubefeedController,
+    CalculateTubefeedOptions,
+)
+from ntk.repositories.formula_repo import OTHER_FORMULAS, READY_TO_HANG_FORMULAS
 
 
 def test_tubefeed_run_returns_success_output() -> None:
-    options = TubefeedOptions(formula="jevity", density=1.5)
-    output = TubefeedController().run(options)
+    options = CalculateTubefeedOptions(formula="jevity", density=1.5)
+    output = CalculateTubefeedController().run(options)
 
     assert output.controller == "tubefeed"
     assert output.exit_code == 0
@@ -17,7 +20,7 @@ def test_tubefeed_run_returns_success_output() -> None:
 
 
 def test_get_formula_info_returns_ready_to_hang_formula() -> None:
-    formula = TubefeedController._get_formula_info("jevity", 1.2, bolus=False)
+    formula = CalculateTubefeedController._get_formula_info("jevity", 1.2, bolus=False)
 
     assert formula.name == "jevity 1.2"
     assert formula.consistency == "nectar"
@@ -25,7 +28,7 @@ def test_get_formula_info_returns_ready_to_hang_formula() -> None:
 
 
 def test_get_formula_info_returns_other_formula_for_bolus() -> None:
-    formula = TubefeedController._get_formula_info("jevity", 1.2, bolus=True)
+    formula = CalculateTubefeedController._get_formula_info("jevity", 1.2, bolus=True)
 
     assert formula.name == "jevity 1.2"
     assert formula.consistency == "nectar"
@@ -34,4 +37,4 @@ def test_get_formula_info_returns_other_formula_for_bolus() -> None:
 
 def test_get_formula_info_raises_for_unknown_formula() -> None:
     with pytest.raises(ValueError, match="Formula not found"):
-        TubefeedController._get_formula_info("unknown", 1.2, bolus=False)
+        CalculateTubefeedController._get_formula_info("unknown", 1.2, bolus=False)

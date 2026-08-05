@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from ntk.controllers.base import BaseController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.repositories.formulas import OTHER_FORMULAS, READY_TO_HANG_FORMULAS
+from ntk.repositories.formula_repo import OTHER_FORMULAS, READY_TO_HANG_FORMULAS
 
 logger = logging.getLogger(__name__)
 

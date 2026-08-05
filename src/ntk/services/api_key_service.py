@@ -3,23 +3,24 @@ from __future__ import annotations
 import hashlib
 import logging
 import typing
+from datetime import UTC, datetime
 from secrets import token_urlsafe
 
-from ntk.models.api_key import ApiKey
-from ntk.repositories.permission import PermissionRepository
+from ntk.models.api_key import APIKey
+from ntk.repositories.permission_repo import PermissionRepo
 
 if typing.TYPE_CHECKING:
-    from ntk.repositories.api_key import ApiKeyRepository
-    from ntk.repositories.permission import PermissionRepository
+    from ntk.repositories.api_key_repo import APIKeyRepo
+    from ntk.repositories.permission_repo import PermissionRepo
 
 logger = logging.getLogger(__name__)
 
 
-class ApiKeyService:
+class APIKeyService:
     def __init__(
         self,
-        api_key_repo: ApiKeyRepository,
-        permission_repo: PermissionRepository,
+        api_key_repo: APIKeyRepo,
+        permission_repo: PermissionRepo,
     ) -> None:
         """Service handles api keys.
 
@@ -29,7 +30,27 @@ class ApiKeyService:
         self.api_key_repo = api_key_repo
         self.permission_repo = permission_repo
 
-    def revoke_api_key(self, plaintext_key: str) -> ApiKey | None:
+    def authenticate(self, plaintext_key: str) -> APIKey:
+        """Authenticate api key.
+
+        :param plaintext_key: plaintext key to authenticate
+        :return: api key model
+        """
+        key_hash = self._hash_api_key(plaintext_key)
+        api_key = self.api_key_repo.get_by_hash(key_hash)
+        if api_key is None:
+            msg = "Invalid API key"
+            raise ValueError(msg)
+        if not api_key.active:
+            msg = "API key is revoked"
+            raise ValueError(msg)
+        if api_key.expires_at is not None and api_key.expires_at < datetime.now(UTC):
+            msg = "API key has expired"
+            raise ValueError(msg)
+        self.api_key_repo.update_last_used(api_key)
+        return api_key
+
+    def revoke_api_key(self, plaintext_key: str) -> APIKey | None:
         """Revoke api key.
 
         :param plaintext_key: plaintext key to filter by
@@ -38,7 +59,7 @@ class ApiKeyService:
         key_hash = self._hash_api_key(plaintext_key)
         return self.api_key_repo.revoke(key_hash)
 
-    def get_api_keys(self, plaintext_key: str | None = None) -> list[ApiKey]:
+    def get_api_keys(self, plaintext_key: str | None = None) -> list[APIKey]:
         """Get api keys.
 
         :param plaintext_key: optional plaintext key to filter by
@@ -50,7 +71,7 @@ class ApiKeyService:
             return [api_key] if api_key else []
         return list(self.api_key_repo.get_all())
 
-    def revoke_permission(self, api_key: ApiKey, permission: str) -> None:
+    def revoke_permission(self, api_key: APIKey, permission: str) -> None:
         """Revoke permission from api key.
 
         :param api_key: api key model
@@ -70,7 +91,7 @@ class ApiKeyService:
             permission_model.id,
         )
 
-    def grant_permission(self, api_key: ApiKey, permission: str) -> None:
+    def grant_permission(self, api_key: APIKey, permission: str) -> None:
         """Grant permission to api key.
 
         :param api_key: api key model
@@ -109,7 +130,7 @@ class ApiKeyService:
         if len(permission_models) == 0:
             msg = f"Provided permissions not found in database: {permissions}"
             raise ValueError(msg)
-        api_key = ApiKey(
+        api_key = APIKey(
             name=name,
             api_key_hash=key_hash,
             permissions=permission_models,

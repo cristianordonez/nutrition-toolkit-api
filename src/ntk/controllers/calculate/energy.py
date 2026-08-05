@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from ntk.controllers.base import BaseController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.services.calculator import CalculatorService
+from ntk.services.calculator_service import CalculatorService
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class EnergyController(BaseController):
             activity_level=options.activity_level,
             amputation=options.amputation,
             goal=options.goal,
+            dialysis=options.dialysis,
         )
 
     @staticmethod

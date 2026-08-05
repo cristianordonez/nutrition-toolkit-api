@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from sqlmodel import Field, Relationship, SQLModel
 
 
-class ApiKeyPermission(SQLModel, table=True):
+class APIKeyPermission(SQLModel, table=True):
     """Links Permission and ApiKey Models in many-to-many relationship."""
 
     __tablename__ = "api_key_permission"
@@ -21,14 +21,14 @@ class Permission(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str = Field(index=True, unique=True)
-    api_keys: list["ApiKey"] = Relationship(
+    api_keys: list["APIKey"] = Relationship(
         back_populates="permissions",
-        link_model=ApiKeyPermission,
+        link_model=APIKeyPermission,
     )
 
 
-class ApiKey(SQLModel, table=True):
-    """ApiKey Model."""
+class APIKey(SQLModel, table=True):
+    """APIKey Model."""
 
     __tablename__ = "api_key"
 
@@ -42,7 +42,17 @@ class ApiKey(SQLModel, table=True):
     revoked_at: datetime | None = Field(default=None)
     permissions: list["Permission"] = Relationship(
         back_populates="api_keys",
-        link_model=ApiKeyPermission,
+        link_model=APIKeyPermission,
         # always load permissions when loading api keys to avoid lazy loading issues
         sa_relationship_kwargs={"lazy": "selectin"},  # codespell:ignore-line
     )
+
+    def has_permission(self, permission_name: str) -> bool:
+        """Check if the API key has a specific permission.
+
+        :param permission_name: Name of the permission to check
+        :return: True if the API key has the permission, False otherwise
+        """
+        return any(
+            permission.name == permission_name for permission in self.permissions
+        )

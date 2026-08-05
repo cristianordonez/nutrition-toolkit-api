@@ -113,7 +113,6 @@ class CalculatorService:
         calc_wt_in_kg = Convert.to_kg(weight)
         protein_factor = self._get_protein_needs(
             protein_needs,
-            dialysis=self.dialysis,
         )
         energy_factor = self._get_energy_needs(energy_needs)
         return {
@@ -145,11 +144,9 @@ class CalculatorService:
             return (30, 35)
         return (25, 30)
 
-    @staticmethod
     def _get_protein_needs(
+        self,
         protein_needs: tuple[float, float] | None = None,
-        *,
-        dialysis: bool = False,
     ) -> tuple[float, float]:
         """Get protein needs for current run.
 
@@ -157,8 +154,10 @@ class CalculatorService:
         :return: range of protein needs
         """
         if protein_needs is not None:
+            logger.debug("Using manually set protein needs: %s", protein_needs)
             return protein_needs
-        if dialysis:
+        if self.dialysis:
+            logger.debug("Dialysis is True, using protein needs of 1.2-1.5 g/kg")
             return (1.2, 1.5)
         return (1.0, 1.2)
 

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import typing
+
 from pydantic import BaseModel
 
-from ntk.models.base import ConsoleRenderableModel  # noqa: TC001
+from ntk.models.base import ConsoleRenderableModel
+
+T = typing.TypeVar("T", bound=ConsoleRenderableModel)
 
 
-class Output(BaseModel):
+class Output[T](BaseModel):
     """Output to the run method of controllers."""
 
     controller: str
-    result: ConsoleRenderableModel
+    result: T
     exit_code: int
