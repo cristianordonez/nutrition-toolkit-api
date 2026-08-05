@@ -29,6 +29,15 @@ class ApiKeyService:
         self.api_key_repo = api_key_repo
         self.permission_repo = permission_repo
 
+    def revoke_api_key(self, plaintext_key: str) -> ApiKey | None:
+        """Revoke api key.
+
+        :param plaintext_key: plaintext key to filter by
+        :return: revoked key model or None if not found
+        """
+        key_hash = self._hash_api_key(plaintext_key)
+        return self.api_key_repo.revoke(key_hash)
+
     def get_api_keys(self, plaintext_key: str | None = None) -> list[ApiKey]:
         """Get api keys.
 

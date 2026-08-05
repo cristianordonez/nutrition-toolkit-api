@@ -5,8 +5,13 @@ import logging
 from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
+from ntk.database.db import get_session
+from ntk.models.api_key import ApiKey  # noqa: TC001
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
+from ntk.repositories.api_key import ApiKeyRepository
+from ntk.repositories.permission import PermissionRepository
+from ntk.services.api_key import ApiKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -14,23 +19,24 @@ logger = logging.getLogger(__name__)
 class RevokeOptions(BaseModel):
     """Options for Rm workflow."""
 
-    energy_needs: tuple[int, int] | None = Field(
-        description="Manually set kcal range",
-        default=None,
+    api_key: str = Field(
+        description="Plaintext API key to filter by",
     )
 
 
 class RevokeResponse(ConsoleRenderableModel):
     """Response for Rm workflow."""
 
-    energy_needs: tuple[int, int] | None = Field(
-        description="Manually set kcal range",
+    revoked_key: ApiKey | None = Field(
+        description="Revoked API key model or None if not found",
         default=None,
     )
 
     def to_console(self) -> str:
         """Return a string representation of the model for console output."""
-        return f"Energy Needs: {self.energy_needs}"
+        if self.revoked_key is None:
+            return "No API key found to revoke."
+        return f"Key revoked: {self.revoked_key}"
 
 
 class RevokeController(BaseController):
@@ -47,8 +53,13 @@ class RevokeController(BaseController):
         :return: Output model
         """
         try:
-            results = RevokeResponse(energy_needs=(2000, 2500))
-            logger.debug("Options: %s", options)
+            logger.debug(options)
+            session = next(get_session())
+            repo = ApiKeyRepository(session)
+            permission_repo = PermissionRepository(session)
+            service = ApiKeyService(repo, permission_repo)
+            revoked_key = service.revoke_api_key(options.api_key)
+            results = RevokeResponse(revoked_key=revoked_key)
             ec = 0
         except ValueError:
             ec = 1

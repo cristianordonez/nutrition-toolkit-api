@@ -3,20 +3,17 @@
 from __future__ import annotations
 
 import logging
-import typing
 
 from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
 from ntk.database.db import get_session
+from ntk.models.api_key import ApiKey  # noqa: TC001
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 from ntk.repositories.api_key import ApiKeyRepository
 from ntk.repositories.permission import PermissionRepository
 from ntk.services.api_key import ApiKeyService
-
-if typing.TYPE_CHECKING:
-    from ntk.models.api_key import ApiKey
 
 logger = logging.getLogger(__name__)
 

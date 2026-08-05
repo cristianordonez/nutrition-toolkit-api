@@ -1,4 +1,5 @@
 # noqa: I002
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -35,6 +36,10 @@ class ApiKey(SQLModel, table=True):
     name: str
     api_key_hash: str
     active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime | None = Field(default=None)
+    last_used_at: datetime | None = Field(default=None)
+    revoked_at: datetime | None = Field(default=None)
     permissions: list["Permission"] = Relationship(
         back_populates="api_keys",
         link_model=ApiKeyPermission,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import typing
+from datetime import UTC, datetime
 
 from sqlmodel import select
 
@@ -19,6 +20,22 @@ class ApiKeyRepository:
         :param session: database session
         """
         self.session = session
+
+    def revoke(self, api_key_hash: str) -> ApiKey | None:
+        """Revoke an API key.
+
+        :param api_key_hash: hashed api key
+        :return: revoked api key model or None if not found
+        """
+        api_key = self.get_by_hash(api_key_hash)
+        if api_key is None:
+            return None
+        api_key.active = False
+        api_key.revoked_at = datetime.now(UTC)
+        self.session.add(api_key)
+        self.session.commit()
+        self.session.refresh(api_key)
+        return api_key
 
     def create(self, api_key: ApiKey) -> ApiKey:
         """Create api key in database.
