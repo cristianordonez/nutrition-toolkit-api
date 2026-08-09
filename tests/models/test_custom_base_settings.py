@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# ruff: noqa: S101
 import typing
 
 from pydantic_settings import PydanticBaseSettingsSource, YamlConfigSettingsSource
@@ -21,9 +20,8 @@ def test_get_env_file_uses_env_variable(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    env_path = tmp_path / "config.ini"
-    monkeypatch.setenv("NUTRITION_CONFIG_FILE", str(env_path))
-
+    env_path = tmp_path / ".env"
+    monkeypatch.setenv("NTK_CONFIG_FILE", str(env_path))
     assert get_env_file() == env_path
 
 
@@ -31,10 +29,9 @@ def test_get_env_file_defaults_to_cwd_config_ini(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.delenv("NUTRITION_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("NTK_CONFIG_FILE", raising=False)
     monkeypatch.chdir(tmp_path)
-
-    assert get_env_file() == tmp_path / "config.ini"
+    assert get_env_file() == tmp_path / ".env"
 
 
 def test_settings_customise_sources_returns_ordered_sources() -> None:

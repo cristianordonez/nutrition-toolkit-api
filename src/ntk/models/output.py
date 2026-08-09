@@ -6,10 +6,14 @@ import typing
 
 from pydantic import BaseModel
 
+from ntk.models.base import ConsoleRenderableModel
 
-class Output(BaseModel):
+T = typing.TypeVar("T", bound=ConsoleRenderableModel)
+
+
+class Output[T](BaseModel):
     """Output to the run method of controllers."""
 
     controller: str
-    result: typing.Any
+    result: T
     exit_code: int

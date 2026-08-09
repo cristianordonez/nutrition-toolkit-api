@@ -2,32 +2,6 @@
 
 FastAPI interface for the nutrition toolkit application with CLI tool support.
 
-## TODO
-
-- run and configure test suite for python 3.12, 3.13, and 3.14
-
-- set up ty type checking and ruff using pre commit
-
-- set up sphinx documentation
-
-- set up pre commit
-
-- change versioning to use semantic versioning instead of date
-
-- containerize with docker
-
-- add option to run jobs/commands in parallel use a parallel runner class that can change between using threads and processes
-
-- set up github actions - lint, format, type check, build, test, deploy package to github packages
-
-- create workflow to update version in __version__.py, consider using uv or hatch to release new version
-
-- publish to pypi
-
-- add branch protection rules on repository
-
-- Update README.md
-
 ## Development
 
 - System python is available at /usr/bin/python3
@@ -55,6 +29,12 @@ uv python list
 
 ```bash
 uv pip install -e .
+```
+
+- Make sure to include optional dependencies to start fastAPI server:
+
+```bash
+uv pip install -e ".[api]"
 ```
 
 - Update uv.lock
@@ -101,6 +81,21 @@ uv tool install tox --with tox-uv
 
 ```bash
 pre-commit run <hook-id>
+```
+
+## Deployment
+
+- Use the ntk-start command to run uvicorn on FastAPI app
+
+```bash
+uv run ntk-start
+```
+
+- containerize the REST API using Docker:
+
+```bash
+docker build -t ntk-api-image .
+docker run -d --env database_host=host.docker.internal --add-host=host.docker.internal:host-gateway -p 3000:3000 --name ntk-api ntk-api-image
 ```
 
 ## Known Issues

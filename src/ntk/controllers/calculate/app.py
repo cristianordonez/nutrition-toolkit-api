@@ -7,7 +7,6 @@ import typing
 
 from ntk.controllers.base import BaseControllerGroup
 from ntk.controllers.calculate.energy import EnergyController
-from ntk.controllers.calculate.tubefeed import TubefeedController
 from ntk.controllers.registry import register_command
 
 logger = logging.getLogger(__name__)
@@ -22,7 +21,7 @@ class CalculateControllerGroup(BaseControllerGroup):
 
     def __init__(self) -> None:
         """Initialize class."""
-        self._subcommands = [EnergyController(), TubefeedController()]
+        self._subcommands = [EnergyController()]
 
     @property
     def subcommands(self) -> list[typing.Any]:

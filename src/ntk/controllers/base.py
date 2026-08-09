@@ -50,14 +50,17 @@ class BaseController[T](ABC):
                 required = not field.default is not PydanticUndefined
                 kwargs = {"help": field.description, "required": required}
                 kwargs["default"] = field.default
+                default_args = typing.get_args(annotation)
                 if annotation is bool:
                     kwargs["action"] = "store_true"
                 elif origin is typing.Literal:
                     kwargs["choices"] = typing.get_args(annotation)
+                elif origin is list:
+                    kwargs["nargs"] = "+"
+                    kwargs["type"] = default_args[0]
                 elif (
                     origin is typing.Union or origin is types.UnionType
                 ):  # account for None type
-                    default_args = typing.get_args(annotation)
                     if isinstance(
                         default_args[0],
                         GenericAlias,

@@ -14,16 +14,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-      - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-      - name: Install Python 3.14
-        run: uv python install 3.14
-      - name: Build
-        run: uv build
-
-      - name: Install uv
+      - name: Create and Push Git Tag
         run: |
-            python -m pip install --upgrade pip
-            pip install uv
-      - name: Publish
-        run: uv publish
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          echo "Creating annotated tag: ${{ inputs.version }}"
+          git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }} via GitHub Actions"
+          git push origin "${{ inputs.version }}"
+      - name: Create Release
+        env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ inputs.version }}" --title "Release ${{ inputs.version }}" --notes "Release ${{ inputs.version }} via GitHub Actions"
+      # build docker image
+      # publish docker image
+      # ssh into droplet and pull docker image then start the service

@@ -17,13 +17,22 @@ authors = [
 urls.Repository = "https://github.com/cristianordonez/nutrition-toolkit-cli.git"
 requires-python = ">= 3.12"
 dependencies = [
+    "psycopg>=3.3.4",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
     "pyyaml>=6.0.3",
+    "sqlmodel>=0.0.39",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.139.0",
+    "uvicorn>=0.51.0",
 ]
 
 [project.scripts]
 ntk = "ntk.presentation.cli.app:main"
+ntk-api = "ntk.presentation.api.main:start"
 
 [dependency-groups]
 dev = [
@@ -39,6 +48,7 @@ test = [
     "pytest-cov",
 ]
 docs = [
+    "autodoc-pydantic>=2.2.0",
     "sphinx>=7.4.7",
     "sphinx-argparse-cli>=1.21.4",
     "sphinx-rtd-theme>=3.1.0",
@@ -79,13 +89,15 @@ exclude = [
 lint.select = [ "ALL" ] # Select which linting rules to use
 lint.ignore = [
     "D100", # Ignore missing docstring in public modules
+    "D101", # Ignore missing docstring in public class
     "D104", # Missing docstring in public package
     "D203", # incorrect blank line before class, conflicts with D211
-    "D213" # multi line summary second line, conflicts with D212
+    "D213", # multi line summary second line, conflicts with D212
 ] # Avoid enforcing specific violations
 lint.fixable = [ "ALL" ] # Allow fix for all enabled rules (when `--fix`) is provided.
 lint.unfixable = [ "F401" ] # Disables automatic or removal of unused imports, will still fail ruff checks
 lint.per-file-ignores."!src/**.py" = [ "D" ] # Don't care about documentation in non package files
+lint.per-file-ignores."tests/**/*.py" = [ "S101" ] # allow assert command in tests
 lint.flake8-errmsg.max-string-length = 30 # Max length of string literal in error message
 lint.flake8-import-conventions.banned-from = [ "typing" ]
 lint.isort = { known-first-party = [

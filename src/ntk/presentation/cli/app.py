@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import pathlib
 import sys
-import typing
 
 from ntk import VERSION
 from ntk.controllers import load_commands
@@ -37,7 +36,7 @@ def main(args: list[str] | None = None) -> None:
     options = parsed.options_model.model_validate(vars(parsed))
     output = parsed.func(options)
     if output.exit_code == 0:
-        pretty(output.result)
+        print(output.result.to_console())  # noqa: T201
     raise SystemExit(output.exit_code)
 
 
@@ -70,29 +69,6 @@ def create_root_parser() -> argparse.ArgumentParser:
         required=False,
     )
     return parser
-
-
-def pretty(obj: typing.Any, indent: int = 0) -> None:  # noqa: ANN401
-    """Pretty print dictionary for CLI output.
-
-    :param obj: dictionary
-    :param indent: number of spaces to indent keys, defaults to 0
-    """
-    pad = " " * indent
-    if isinstance(obj, dict):
-        print(f"{pad}{{")  # noqa: T201
-        for k, v in obj.items():
-            print(f"{pad}  {k}: ", end="")  # noqa: T201
-            pretty(v, indent + 2)
-        print(f"{pad}}}")  # noqa: T201
-    elif isinstance(obj, list):
-        print("[")  # noqa: T201
-        for item in obj:
-            print(" " * (indent + 2), end="")  # noqa: T201
-            pretty(item, indent + 2)
-        print(f"{pad}]")  # noqa: T201
-    else:
-        print(obj)  # noqa: T201
 
 
 if __name__ == "__main__":
