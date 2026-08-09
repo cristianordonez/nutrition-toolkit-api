@@ -71,6 +71,7 @@ commands = [ [
 [env.type]
 description = "type check the code base"
 skip_install = false
+extras = [ "api" ]
 dependency_groups = [ "type", "test" ]
 commands = [ [
     "ty", 

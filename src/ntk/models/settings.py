@@ -6,9 +6,11 @@ from .base import CustomBaseSettings
 
 
 class Settings(CustomBaseSettings):
-    """Initial application settings."""
+    """Initial application settings. Pulls default values from the environment.
 
-    ntk_api_key: str
+    Default path for .env file to source from comes from NTK_CONFIG_FILE env variable.
+    """
+
     database_user: str
     database_host: str
     database_name: str
@@ -16,6 +18,7 @@ class Settings(CustomBaseSettings):
     database_port: int = Field(default=5432)
     pool_size: int = Field(default=50)
     max_overflow: int = Field(default=100)
+    port: int = Field(alias="ntk_port")
 
     @computed_field
     @property
@@ -28,4 +31,6 @@ class Settings(CustomBaseSettings):
         )
 
 
-settings = Settings()  # ty: ignore[missing-argument]
+def get_settings() -> Settings:
+    """Return a settings instance using the current environment."""
+    return Settings()

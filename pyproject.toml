@@ -92,11 +92,12 @@ lint.ignore = [
     "D101", # Ignore missing docstring in public class
     "D104", # Missing docstring in public package
     "D203", # incorrect blank line before class, conflicts with D211
-    "D213" # multi line summary second line, conflicts with D212
+    "D213", # multi line summary second line, conflicts with D212
 ] # Avoid enforcing specific violations
 lint.fixable = [ "ALL" ] # Allow fix for all enabled rules (when `--fix`) is provided.
 lint.unfixable = [ "F401" ] # Disables automatic or removal of unused imports, will still fail ruff checks
 lint.per-file-ignores."!src/**.py" = [ "D" ] # Don't care about documentation in non package files
+lint.per-file-ignores."tests/**/*.py" = [ "S101" ] # allow assert command in tests
 lint.flake8-errmsg.max-string-length = 30 # Max length of string literal in error message
 lint.flake8-import-conventions.banned-from = [ "typing" ]
 lint.isort = { known-first-party = [

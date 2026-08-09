@@ -8,9 +8,6 @@ from ntk.controllers.base import BaseController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 
-# ruff: noqa: S101
-
-
 _TEST_FOO = 5
 
 

@@ -6,12 +6,12 @@ from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
 from ntk.database.db import get_session
-from ntk.models.api_key import ApiKey  # noqa: TC001
+from ntk.models.api_key import APIKey  # noqa: TC001
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.repositories.api_key import ApiKeyRepository
-from ntk.repositories.permission import PermissionRepository
-from ntk.services.api_key import ApiKeyService
+from ntk.repositories.api_key_repo import APIKeyRepo
+from ntk.repositories.permission_repo import PermissionRepo
+from ntk.services.api_key_service import APIKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class ListOptions(BaseModel):
 class ListResponse(ConsoleRenderableModel):
     """Response for list controller."""
 
-    api_keys: list[ApiKey] | None = Field(
+    api_keys: list[APIKey] | None = Field(
         description="List of API keys",
         default=None,
     )
@@ -57,9 +57,9 @@ class ListController(BaseController):
         """
         logger.debug(options)
         session = next(get_session())
-        repo = ApiKeyRepository(session)
-        permission_repo = PermissionRepository(session)
-        service = ApiKeyService(repo, permission_repo)
+        repo = APIKeyRepo(session)
+        permission_repo = PermissionRepo(session)
+        service = APIKeyService(repo, permission_repo)
         api_keys = service.get_api_keys(plaintext_key=options.api_key)
         results = ListResponse(api_keys=api_keys)
         return Output(result=results, controller=self.name, exit_code=0)

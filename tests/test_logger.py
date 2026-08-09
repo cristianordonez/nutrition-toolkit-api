@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# ruff: noqa: S101
 import logging
 import typing
 

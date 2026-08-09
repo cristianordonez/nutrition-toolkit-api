@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# ruff: noqa: S101
 import argparse
 
 from ntk.controllers.calculate.app import CalculateControllerGroup

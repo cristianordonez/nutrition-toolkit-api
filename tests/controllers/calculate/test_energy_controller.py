@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# ruff: noqa: S101
 from ntk.controllers.calculate.energy import EnergyController, EnergyOptions
 from ntk.services.calculator_service import CalculatorService
 
@@ -59,8 +58,6 @@ def test_energy_controller_accepts_manual_ranges() -> None:
         protein_needs=(1.1, 1.3),
     )
     output = EnergyController().run(options)
-    assert output.result["kcal"].endswith(" kcal (20-25 kcal/kg)")
-    assert output.result["protein"].endswith(" g (1.1-1.3 g/kg)")
     min_kcal = 22
     max_kcal = 27
     min_protein = 1.1

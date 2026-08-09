@@ -8,9 +8,9 @@ from ntk.controllers.base import BaseController
 from ntk.database.db import get_session
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.repositories.api_key import ApiKeyRepository
-from ntk.repositories.permission import PermissionRepository
-from ntk.services.api_key import ApiKeyService
+from ntk.repositories.api_key_repo import APIKeyRepo
+from ntk.repositories.permission_repo import PermissionRepo
+from ntk.services.api_key_service import APIKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +54,9 @@ class GrantPermissionsController(BaseController):
         """
         logger.debug(options)
         session = next(get_session())
-        repo = ApiKeyRepository(session)
-        permission_repo = PermissionRepository(session)
-        service = ApiKeyService(repo, permission_repo)
+        repo = APIKeyRepo(session)
+        permission_repo = PermissionRepo(session)
+        service = APIKeyService(repo, permission_repo)
         api_keys = service.get_api_keys(plaintext_key=options.api_key)
         if len(api_keys) == 0:
             msg = f"No API key found for '{options.api_key}'"

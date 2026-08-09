@@ -6,7 +6,6 @@ import pytest
 
 from ntk.services.calculator_service import BMICategory, CalculatorService, WeightBasis
 
-# ruff: noqa: S101
 _TEST_WEIGHT = 220.0
 _TEST_IBW = 142.0
 _TEST_AIBW = 161.5

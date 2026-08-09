@@ -4,6 +4,8 @@ import os
 import sys
 import typing
 
+from ntk.models.settings import get_settings
+
 try:
     import uvicorn
     from fastapi import Depends, FastAPI, HTTPException, status
@@ -20,11 +22,7 @@ app = FastAPI()
 
 security_sheme = HTTPBearer()
 
-ntk_api_token = os.getenv("NTK_API_TOKEN")
-
-if ntk_api_token is None:
-    msg = "No environment variable for ntk api found."
-    raise RuntimeError(msg)
+SETTINGS = get_settings()
 
 
 def verify_token(
@@ -84,7 +82,7 @@ def start(args: list[str] | None = None) -> None:
     parser.add_argument(
         "--port",
         type=int,
-        default=8000,
+        default=SETTINGS.port,
         help="Port to bind the server to",
     )
     ns = parser.parse_args(args)

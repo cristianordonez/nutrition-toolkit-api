@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# ruff: noqa: S101
 import typing
 
 from pydantic_settings import PydanticBaseSettingsSource, YamlConfigSettingsSource

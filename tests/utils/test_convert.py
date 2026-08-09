@@ -4,8 +4,6 @@ import pytest
 
 from ntk.utils.convert import Convert
 
-# ruff: noqa: S101
-
 
 @pytest.mark.parametrize(
     ("inches", "expected"),

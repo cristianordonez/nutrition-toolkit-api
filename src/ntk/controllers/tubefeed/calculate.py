@@ -61,9 +61,9 @@ class CalculateTubefeedController(BaseController):
         :param options: pydantic basemodel TubefeedOptions instance
         :return: Output model
         """
+        result = CalculateTubefeedResponse(energy_needs="")
         try:
             logger.debug("Options: %s", options)
-            result = CalculateTubefeedResponse(energy_needs="")
             ec = 0
         except ValueError:
             ec = 1

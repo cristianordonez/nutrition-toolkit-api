@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 MIN_HEIGHT = 60.0
 
-GERIATRIC_AGE = 70
+GERIATRIC_AGE = 65
 
 
 class BMICategory(Enum):
@@ -30,8 +30,8 @@ STANDARD_BMI_RANGES = {
 }
 
 GERIATRIC_BMI_RANGES = {
-    BMICategory.UNDERWEIGHT: (0.0, 23.0),
-    BMICategory.NORMAL: (23.0, 28.0),
+    BMICategory.UNDERWEIGHT: (0.0, 22.0),
+    BMICategory.NORMAL: (22.0, 28.0),
     BMICategory.OVERWEIGHT: (28.0, 30.0),
     BMICategory.OBESE: (30.0, 40.0),
     BMICategory.MORBIDLY_OBESE: (40.0, float("inf")),
