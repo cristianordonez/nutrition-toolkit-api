@@ -5,7 +5,7 @@ Databricks App boilerplate:
 - Pulls data from the Massive API via massive_client.py and syncs it into Lakebase
 
 Run locally:
-    python app.py
+    python scripts/app.py
 Deploy as a Databricks App using app.yaml.
 """
 
