@@ -16,7 +16,7 @@ class Settings(CustomBaseSettings):
     )
     pool_size: int = Field(default=50)
     max_overflow: int = Field(default=100)
-    port: int = Field(description="Port that FastAPI server will run on.")
+    port: int = Field(description="Port that FastAPI server will run on.", default=8000)
     debug: bool = Field(description="Enable debug logging.")
 
 
