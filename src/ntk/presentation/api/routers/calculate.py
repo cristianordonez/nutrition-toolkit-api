@@ -22,7 +22,7 @@ async def calculate_energy(
     options: EnergyOptions,
     _: typing.Annotated[
         APIKey,
-        Depends(require_any_permission(["admin", "calculate_energy"])),
+        Depends(require_any_permission(["admin", "calculate:read"])),
     ],
 ) -> EnergyResponse:
     """Calculate nutrition needs based on user metrics.

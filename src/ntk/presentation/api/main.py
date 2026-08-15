@@ -1,68 +1,77 @@
 from __future__ import annotations
 
-import os
 import sys
-import typing
+from pathlib import Path
+
+from fastapi import HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from ntk.models.settings import get_settings
 
 try:
     import uvicorn
-    from fastapi import Depends, FastAPI, HTTPException, status
-    from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+    from fastapi import FastAPI, HTTPException, status
 except ImportError as err:
     msg = (
         "The API dependencies are not installed. Install them with: pip install 'ntk[api]'",  # noqa: E501
     )
     raise SystemExit(msg) from err
 
+
+from ntk.logger import setup_logging
 from ntk.presentation.cli.app import create_root_parser
 
-from .routers import calculate
+from .routers import calculate, tickets
 
 app = FastAPI()
 
-security_sheme = HTTPBearer()
+# Initialize logging from env
+
 
 SETTINGS = get_settings()
 
+logger = setup_logging(debug=SETTINGS.debug)
 
-def verify_token(
-    credentials: HTTPAuthorizationCredentials | None = None,
-) -> str:
-    """Verify the provided token."""
-    if credentials is None:
-        credentials = Depends(security_sheme)
-    token = credentials.credentials
-    expected_token = os.getenv("NTK_API_TOKEN")
-    if expected_token is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server misconfiguration: NTK_API_TOKEN not set",
-        )
-    if token != expected_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return token
+# Serve static assets (index.html lives in src/ntk/static)
+_STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 app.include_router(
     calculate.router,
     prefix="/api/v1",
     tags=["calculate"],
-    dependencies=[Depends(verify_token)],
 )
 
 
-@app.get("/")
-async def root(
-    token: typing.Annotated[str, Depends(verify_token)],
-) -> dict[str, str]:
-    """Get root path."""
-    return {"message": "Welcome to the Nutrition Toolkit API", "token": token}
+app.include_router(
+    tickets.router,
+    prefix="/api/v1",
+    tags=["tickets"],
+)
+
+
+@app.exception_handler(Exception)
+async def handle_exception(_: Request, exc: Exception) -> JSONResponse:
+    """Catch-all exception handler that returns JSON and logs the error."""
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+    logger.error("Unhandled exception while processing request: %s", exc)
+    return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root() -> HTMLResponse:
+    """Render the single-page app index.html from the package static folder."""
+    index_file = _STATIC_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Index not found",
+        )
+    return HTMLResponse(index_file.read_text(encoding="utf-8"))
 
 
 def start(args: list[str] | None = None) -> None:

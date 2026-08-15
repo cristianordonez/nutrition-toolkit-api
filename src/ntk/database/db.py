@@ -5,6 +5,7 @@ import typing
 
 from sqlmodel import Session, SQLModel, create_engine
 
+# import all models so that they are initialized below
 import ntk.models  # noqa: F401
 from ntk.models.settings import get_settings
 from ntk.repositories.permission_repo import PermissionRepo

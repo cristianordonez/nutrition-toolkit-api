@@ -1,8 +1,7 @@
 command:
   - "sh"
   - "-c"
-  - "python -m pip install -r requirements.txt && python scripts/app.py"
-  # - "uv pip install 'ntk[api]' && uv run ntk-api"
+  - "uv pip install '.[api]' && uv run ntk-api"
 env:
   - name: LAKEBASE_SECRET_SCOPE
     value: "database"

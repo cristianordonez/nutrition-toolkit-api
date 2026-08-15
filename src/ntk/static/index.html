@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Tickets — Admin</title>
+        <style>
+            body { font-family: -apple-system, Arial, sans-serif; max-width: 900px; margin: 24px auto; color:#222 }
+            h1 { font-size: 20px }
+            .row { display:flex; gap:20px }
+            .col { flex:1 }
+            label { display:block; margin-top:12px; font-weight:600 }
+            input[type=text], select, textarea { width:100%; padding:8px; box-sizing:border-box; margin-top:6px }
+            button { margin-top:10px; padding:8px 12px }
+            .list { border:1px solid #ddd; padding:8px; border-radius:6px; max-height:520px; overflow:auto }
+            .item { padding:8px; border-bottom:1px solid #eee; cursor:pointer }
+            .item:hover { background:#f9f9f9 }
+            .active { background:#eef; }
+            .messages { background:#f6f6f6; padding:8px; border-radius:6px; margin-top:8px }
+            .meta { color:#666; font-size:13px }
+            .error { color:#b00 }
+        </style>
+    </head>
+    <body>
+        <h1>Tickets</h1>
+
+        <label for="auth">Authorization token (Bearer)</label>
+        <input id="auth" type="text" placeholder="Enter token or raw API key" />
+        <div class="hint">Provide the raw API key (the server expects 'Bearer &lt;key&gt;' in the Authorization header).</div>
+
+        <div style="margin-top:16px" class="row">
+            <div class="col" style="max-width:360px">
+                <h3>All tickets</h3>
+                <div id="tickets" class="list"></div>
+                <button id="refresh">Refresh</button>
+            </div>
+
+            <div class="col">
+                <h3>Ticket detail</h3>
+                <div id="detail">
+                    <div id="detail-meta" class="meta">Select a ticket to view details</div>
+                    <div id="messages" class="messages"></div>
+
+                    <h4>Add message</h4>
+                    <label for="msg-author">Author</label>
+                    <input id="msg-author" type="text" />
+                    <label for="msg-text">Message</label>
+                    <textarea id="msg-text" rows="3"></textarea>
+                    <button id="add-msg">Add message</button>
+
+                    <h4>Create ticket</h4>
+                    <label for="t-title">Title</label>
+                    <input id="t-title" type="text" />
+                    <label for="t-by">Created by</label>
+                    <input id="t-by" type="text" />
+                    <label for="t-status">Status</label>
+                    <select id="t-status"><option value="open">open</option><option value="closed">closed</option></select>
+                    <button id="create-ticket">Create ticket</button>
+
+                    <h4>Update status</h4>
+                    <select id="update-status"><option value="open">open</option><option value="in_progress">in_progress</option><option value="closed">closed</option></select>
+                    <button id="set-status">Update status</button>
+
+                    <div id="result" style="margin-top:12px"></div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const base = '/api/v1/tickets';
+            let selectedId = null;
+
+            function authHeader() {
+                const v = document.getElementById('auth').value.trim();
+                if (!v) return {};
+                // If user already included 'Bearer ' prefix, use as-is; otherwise prefix.
+                return { 'Authorization': v.startsWith('Bearer ') ? v : 'Bearer ' + v };
+            }
+
+            async function fetchJson(url, opts = {}) {
+                const headers = Object.assign({'Content-Type':'application/json'}, authHeader(), opts.headers || {});
+                const res = await fetch(url, Object.assign({}, opts, { headers }));
+                let body = null;
+                try { body = await res.json(); } catch (e) { body = null; }
+                if (!res.ok) throw { status: res.status, body };
+                return body;
+            }
+
+            async function loadTickets() {
+                const el = document.getElementById('tickets');
+                el.innerHTML = 'Loading...';
+                try {
+                    const data = await fetchJson(base + '/');
+                    el.innerHTML = '';
+                    data.forEach(t => {
+                        const div = document.createElement('div');
+                        div.className = 'item';
+                        div.dataset.id = t.ticket_id || t.id || t.ticketId || '';
+                        div.innerHTML = `<strong>${escapeHtml(t.title || '(no title)')}</strong><div class="meta">${escapeHtml(t.status||'')} — ${escapeHtml(t.created_by||'')}</div>`;
+                        div.addEventListener('click', () => selectTicket(div.dataset.id, div));
+                        el.appendChild(div);
+                    });
+                } catch (err) {
+                    document.getElementById('result').innerHTML = '<div class="error">Failed to load tickets: ' + (err.body?.error || err.status || err) + '</div>';
+                    el.innerHTML = '';
+                }
+            }
+
+            function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]); }
+
+            async function selectTicket(id, div) {
+                selectedId = id;
+                document.querySelectorAll('.item').forEach(i=>i.classList.remove('active'));
+                if (div) div.classList.add('active');
+                document.getElementById('detail-meta').textContent = 'Loading...';
+                try {
+                    const t = await fetchJson(base + '/' + id);
+                    document.getElementById('detail-meta').innerHTML = `<strong>${escapeHtml(t.title)}</strong> <span class="meta">(${escapeHtml(t.status)})</span><br/>Created by ${escapeHtml(t.created_by)} on ${new Date(t.created_at).toLocaleString()}`;
+                    const msgEl = document.getElementById('messages');
+                    msgEl.innerHTML = '';
+                    const msgs = t.messages || [];
+                    if (msgs.length === 0) msgEl.textContent = '(no messages)';
+                    msgs.forEach(m => {
+                        const p = document.createElement('div');
+                        p.innerHTML = `<div><strong>${escapeHtml(m.author)}</strong> <span class="meta">${new Date(m.created_at).toLocaleString()}</span></div><div>${escapeHtml(m.message_text)}</div><hr/>`;
+                        msgEl.appendChild(p);
+                    });
+                } catch (err) {
+                    document.getElementById('result').innerHTML = '<div class="error">Failed to load ticket: ' + (err.body?.error || err.status || err) + '</div>';
+                    document.getElementById('detail-meta').textContent = 'Error loading ticket';
+                }
+            }
+
+            document.getElementById('refresh').addEventListener('click', loadTickets);
+
+            document.getElementById('create-ticket').addEventListener('click', async ()=>{
+                const title = document.getElementById('t-title').value.trim();
+                const by = document.getElementById('t-by').value.trim();
+                const status = document.getElementById('t-status').value;
+                if (!title || !by) { document.getElementById('result').textContent = 'Title and Created by required'; return; }
+                try {
+                    const data = await fetchJson(base + '/', { method: 'POST', body: JSON.stringify({ title, created_by: by, status }) });
+                    document.getElementById('result').textContent = 'Created ticket ' + (data.ticket_id || data.id || '');
+                    loadTickets();
+                    selectTicket(data.ticket_id || data.id || '');
+                } catch (err) {
+                    document.getElementById('result').innerHTML = '<div class="error">Create failed: ' + (err.body?.error || err.status || err) + '</div>';
+                }
+            });
+
+            document.getElementById('add-msg').addEventListener('click', async ()=>{
+                if (!selectedId) { document.getElementById('result').textContent = 'Select a ticket first'; return; }
+                const author = document.getElementById('msg-author').value.trim();
+                const text = document.getElementById('msg-text').value.trim();
+                if (!author || !text) { document.getElementById('result').textContent = 'Author and message required'; return; }
+                try {
+                    await fetchJson(base + '/' + selectedId + '/messages', { method: 'POST', body: JSON.stringify({ message_text: text, author }) });
+                    document.getElementById('msg-text').value = '';
+                    document.getElementById('result').textContent = 'Message added';
+                    selectTicket(selectedId);
+                } catch (err) {
+                    document.getElementById('result').innerHTML = '<div class="error">Add message failed: ' + (err.body?.error || err.status || err) + '</div>';
+                }
+            });
+
+            document.getElementById('set-status').addEventListener('click', async ()=>{
+                if (!selectedId) { document.getElementById('result').textContent = 'Select a ticket first'; return; }
+                const status = document.getElementById('update-status').value;
+                try {
+                    await fetchJson(base + '/' + selectedId + '/status', { method: 'PATCH', body: JSON.stringify({ status }) });
+                    document.getElementById('result').textContent = 'Status updated';
+                    loadTickets();
+                    selectTicket(selectedId);
+                } catch (err) {
+                    document.getElementById('result').innerHTML = '<div class="error">Update failed: ' + (err.body?.error || err.status || err) + '</div>';
+                }
+            });
+
+            // initialize
+            loadTickets();
+        </script>
+    </body>
+</html>

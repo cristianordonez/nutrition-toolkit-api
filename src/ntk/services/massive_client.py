@@ -1,5 +1,4 @@
-"""
-Client for the Massive API.
+"""Client for the Massive API.
 
 The API key is stored in a Databricks secret scope (see setup_secrets.py) and
 resolved at runtime via the Databricks SDK - it is never stored in code, env
@@ -10,10 +9,13 @@ from __future__ import annotations
 
 import base64
 import os
-from typing import Any
+import typing
 
 import requests
 from databricks.sdk import WorkspaceClient
+
+if typing.TYPE_CHECKING:
+    from collections.abc import Generator
 
 _w = WorkspaceClient()
 
@@ -33,7 +35,16 @@ def _get_api_key() -> str:
 class MassiveClient:
     """Thin wrapper around the Massive API with auth + retry-friendly session."""
 
-    def __init__(self, base_url: str | None = None, timeout: int = _DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        base_url: str | None = None,
+        timeout: int = _DEFAULT_TIMEOUT,
+    ) -> None:
+        """Init client.
+
+        :param base_url: API URL, defaults to None
+        :param timeout: seconds until timeout, defaults to _DEFAULT_TIMEOUT
+        """
         self.base_url = (base_url or _BASE_URL).rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
@@ -44,7 +55,13 @@ class MassiveClient:
             },
         )
 
-    def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+    def get(self, path: str, params: dict[str, typing.Any] | None = None) -> str:
+        """Get stocks.
+
+        :param path: path to url
+        :param params: api paramsi, defaults to None
+        :return: string
+        """
         resp = self._session.get(
             f"{self.base_url}{path}",
             params=params,
@@ -53,7 +70,13 @@ class MassiveClient:
         resp.raise_for_status()
         return resp.json()
 
-    def post(self, path: str, json: dict[str, Any] | None = None) -> Any:
+    def post(self, path: str, json: dict[str, typing.Any] | None = None) -> str:
+        """Post to client.
+
+        :param path: path to url
+        :param json: json string, defaults to None
+        :return: json
+        """
         resp = self._session.post(
             f"{self.base_url}{path}",
             json=json,
@@ -65,12 +88,12 @@ class MassiveClient:
     def paginated_get(
         self,
         path: str,
-        params: dict[str, Any] | None = None,
+        params: dict[str, typing.Any] | None = None,
         page_size: int = 200,
-    ):
-        """
-        Generator that yields items across all pages of a "massive" (large)
-        paginated dataset. Assumes a cursor-based API shape:
+    ) -> Generator:
+        """Yield items across all pages of a "massive" (large).
+
+        Paginated dataset. Assumes a cursor-based API shape:
         {"items": [...], "next_cursor": "..." | null}
         Adjust to match the real Massive API pagination contract.
         """
@@ -83,20 +106,18 @@ class MassiveClient:
                 params["cursor"] = cursor
             data = self.get(path, params=params)
             items = data.get("items", [])
-            for item in items:
-                yield item
+            yield from items
 
             cursor = data.get("next_cursor")
             if not cursor:
                 break
 
     def get_latest_price(self, symbol: str) -> dict:
-        """
-        Fetch the latest traded price for a single symbol in a SINGLE API
-        call (no pagination). Use this instead of paginated_get() whenever
+        """Fetch the latest traded price for a single symbol in a SINGLE API.
+
+        No pagination. Use this instead of paginated_get() whenever
         the caller needs to stay within tight API rate limits (e.g.
         classroom/student accounts), at the cost of only being able to
         request one symbol per request.
         """
-        data = self.get(f"/v2/aggs/ticker/{symbol}/prev")
-        return data
+        return self.get(f"/v2/aggs/ticker/{symbol}/prev")

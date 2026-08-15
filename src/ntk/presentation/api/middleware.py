@@ -22,7 +22,7 @@ def get_api_key_service() -> APIKeyService:
 
 
 def get_api_key(
-    authorization: str = Header(...),
+    authorization: str | None = Header(None),
     api_key_service: APIKeyService = Depends(get_api_key_service),  # noqa: B008
 ) -> APIKey:
     """Dependency to get the API key from the request header.
@@ -31,10 +31,15 @@ def get_api_key(
     :param api_key_service: APIKeyService instance
     :return: APIKey model
     """
+    if authorization is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization header",
+        )
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
-            detail="Invalid or missing Authorization header",
+            detail="Invalid Authorization header",
         )
     raw_key = authorization[len("Bearer ") :]
     try:

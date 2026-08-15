@@ -85,10 +85,10 @@ pre-commit run <hook-id>
 
 ## Deployment
 
-- Use the ntk-start command to run uvicorn on FastAPI app
+- Use the ntk-api command to run uvicorn on FastAPI app
 
 ```bash
-uv run ntk-start
+uv run ntk-api
 ```
 
 - containerize the REST API using Docker:

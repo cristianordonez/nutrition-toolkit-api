@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field, PostgresDsn, computed_field
+from pydantic import Field, PostgresDsn
 
 from .base import CustomBaseSettings
 
@@ -11,24 +11,13 @@ class Settings(CustomBaseSettings):
     Default path for .env file to source from comes from NTK_CONFIG_FILE env variable.
     """
 
-    database_user: str
-    database_host: str
-    database_name: str
-    database_password: str
-    database_port: int = Field(default=5432)
+    database_url: PostgresDsn = Field(
+        description="Full postgres connection string. Example: 'postgresql+psycopg://{user}{pw}@{host}:{port}/{name}",
+    )
     pool_size: int = Field(default=50)
     max_overflow: int = Field(default=100)
-    port: int = Field(alias="ntk_port")
-
-    @computed_field
-    @property
-    def database_url(self) -> PostgresDsn:
-        """Validates postgres connection string and connection."""
-        return PostgresDsn(
-            f"postgresql+psycopg://{self.database_user}:"
-            f"{self.database_password}@{self.database_host}:"
-            f"{self.database_port}/{self.database_name}",
-        )
+    port: int = Field(description="Port that FastAPI server will run on.")
+    debug: bool = Field(description="Enable debug logging.")
 
 
 def get_settings() -> Settings:

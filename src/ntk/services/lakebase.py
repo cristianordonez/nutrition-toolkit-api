@@ -1,5 +1,4 @@
-"""
-Lakebase (Databricks-managed Postgres) connection helper.
+"""Lakebase (Databricks-managed Postgres) connection helper.
 
 Connects using a single LAKEBASE_URL (a standard Postgres connection URL,
 e.g. postgresql://role:password@host:5432/databricks_postgres?sslmode=require)
@@ -11,12 +10,17 @@ from __future__ import annotations
 
 import base64
 import os
+import typing
 from contextlib import contextmanager
 
 import psycopg2
 from databricks.sdk import WorkspaceClient
 from psycopg2.extras import RealDictCursor
 from sqlalchemy import create_engine
+
+if typing.TYPE_CHECKING:
+    from sqlalchemy import Engine
+
 
 _w = WorkspaceClient()
 
@@ -31,7 +35,7 @@ def _lakebase_url() -> str:
 
 
 @contextmanager
-def get_connection():
+def get_connection() -> typing.Any:  # noqa: ANN401
     """Yield a raw psycopg2 connection with a RealDictCursor factory."""
     conn = psycopg2.connect(_lakebase_url(), cursor_factory=RealDictCursor)
     try:
@@ -40,7 +44,7 @@ def get_connection():
         conn.close()
 
 
-def get_engine():
+def get_engine() -> Engine:
     """Return a SQLAlchemy engine for Lakebase."""
     return create_engine(_lakebase_url())
 
