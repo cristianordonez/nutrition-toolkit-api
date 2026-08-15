@@ -61,8 +61,6 @@ type = [
 ]
 
 [tool.hatch]
-version.source = "vcs"
-build.hooks.vcs.version-file = "src/ntk/_version.py"
 build.dev-mode-dirs = [
   "src",
 ]
