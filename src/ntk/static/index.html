@@ -24,9 +24,7 @@
     <body>
         <h1>Tickets</h1>
 
-        <label for="auth">Authorization token (Bearer)</label>
-        <input id="auth" type="text" placeholder="Enter token or raw API key" />
-        <div class="hint">Provide the raw API key (the server expects 'Bearer &lt;key&gt;' in the Authorization header).</div>
+        <div class="hint">Tickets API does not require an Authorization header.</div>
 
         <div style="margin-top:16px" class="row">
             <div class="col" style="max-width:360px">
@@ -70,15 +68,8 @@
             const base = '/api/v1/tickets';
             let selectedId = null;
 
-            function authHeader() {
-                const v = document.getElementById('auth').value.trim();
-                if (!v) return {};
-                // If user already included 'Bearer ' prefix, use as-is; otherwise prefix.
-                return { 'Authorization': v.startsWith('Bearer ') ? v : 'Bearer ' + v };
-            }
-
             async function fetchJson(url, opts = {}) {
-                const headers = Object.assign({'Content-Type':'application/json'}, authHeader(), opts.headers || {});
+                const headers = Object.assign({'Content-Type':'application/json'}, opts.headers || {});
                 const res = await fetch(url, Object.assign({}, opts, { headers }));
                 let body = null;
                 try { body = await res.json(); } catch (e) { body = null; }

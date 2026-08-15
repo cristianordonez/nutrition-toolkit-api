@@ -3,12 +3,11 @@ from __future__ import annotations
 import typing
 from uuid import UUID  # noqa: TC003
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from ntk.database.db import get_session
 from ntk.models import Ticket, TicketMessage, TicketPublic
-from ntk.presentation.api.middleware import require_any_permission
 from ntk.repositories.ticket_repo import TicketRepo
 
 if typing.TYPE_CHECKING:
@@ -32,11 +31,7 @@ class UpdateStatusRequest(BaseModel):
     status: str
 
 
-@router.get(
-    "/tickets/",
-    response_model=list[Ticket],
-    dependencies=[Depends(require_any_permission(["admin", "ticket:read"]))],
-)
+@router.get("/tickets/", response_model=list[Ticket])
 async def list_tickets() -> Sequence[Ticket]:
     """List tickets.
 
@@ -47,11 +42,7 @@ async def list_tickets() -> Sequence[Ticket]:
     return repo.list_all()
 
 
-@router.get(
-    "/tickets/{ticket_id}",
-    response_model=TicketPublic,
-    dependencies=[Depends(require_any_permission(["admin", "ticket:read"]))],
-)
+@router.get("/tickets/{ticket_id}", response_model=TicketPublic)
 async def get_ticket(ticket_id: UUID) -> Ticket:
     """Get ticket.
 
@@ -70,12 +61,7 @@ async def get_ticket(ticket_id: UUID) -> Ticket:
     return ticket
 
 
-@router.post(
-    "/tickets/",
-    response_model=Ticket,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_any_permission(["admin", "ticket:write"]))],
-)
+@router.post("/tickets/", response_model=Ticket, status_code=status.HTTP_201_CREATED)
 async def create_ticket(payload: CreateTicketRequest) -> Ticket:
     """Create ticket.
 
@@ -96,7 +82,6 @@ async def create_ticket(payload: CreateTicketRequest) -> Ticket:
     "/tickets/{ticket_id}/messages",
     response_model=TicketMessage,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_any_permission(["admin", "ticket:write"]))],
 )
 async def add_ticket_message(
     ticket_id: UUID,
@@ -120,11 +105,7 @@ async def add_ticket_message(
         ) from err
 
 
-@router.patch(
-    "/tickets/{ticket_id}/status",
-    response_model=Ticket,
-    dependencies=[Depends(require_any_permission(["admin", "ticket:write"]))],
-)
+@router.patch("/tickets/{ticket_id}/status", response_model=Ticket)
 async def update_ticket_status(ticket_id: UUID, payload: UpdateStatusRequest) -> Ticket:
     """Update ticket status.
 
