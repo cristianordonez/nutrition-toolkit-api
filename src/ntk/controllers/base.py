@@ -17,7 +17,7 @@ if typing.TYPE_CHECKING:
 T = typing.TypeVar("T", bound="CustomBaseSettings")
 
 
-class BaseController[T](ABC):
+class BaseController(ABC, typing.Generic[T]):
     """Base Controller class. Each represents a CLI command."""
 
     name: typing.ClassVar[str]
