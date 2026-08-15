@@ -17,6 +17,7 @@ urls.Repository = "https://github.com/cristianordonez/nutrition-toolkit-cli.git"
 requires-python = ">= 3.11"
 dependencies = [
     "psycopg2>=2.9.12",
+    "psycopg2-binary>=2.9.9",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
     "pyyaml>=6.0.3",
