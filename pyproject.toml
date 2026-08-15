@@ -85,6 +85,7 @@ exclude = [
 ]
 lint.select = [ "ALL" ] # Select which linting rules to use
 lint.ignore = [
+    "CPY001", # Missing copyright
     "D100", # Ignore missing docstring in public modules
     "D101", # Ignore missing docstring in public class
     "D104", # Missing docstring in public package

@@ -11,7 +11,9 @@ try:
     from fastapi import Depends, FastAPI, HTTPException, status
     from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 except ImportError as err:
-    msg = ("The API is not install. Install it with: pip install 'ntk[api]'",)
+    msg = (
+        "The API dependencies are not installed. Install them with: pip install 'ntk[api]'",  # noqa: E501
+    )
     raise SystemExit(msg) from err
 
 from ntk.presentation.cli.app import create_root_parser
