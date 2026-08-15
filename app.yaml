@@ -1,9 +1,4 @@
 command:
-  # - "python"
-  # - "scripts/app.py"
-  # - "uv"
-  # - "run"
-  # - "ntk-api"
   - "sh"
   - "-c"
   - "uv pip install 'ntk[api]' && uv run ntk-api"
