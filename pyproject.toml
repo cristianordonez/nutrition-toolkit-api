@@ -1,7 +1,6 @@
 [build-system]
 requires = [
     "hatchling >= 1.26",
-    "hatch-vcs==0.3.0"
 ]
 build-backend = "hatchling.build"
 
@@ -10,7 +9,7 @@ name = "ntk"
 description = "Template repository for python projects"
 readme.content-type = "text/markdown"
 readme.file = "README.md"
-dynamic = [ "version" ]
+version = "0.2.0"
 authors = [
     {name = "Cristian Ordonez", email = "cristianordonezrd@gmail.com"},
 ]
