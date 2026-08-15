@@ -1,6 +1,9 @@
 command:
-  - "python"
-  - "scripts/app.py"
+  - "uv"
+  - "cache"
+  - "clean"
+  # - "python"
+  # - "scripts/app.py"
 
 env:
   - name: LAKEBASE_SECRET_SCOPE
