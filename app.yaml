@@ -1,7 +1,9 @@
 command:
-  - "python"
-  - "scripts/app.py"
-
+  # - "python"
+  # - "scripts/app.py"
+  - "uv"
+  - "run"
+  - "ntk-api"
 env:
   - name: LAKEBASE_SECRET_SCOPE
     value: "database"
