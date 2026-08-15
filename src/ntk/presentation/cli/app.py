@@ -6,7 +6,7 @@ import argparse
 import pathlib
 import sys
 
-from ntk import VERSION
+from ntk import __version__
 from ntk.controllers import load_commands
 from ntk.controllers.registry import COMMAND_REGISTRY
 from ntk.logger import setup_logging
@@ -50,7 +50,11 @@ def create_root_parser() -> argparse.ArgumentParser:
         description="Application description",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     parser.add_argument(
         "--log-file-interval",
         type=int,
