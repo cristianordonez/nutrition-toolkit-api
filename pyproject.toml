@@ -9,7 +9,7 @@ name = "ntk"
 description = "Template repository for python projects"
 readme.content-type = "text/markdown"
 readme.file = "README.md"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     {name = "Cristian Ordonez", email = "cristianordonezrd@gmail.com"},
 ]

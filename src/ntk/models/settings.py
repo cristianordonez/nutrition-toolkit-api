@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 
 from databricks.sdk import WorkspaceClient
@@ -8,7 +9,7 @@ from pydantic import Field, PostgresDsn
 
 from .base import CustomBaseSettings
 
-_w = WorkspaceClient()
+logger = logging.getLogger(__name__)
 
 _SCOPE = os.environ.get("LAKEBASE_SECRET_SCOPE", "database")
 _KEY = os.environ.get("LAKEBASE_SECRET_KEY", "ntk-database-url")
@@ -16,8 +17,13 @@ _KEY = os.environ.get("LAKEBASE_SECRET_KEY", "ntk-database-url")
 
 def _lakebase_url() -> str:
     """Fetch and decode the Lakebase connection URL from the Databricks secret scope."""
-    secret = _w.secrets.get_secret(scope=_SCOPE, key=_KEY)
-    return base64.b64decode(secret.value).decode("utf-8")
+    try:
+        _w = WorkspaceClient()
+        secret = _w.secrets.get_secret(scope=_SCOPE, key=_KEY)
+        return base64.b64decode(secret.value).decode("utf-8")
+    except ValueError:
+        msg = "Application not running on databricks"
+        logger.exception(msg)
 
 
 class Settings(CustomBaseSettings):

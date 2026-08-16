@@ -1,31 +1,93 @@
-name: "Release Workflow"
+name: Release
 on:
-    workflow_dispatch:
-      inputs:
-        version:
-          description: "Release version"
-          required: true
-          type: string
+  push:
+    branches:
+      - main
+env:
+  REGISTRY: ghcr.io
 jobs:
-  deploy:
+  update-version:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      release-version: ${{ steps.get_version.outputs.RELEASE_VERSION }}
     steps:
-      - name: Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Use Pull Request title to determine new version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        id: get_version
+        run: |
+          PR_TITLE=$(gh pr list --base main --state merged --limit 1 --json title --jq '.[].title')
+          IFS=':' read -ra title_array <<< "$PR_TITLE"
+          PR_TITLE_ID="${title_array[0]}"
+          LATEST_VERSION=$(gh release view --json tagName --jq '.tagName')
+          version=${LATEST_VERSION#v}
+          IFS='.' read -r major minor patch <<< "$version"
+          if [[ -z "$PR_TITLE_ID" ]]; then
+           echo "Pull request title "$PR_TITLE" must start with 'fix:', 'feature:', or 'BREAKING CHANGE:'"
+           exit 1
+          elif [[ $PR_TITLE_ID == fix* ]]; then
+           patch=$((patch + 1))
+          elif [[ $PR_TITLE_ID == feature* ]]; then
+           minor=$((minor + 1))
+          elif [[ $PR_TITLE_ID == "BREAKING CHANGE" ]]; then
+           major=$((major + 1))
+          else
+           echo "Pull request title "$PR_TITLE" does not match expected format"
+           exit 1
+          fi
+          RELEASE_VERSION="v$major.$minor.$patch"
+          echo "RELEASE_VERSION=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+  tag:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    needs:
+      - update-version
+    steps:
+      - name: Checkout repository
         uses: actions/checkout@v7
       - name: Create and Push Git Tag
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          echo "Creating annotated tag: ${{ inputs.version }}"
-          git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }} via GitHub Actions"
-          git push origin "${{ inputs.version }}"
+          echo "Creating annotated tag: ${{ needs.update-version.outputs.release-version }}"
+          git tag -a "${{ needs.update-version.outputs.release-version }}" -m "Release ${{ needs.update-version.outputs.release-version }} via GitHub Actions"
+          git push origin "${{ needs.update-version.outputs.release-version }}"
       - name: Create Release
+        id: create_release
+        uses: actions/create-release@latest
         env:
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.update-version.outputs.release-version }}
+          release_name: ${{ needs.update-version.outputs.release-version }}
+          prerelease: false
+          draft: false
+  build-push-image:
+    runs-on: ubuntu-latest
+    needs:
+      - update-version
+      - tag
+    permissions: write-all
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+      - name: Update pyproject.toml version
         run: |
-          gh release create "${{ inputs.version }}" --title "Release ${{ inputs.version }}" --notes "Release ${{ inputs.version }} via GitHub Actions"
-      # build docker image
-      # publish docker image
-      # ssh into droplet and pull docker image then start the service
+          INPUT="${{ needs.update-version.outputs.release-version }}"
+          VERSION=${INPUT#v}
+          uv pip install hatch
+          uv run hatch version $VERSION
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: docker build
+        run: docker build -t ${{ env.REGISTRY }}/${{ github.repository }}:${{ needs.update-version.outputs.release-version }} .
+      - name: docker push
+        run: docker push ${{ env.REGISTRY }}/${{ github.repository }}:${{ needs.update-version.outputs.release-version }}
