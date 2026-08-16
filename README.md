@@ -55,6 +55,12 @@ uv run ntk
 uv add pydantic
 ```
 
+- Use docker compose to start postgresql and redis containers:
+
+```bash
+docker compose up -d
+```
+
 ## Pre-Commit
 
 - Install pre-commit with uv

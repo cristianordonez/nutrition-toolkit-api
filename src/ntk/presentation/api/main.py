@@ -7,7 +7,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ntk.models.settings import get_settings
+from ntk.models.settings import SETTINGS
 
 try:
     import uvicorn
@@ -25,11 +25,6 @@ from ntk.presentation.cli.app import create_root_parser
 from .routers import calculate, tickets
 
 app = FastAPI()
-
-# Initialize logging from env
-
-
-SETTINGS = get_settings()
 
 logger = setup_logging(debug=SETTINGS.debug)
 
@@ -56,9 +51,9 @@ app.include_router(
 @app.exception_handler(Exception)
 async def handle_exception(_: Request, exc: Exception) -> JSONResponse:
     """Catch-all exception handler that returns JSON and logs the error."""
+    logger.error("Unhandled exception while processing request: %s", exc)
     if isinstance(exc, HTTPException):
         return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
-    logger.error("Unhandled exception while processing request: %s", exc)
     return JSONResponse(status_code=500, content={"error": str(exc)})
 
 

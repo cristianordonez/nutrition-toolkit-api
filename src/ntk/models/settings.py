@@ -5,7 +5,7 @@ import logging
 import os
 
 from databricks.sdk import WorkspaceClient
-from pydantic import Field, PostgresDsn
+from pydantic import Field, PostgresDsn, RedisDsn
 
 from .base import CustomBaseSettings
 
@@ -40,8 +40,7 @@ class Settings(CustomBaseSettings):
     max_overflow: int = Field(default=100)
     port: int = Field(description="Port that FastAPI server will run on.", default=8000)
     debug: bool = Field(description="Enable debug logging.", default=False)
+    redis_dsn: RedisDsn = Field(description="Redis DSN.")
 
 
-def get_settings() -> Settings:
-    """Return a settings instance using the current environment."""
-    return Settings()
+SETTINGS = Settings()

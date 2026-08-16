@@ -3,11 +3,12 @@ from __future__ import annotations
 import typing
 from uuid import UUID  # noqa: TC003
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ntk.database.db import get_session
 from ntk.models import Ticket, TicketMessage, TicketPublic
+from ntk.presentation.api.middleware import rate_limit
 from ntk.repositories.ticket_repo import TicketRepo
 
 if typing.TYPE_CHECKING:
@@ -31,7 +32,11 @@ class UpdateStatusRequest(BaseModel):
     status: str
 
 
-@router.get("/tickets/", response_model=list[Ticket])
+@router.get(
+    "/tickets/",
+    response_model=list[TicketPublic],
+    dependencies=[Depends(rate_limit(5))],
+)
 async def list_tickets() -> Sequence[Ticket]:
     """List tickets.
 

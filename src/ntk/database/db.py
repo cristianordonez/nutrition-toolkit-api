@@ -7,7 +7,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 # import all models so that they are initialized below
 import ntk.models  # noqa: F401
-from ntk.models.settings import get_settings
+from ntk.models.settings import SETTINGS
 from ntk.repositories.permission_repo import PermissionRepo
 
 if typing.TYPE_CHECKING:
@@ -16,13 +16,11 @@ if typing.TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-settings = get_settings()
-
 engine = create_engine(
-    str(settings.database_url),
+    str(SETTINGS.database_url),
     echo=False,
-    pool_size=settings.pool_size,
-    max_overflow=settings.max_overflow,
+    pool_size=SETTINGS.pool_size,
+    max_overflow=SETTINGS.max_overflow,
 )
 
 
