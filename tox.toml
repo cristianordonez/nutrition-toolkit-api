@@ -15,6 +15,7 @@ skip_missing_interpreters = true
 description = "Run pytest for python package"
 package = "wheel"
 dependency_groups = [ "test" ]
+extras = [ "api" ]
 set_env.COVERAGE_FILE = { replace = "env", name = "COVERAGE_FILE", default = "{work_dir}{/}.coverage.{env_name}" }
 commands = [
   [

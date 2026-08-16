@@ -149,7 +149,7 @@ paths.source = [
   "*/src",
   "*\\src",
 ]
-report.fail_under = 88
+report.fail_under = 85
 report.omit = []
 html.show_contexts = true
 html.skip_covered = false

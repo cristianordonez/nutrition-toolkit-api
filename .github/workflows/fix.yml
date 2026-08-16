@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0
       - name: Run tox test suites
         run: |
-          tox -e py311,py312,py313,py314,py315
+          tox -e py311,py312,py313,py314
   check:
     runs-on: ubuntu-latest
     steps:

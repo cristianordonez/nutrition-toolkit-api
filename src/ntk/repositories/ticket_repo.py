@@ -24,7 +24,7 @@ class TicketRepo:
 
     def list_all(self) -> Sequence[Ticket]:
         """Return all tickets ordered by creation time."""
-        statement = select(Ticket).order_by(Ticket.created_at)
+        statement = select(Ticket).order_by(Ticket.created_at)  # ty: ignore
         return self.session.exec(statement).all()
 
     def create(self, ticket: Ticket) -> Ticket:

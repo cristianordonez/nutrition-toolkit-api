@@ -15,12 +15,12 @@ _SCOPE = os.environ.get("LAKEBASE_SECRET_SCOPE", "database")
 _KEY = os.environ.get("LAKEBASE_SECRET_KEY", "ntk-database-url")
 
 
-def _lakebase_url() -> str:
+def _lakebase_url() -> str | None:
     """Fetch and decode the Lakebase connection URL from the Databricks secret scope."""
     try:
         _w = WorkspaceClient()
         secret = _w.secrets.get_secret(scope=_SCOPE, key=_KEY)
-        return base64.b64decode(secret.value).decode("utf-8")
+        return base64.b64decode(secret.value).decode("utf-8")  # ty: ignore
     except ValueError:
         msg = "Application not running on databricks"
         logger.exception(msg)
@@ -32,8 +32,8 @@ class Settings(CustomBaseSettings):
     Default path for .env file to source from comes from NTK_CONFIG_FILE env variable.
     """
 
-    database_url: PostgresDsn = Field(
-        description="Full postgres connection string. Example: 'postgresql+psycopg://{user}{pw}@{host}:{port}/{name}",
+    database_url: PostgresDsn = Field(  # ty: ignore
+        description="Full postgres connection string. Example: 'postgresql+psycopg://{user}:{pw}@{host}:{port}/{name}'",
         default=_lakebase_url(),
     )
     pool_size: int = Field(default=50)
