@@ -54,16 +54,15 @@ def test_custom_base_settings_follows_env_sources(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.delenv("NUTRITION_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("NTK_CONFIG_FILE", raising=False)
     monkeypatch.chdir(tmp_path)
-
-    (tmp_path / ".env").write_text("VALUE=from_envfile\n")
-    (tmp_path / "config.yaml").write_text("value: from_yaml\n")
-    monkeypatch.setenv("VALUE", "from_env")
+    (tmp_path / ".env").write_text("NTK_VALUE=from_envfile\n")
+    (tmp_path / "config.yaml").write_text("ntk_value: from_yaml\n")
+    monkeypatch.setenv("NTK_CONFIG_FILE", str(tmp_path / ".env"))
+    monkeypatch.setenv("NTK_VALUE", "from_env")
 
     class PrioritySettings(CustomBaseSettings):
-        value: str = "default"
+        value: str
 
     settings = PrioritySettings()
-
     assert settings.value == "from_env"

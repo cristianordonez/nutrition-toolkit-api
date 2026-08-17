@@ -1,4 +1,4 @@
-name: Check Release Tag
+name: Check Pull Request Matches Expected Format
 on:
   pull_request:
     branches:
@@ -6,25 +6,35 @@ on:
 permissions:
   contents: read
 jobs:
-  check-tag:
+  check-pr:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Read version
-        id: version
+      - name: Get Pull Request Title ID
+        id: get_pr_title_id
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(jq -r '.version' package.json)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - name: Check if tag already exists
+          PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title --jq '.title')
+          echo $PR_TITLE
+          IFS=':' read -ra title_array <<< "$PR_TITLE"
+          PR_TITLE_ID="${title_array[0]}"
+          echo "PR_TITLE_ID=$PR_TITLE_ID" >> "$GITHUB_OUTPUT"
+      - name: Confirm PR Title ID
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
-          echo "Checking for tag: $TAG"
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag '$TAG' already exists."
-            exit 1
+          PR_TITLE_ID="${{ steps.get_pr_title_id.outputs.PR_TITLE_ID }}"
+          if [[ -z "$PR_TITLE_ID" ]]; then
+           echo ""
+          echo "ERROR: Pull request title must start with 'fix:', 'feature:', or 'BREAKING CHANGE:'"
+           exit 1
+          elif [[ $PR_TITLE_ID == "BREAKING CHANGE" || \
+                 $PR_TITLE_ID == fix* || \
+                 $PR_TITLE_ID == feature* ]]; then
+           echo "Correct PR title detected."
+          else
+           echo "Pull request title does not match expected version"
+           exit 1
           fi
-          echo "Tag '$TAG' does not exist."

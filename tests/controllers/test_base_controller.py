@@ -33,7 +33,7 @@ class DummyResponse(ConsoleRenderableModel):
         return f"Foo: {self.foo}, Bar: {self.bar}, Flag: {self.flag}, Mode: {self.mode}"
 
 
-class DummyController(BaseController[DummyOptions]):
+class DummyController(BaseController[DummyOptions]):  # ty: ignore
     name = "dummy"
     help = "Dummy command"
     options_model = DummyOptions

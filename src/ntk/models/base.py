@@ -32,6 +32,7 @@ class CustomBaseSettings(BaseSettings):
         yaml_file="config.yaml",
         case_sensitive=False,
         extra="ignore",
+        env_prefix="ntk_",
     )
 
     @classmethod

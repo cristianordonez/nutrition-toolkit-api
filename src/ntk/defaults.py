@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 DEFAULT_PERMISSIONS = [
-    "key:read",
-    "key:write",
+    "calculate:read",
+    "tickets:read",
+    "tickets:write",
     "admin",
 ]

@@ -55,6 +55,12 @@ uv run ntk
 uv add pydantic
 ```
 
+- Use docker compose to start postgresql and redis containers:
+
+```bash
+docker compose up -d
+```
+
 ## Pre-Commit
 
 - Install pre-commit with uv
@@ -85,10 +91,10 @@ pre-commit run <hook-id>
 
 ## Deployment
 
-- Use the ntk-start command to run uvicorn on FastAPI app
+- Use the ntk-api command to run uvicorn on FastAPI app
 
 ```bash
-uv run ntk-start
+uv run ntk-api
 ```
 
 - containerize the REST API using Docker:

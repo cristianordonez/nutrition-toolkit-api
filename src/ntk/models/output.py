@@ -11,7 +11,7 @@ from ntk.models.base import ConsoleRenderableModel
 T = typing.TypeVar("T", bound=ConsoleRenderableModel)
 
 
-class Output[T](BaseModel):
+class Output(BaseModel, typing.Generic[T]):
     """Output to the run method of controllers."""
 
     controller: str

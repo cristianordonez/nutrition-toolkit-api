@@ -82,3 +82,4 @@ class APIKeyRepo:
         api_key.last_used_at = datetime.now(UTC)
         self.session.add(api_key)
         self.session.commit()
+        self.session.refresh(api_key)

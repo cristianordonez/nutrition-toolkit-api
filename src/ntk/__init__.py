@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
-from ._version import __version__ as VERSION  # noqa: N812
+from importlib.metadata import version
 
-__all__: list[str] = ["VERSION"]
+__version__ = version("ntk")
+
+__all__: list[str] = ["__version__"]

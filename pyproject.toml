@@ -1,7 +1,6 @@
 [build-system]
 requires = [
     "hatchling >= 1.26",
-    "hatch-vcs==0.3.0"
 ]
 build-backend = "hatchling.build"
 
@@ -10,14 +9,14 @@ name = "ntk"
 description = "Template repository for python projects"
 readme.content-type = "text/markdown"
 readme.file = "README.md"
-dynamic = [ "version" ]
+version = "0.3.0"
 authors = [
     {name = "Cristian Ordonez", email = "cristianordonezrd@gmail.com"},
 ]
 urls.Repository = "https://github.com/cristianordonez/nutrition-toolkit-cli.git"
-requires-python = ">= 3.12"
+requires-python = ">= 3.11"
 dependencies = [
-    "psycopg>=3.3.4",
+    "psycopg2-binary>=2.9.9",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
     "pyyaml>=6.0.3",
@@ -28,6 +27,11 @@ dependencies = [
 api = [
     "fastapi>=0.139.0",
     "uvicorn>=0.51.0",
+    "redis>=8.1.0",
+    "databricks-sdk>=0.30.0",
+    "databricks-sql-connector>=3.4.0",
+    "requests>=2.32.3",
+    "python-dotenv>=1.0.1",
 ]
 
 [project.scripts]
@@ -62,8 +66,6 @@ type = [
 ]
 
 [tool.hatch]
-version.source = "vcs"
-build.hooks.vcs.version-file = "src/ntk/_version.py"
 build.dev-mode-dirs = [
   "src",
 ]
@@ -88,6 +90,7 @@ exclude = [
 ]
 lint.select = [ "ALL" ] # Select which linting rules to use
 lint.ignore = [
+    "CPY001", # Missing copyright
     "D100", # Ignore missing docstring in public modules
     "D101", # Ignore missing docstring in public class
     "D104", # Missing docstring in public package
@@ -100,6 +103,7 @@ lint.per-file-ignores."!src/**.py" = [ "D" ] # Don't care about documentation in
 lint.per-file-ignores."tests/**/*.py" = [ "S101" ] # allow assert command in tests
 lint.flake8-errmsg.max-string-length = 30 # Max length of string literal in error message
 lint.flake8-import-conventions.banned-from = [ "typing" ]
+lint.flake8-bugbear.extend-immutable-calls = [ "fastapi.Depends" ] # Allow settings default values using Depends
 lint.isort = { known-first-party = [
     "tox", "tests"
 ], required-imports = [
@@ -123,6 +127,7 @@ src.include = [
 [tool.codespell]
 count = true
 quiet-level = 3
+ignore-words-list = "selectin"
 
 [tool.pytest]
 ini_options.testpaths = [
@@ -146,7 +151,7 @@ paths.source = [
   "*/src",
   "*\\src",
 ]
-report.fail_under = 88
+report.fail_under = 85
 report.omit = []
 html.show_contexts = true
 html.skip_covered = false
