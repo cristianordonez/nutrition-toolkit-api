@@ -58,6 +58,9 @@ class BaseController(ABC, typing.Generic[T]):
                 elif origin is list:
                     kwargs["nargs"] = "+"
                     kwargs["type"] = default_args[0]
+                elif origin is tuple:
+                    kwargs["nargs"] = len(default_args)
+                    kwargs["type"] = default_args[0]
                 elif (
                     origin is typing.Union or origin is types.UnionType
                 ):  # account for None type

@@ -16,22 +16,26 @@ authors = [
 urls.Repository = "https://github.com/cristianordonez/nutrition-toolkit-cli.git"
 requires-python = ">= 3.11"
 dependencies = [
-    "psycopg2-binary>=2.9.9",
+    "pypdf>=5.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
     "pyyaml>=6.0.3",
     "sqlmodel>=0.0.39",
+    "openai>=3.3.0",
+    "pgvector>=0.5.0",
+    "psycopg>=3.3.4",
+    "psycopg2-binary>=2.9.11",
+    "pydantic-ai>=2.32.1",
+    "logfire[system-metrics]>=4.41.0",
+    "pydantic-ai-slim[openai]>=2.32.1",
 ]
 
 [project.optional-dependencies]
 api = [
     "fastapi>=0.139.0",
+    "python-multipart>=0.0.22",
     "uvicorn>=0.51.0",
     "redis>=8.1.0",
-    "databricks-sdk>=0.30.0",
-    "databricks-sql-connector>=3.4.0",
-    "requests>=2.32.3",
-    "python-dotenv>=1.0.1",
 ]
 
 [project.scripts]

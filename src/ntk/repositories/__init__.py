@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from .document_repo import DocumentRepo
 from .ticket_repo import TicketRepo
 
 __all__ = [
+    "DocumentRepo",
     "TicketRepo",
 ]

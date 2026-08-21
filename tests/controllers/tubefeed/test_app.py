@@ -31,6 +31,9 @@ def test_tubefeed_controller_group_registers_subparsers() -> None:
         [
             "tubefeed",
             "calculate",
+            "--energy-needs",
+            "1800",
+            "2000",
             "--formula",
             "jevity",
         ],
@@ -39,3 +42,4 @@ def test_tubefeed_controller_group_registers_subparsers() -> None:
     assert parsed.command == "tubefeed"
     assert parsed.tubefeed_command == "calculate"
     assert parsed.formula == "jevity"
+    assert parsed.energy_needs == [1800, 2000]

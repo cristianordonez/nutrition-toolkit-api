@@ -2,173 +2,256 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>Tickets — Admin</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>RAG Documents</title>
         <style>
-            body { font-family: -apple-system, Arial, sans-serif; max-width: 900px; margin: 24px auto; color:#222 }
-            h1 { font-size: 20px }
-            .row { display:flex; gap:20px }
-            .col { flex:1 }
-            label { display:block; margin-top:12px; font-weight:600 }
-            input[type=text], select, textarea { width:100%; padding:8px; box-sizing:border-box; margin-top:6px }
-            button { margin-top:10px; padding:8px 12px }
-            .list { border:1px solid #ddd; padding:8px; border-radius:6px; max-height:520px; overflow:auto }
-            .item { padding:8px; border-bottom:1px solid #eee; cursor:pointer }
-            .item:hover { background:#f9f9f9 }
-            .active { background:#eef; }
-            .messages { background:#f6f6f6; padding:8px; border-radius:6px; margin-top:8px }
-            .meta { color:#666; font-size:13px }
-            .error { color:#b00 }
+            :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+            body { align-items: center; background: #f4f7fb; color: #172033; display: flex; justify-content: center; margin: 0; min-height: 100vh; padding: 24px; }
+            main { background: #fff; border: 1px solid #dce3ef; border-radius: 12px; box-shadow: 0 12px 30px rgb(20 35 60 / 8%); max-width: 680px; padding: 32px; width: 100%; }
+            h1, h2 { margin: 0 0 8px; }
+            h1 { font-size: 1.5rem; }
+            h2 { font-size: 1.2rem; }
+            p { color: #526074; line-height: 1.5; margin: 0 0 24px; }
+            .fields { display: grid; gap: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .full-width { grid-column: 1 / -1; }
+            label { display: block; font-size: .9rem; font-weight: 650; margin-bottom: 6px; }
+            input, select, button { font: inherit; }
+            input, select { border: 1px solid #b9c4d5; border-radius: 7px; box-sizing: border-box; padding: 10px; width: 100%; }
+            input[type="checkbox"] { margin-right: 6px; padding: 0; width: auto; }
+            input:disabled, select:disabled { background: #edf1f6; color: #77849a; }
+            .hint { color: #66758b; display: block; font-size: .8rem; margin-top: 5px; }
+            button { background: #155eef; border: 0; border-radius: 7px; color: #fff; cursor: pointer; font-weight: 650; margin-top: 24px; padding: 11px 16px; }
+            button:hover { background: #004ee8; }
+            button:disabled { cursor: wait; opacity: .7; }
+            .status { border-radius: 7px; display: none; margin-top: 20px; padding: 12px; }
+            .status.success { background: #dcfae6; color: #075c2f; display: block; }
+            .status.error { background: #fee4e2; color: #b42318; display: block; }
+            .search-section { border-top: 1px solid #dce3ef; margin-top: 32px; padding-top: 28px; }
+            .search-fields { align-items: end; display: grid; gap: 12px; grid-template-columns: 1fr 100px auto; }
+            .search-fields button { margin-top: 0; }
+            #search-results { display: grid; gap: 12px; margin-top: 18px; }
+            .search-result { border: 1px solid #dce3ef; border-radius: 8px; padding: 14px; }
+            .search-result strong { display: block; margin-bottom: 6px; }
+            .search-result p { color: #344054; margin: 0 0 8px; white-space: pre-wrap; }
+            .similarity { color: #66758b; font-size: .8rem; }
+            textarea { border: 1px solid #b9c4d5; border-radius: 7px; box-sizing: border-box; font: inherit; min-height: 240px; padding: 12px; resize: vertical; width: 100%; }
+            @media (max-width: 540px) { .fields { grid-template-columns: 1fr; } }
+            @media (max-width: 540px) { .search-fields { grid-template-columns: 1fr; } }
         </style>
     </head>
     <body>
-        <h1>Tickets</h1>
+        <main>
+            <h1>RAG PDF ingestion</h1>
+            <p>Upload one or more PDFs to split and store them for retrieval testing.</p>
 
-        <div class="hint">Tickets API does not require an Authorization header.</div>
-
-        <div style="margin-top:16px" class="row">
-            <div class="col" style="max-width:360px">
-                <h3>All tickets</h3>
-                <div id="tickets" class="list"></div>
-                <button id="refresh">Refresh</button>
-            </div>
-
-            <div class="col">
-                <h3>Ticket detail</h3>
-                <div id="detail">
-                    <div id="detail-meta" class="meta">Select a ticket to view details</div>
-                    <div id="messages" class="messages"></div>
-
-                    <h4>Add message</h4>
-                    <label for="msg-author">Author</label>
-                    <input id="msg-author" type="text" />
-                    <label for="msg-text">Message</label>
-                    <textarea id="msg-text" rows="3"></textarea>
-                    <button id="add-msg">Add message</button>
-
-                    <h4>Create ticket</h4>
-                    <label for="t-title">Title</label>
-                    <input id="t-title" type="text" />
-                    <label for="t-by">Created by</label>
-                    <input id="t-by" type="text" />
-                    <label for="t-status">Status</label>
-                    <select id="t-status"><option value="open">open</option><option value="closed">closed</option></select>
-                    <button id="create-ticket">Create ticket</button>
-
-                    <h4>Update status</h4>
-                    <select id="update-status"><option value="open">open</option><option value="in_progress">in_progress</option><option value="closed">closed</option></select>
-                    <button id="set-status">Update status</button>
-
-                    <div id="result" style="margin-top:12px"></div>
+            <form id="ingest-form">
+                <div class="fields">
+                    <div class="full-width">
+                        <label for="files">PDF or text files</label>
+                        <input id="files" name="files" type="file" accept="application/pdf,text/plain,.pdf,.txt" multiple required />
+                        <span class="hint">You can select multiple documents.</span>
+                    </div>
+                    <div class="full-width">
+                        <label for="document-type">Document type</label>
+                        <select id="document-type" name="document_type" required>
+                            <option value="clinical-knowledge" selected>Clinical Knowledge</option>
+                            <option value="single-assessment">Single Assessment</option>
+                            <option value="pcc-progress-report">PCC Nutrition Assessment History</option>
+                        </select>
+                        <span class="hint">Matching documents are skipped by default.</span>
+                    </div>
+                    <div class="full-width">
+                        <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing document</label>
+                        <span class="hint">Creates new OpenAI embeddings and replaces stored chunks.</span>
+                    </div>
                 </div>
-            </div>
-        </div>
+                <button id="submit" type="submit">Ingest PDFs</button>
+            </form>
+            <div id="status" class="status" role="status"></div>
+
+            <section class="search-section">
+                <h2>Search RAG documents</h2>
+                <p>Find the document chunks most similar to your question.</p>
+                <form id="search-form">
+                    <div class="search-fields">
+                        <div>
+                            <label for="search-text">Search text</label>
+                            <input id="search-text" name="text" type="text" placeholder="e.g. protein needs for wound healing" required />
+                        </div>
+                        <div>
+                            <label for="top-k">Results</label>
+                            <input id="top-k" name="top_k" type="number" min="1" max="20" value="5" required />
+                        </div>
+                        <button id="search-submit" type="submit">Search</button>
+                    </div>
+                </form>
+                <div id="search-status" class="status" role="status"></div>
+                <div id="search-results" aria-live="polite"></div>
+            </section>
+
+            <section class="search-section">
+                <h2>Create patient assessment</h2>
+                <p>Upload one or more patient PDFs. Their contents will be combined into a single patient assessment.</p>
+                <form id="assessment-form">
+                    <div class="fields">
+                        <div class="full-width">
+                            <label for="assessment-files">Patient PDFs</label>
+                            <input id="assessment-files" name="files" type="file" accept="application/pdf,.pdf" multiple required />
+                            <span id="assessment-file-summary" class="hint">Select all reports for the current patient.</span>
+                        </div>
+                        <div class="full-width">
+                            <label for="assessment-query">Optional focus or retrieval query</label>
+                            <input id="assessment-query" name="query" type="text" placeholder="e.g. wound healing and unintended weight loss" />
+                        </div>
+                    </div>
+                    <button id="assessment-submit" type="submit">Create ADIME assessment</button>
+                </form>
+                <div id="assessment-status" class="status" role="status"></div>
+                <div id="assessment-result" hidden>
+                    <label for="assessment-output">Completed ADIME</label>
+                    <textarea id="assessment-output" readonly></textarea>
+                </div>
+            </section>
+        </main>
 
         <script>
-            const base = '/api/v1/tickets';
-            let selectedId = null;
+            const form = document.getElementById("ingest-form");
+            const submit = document.getElementById("submit");
+            const status = document.getElementById("status");
+            const searchForm = document.getElementById("search-form");
+            const searchSubmit = document.getElementById("search-submit");
+            const searchStatus = document.getElementById("search-status");
+            const searchResults = document.getElementById("search-results");
+            const assessmentForm = document.getElementById("assessment-form");
+            const assessmentFiles = document.getElementById("assessment-files");
+            const assessmentFileSummary = document.getElementById("assessment-file-summary");
+            const assessmentSubmit = document.getElementById("assessment-submit");
+            const assessmentStatus = document.getElementById("assessment-status");
+            const assessmentResult = document.getElementById("assessment-result");
+            const assessmentOutput = document.getElementById("assessment-output");
 
-            async function fetchJson(url, opts = {}) {
-                const headers = Object.assign({'Content-Type':'application/json'}, opts.headers || {});
-                const res = await fetch(url, Object.assign({}, opts, { headers }));
-                let body = null;
-                try { body = await res.json(); } catch (e) { body = null; }
-                if (!res.ok) throw { status: res.status, body };
-                return body;
+            assessmentFiles.addEventListener("change", () => {
+                const count = assessmentFiles.files.length;
+                assessmentFileSummary.textContent = count
+                    ? `${count} PDF${count === 1 ? "" : "s"} selected. All files will be analyzed together.`
+                    : "Select all reports for the current patient.";
+            });
+
+            function showStatus(message, kind) {
+                status.textContent = message;
+                status.className = `status ${kind}`;
             }
 
-            async function loadTickets() {
-                const el = document.getElementById('tickets');
-                el.innerHTML = 'Loading...';
+            function renderSearchResults(matches) {
+                searchResults.replaceChildren();
+                for (const match of matches) {
+                    const result = document.createElement("article");
+                    result.className = "search-result";
+
+                    const filename = document.createElement("strong");
+                    filename.textContent = match.filename;
+                    const content = document.createElement("p");
+                    content.textContent = match.chunk_text;
+                    const similarity = document.createElement("span");
+                    similarity.className = "similarity";
+                    similarity.textContent = `Similarity: ${Number(match.similarity).toFixed(4)}`;
+
+                    result.append(filename, content, similarity);
+                    searchResults.append(result);
+                }
+            }
+
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                submit.disabled = true;
+                showStatus("Ingesting PDFs…", "success");
+
                 try {
-                    const data = await fetchJson(base + '/');
-                    el.innerHTML = '';
-                    data.forEach(t => {
-                        const div = document.createElement('div');
-                        div.className = 'item';
-                        div.dataset.id = t.ticket_id || t.id || t.ticketId || '';
-                        div.innerHTML = `<strong>${escapeHtml(t.title || '(no title)')}</strong><div class="meta">${escapeHtml(t.status||'')} — ${escapeHtml(t.created_by||'')}</div>`;
-                        div.addEventListener('click', () => selectTicket(div.dataset.id, div));
-                        el.appendChild(div);
+                    const response = await fetch("/api/v1/rag/ingest", {
+                        method: "POST",
+                        body: new FormData(form),
                     });
-                } catch (err) {
-                    document.getElementById('result').innerHTML = '<div class="error">Failed to load tickets: ' + (err.body?.error || err.status || err) + '</div>';
-                    el.innerHTML = '';
+                    const body = await response.json();
+                    if (!response.ok) {
+                        const detail = body.detail || body.error || `Request failed (${response.status})`;
+                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    }
+                    const documents = body.documents || [];
+                    const chunkCount = documents.reduce((total, document) => total + (document.chunk_count || 0), 0);
+                    const message = `Created ${chunkCount} chunk${chunkCount === 1 ? "" : "s"} from ${documents.length} PDF${documents.length === 1 ? "" : "s"}.`;
+                    showStatus(message, "success");
+                    alert(message);
+                } catch (error) {
+                    showStatus(`Ingestion failed: ${error.message}`, "error");
+                } finally {
+                    submit.disabled = false;
                 }
-            }
+            });
 
-            function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]); }
+            searchForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                searchSubmit.disabled = true;
+                searchResults.replaceChildren();
+                searchStatus.textContent = "Searching…";
+                searchStatus.className = "status success";
 
-            async function selectTicket(id, div) {
-                selectedId = id;
-                document.querySelectorAll('.item').forEach(i=>i.classList.remove('active'));
-                if (div) div.classList.add('active');
-                document.getElementById('detail-meta').textContent = 'Loading...';
                 try {
-                    const t = await fetchJson(base + '/' + id);
-                    document.getElementById('detail-meta').innerHTML = `<strong>${escapeHtml(t.title)}</strong> <span class="meta">(${escapeHtml(t.status)})</span><br/>Created by ${escapeHtml(t.created_by)} on ${new Date(t.created_at).toLocaleString()}`;
-                    const msgEl = document.getElementById('messages');
-                    msgEl.innerHTML = '';
-                    const msgs = t.messages || [];
-                    if (msgs.length === 0) msgEl.textContent = '(no messages)';
-                    msgs.forEach(m => {
-                        const p = document.createElement('div');
-                        p.innerHTML = `<div><strong>${escapeHtml(m.author)}</strong> <span class="meta">${new Date(m.created_at).toLocaleString()}</span></div><div>${escapeHtml(m.message_text)}</div><hr/>`;
-                        msgEl.appendChild(p);
+                    const query = new URLSearchParams(new FormData(searchForm));
+                    const response = await fetch(`/api/v1/rag/search?${query}`);
+                    const body = await response.json();
+                    if (!response.ok) {
+                        const detail = body.detail || body.error || `Request failed (${response.status})`;
+                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    }
+                    renderSearchResults(body);
+                    searchStatus.textContent = body.length
+                        ? `Found ${body.length} matching chunk${body.length === 1 ? "" : "s"}.`
+                        : "No embedded document chunks are available yet.";
+                    searchStatus.className = "status success";
+                } catch (error) {
+                    searchStatus.textContent = `Search failed: ${error.message}`;
+                    searchStatus.className = "status error";
+                } finally {
+                    searchSubmit.disabled = false;
+                }
+            });
+
+            assessmentForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                assessmentSubmit.disabled = true;
+                assessmentResult.hidden = true;
+                assessmentStatus.textContent = "Extracting patient data and creating assessment…";
+                assessmentStatus.className = "status success";
+
+                try {
+                    const data = new FormData(assessmentForm);
+                    const fileCount = assessmentFiles.files.length;
+                    const query = String(data.get("query") || "").trim();
+                    data.delete("query");
+                    const suffix = query ? `?query=${encodeURIComponent(query)}` : "";
+                    const response = await fetch(`/api/v1/assessment${suffix}`, {
+                        method: "POST",
+                        body: data,
                     });
-                } catch (err) {
-                    document.getElementById('result').innerHTML = '<div class="error">Failed to load ticket: ' + (err.body?.error || err.status || err) + '</div>';
-                    document.getElementById('detail-meta').textContent = 'Error loading ticket';
-                }
-            }
-
-            document.getElementById('refresh').addEventListener('click', loadTickets);
-
-            document.getElementById('create-ticket').addEventListener('click', async ()=>{
-                const title = document.getElementById('t-title').value.trim();
-                const by = document.getElementById('t-by').value.trim();
-                const status = document.getElementById('t-status').value;
-                if (!title || !by) { document.getElementById('result').textContent = 'Title and Created by required'; return; }
-                try {
-                    const data = await fetchJson(base + '/', { method: 'POST', body: JSON.stringify({ title, created_by: by, status }) });
-                    document.getElementById('result').textContent = 'Created ticket ' + (data.ticket_id || data.id || '');
-                    loadTickets();
-                    selectTicket(data.ticket_id || data.id || '');
-                } catch (err) {
-                    document.getElementById('result').innerHTML = '<div class="error">Create failed: ' + (err.body?.error || err.status || err) + '</div>';
+                    const body = await response.json();
+                    if (!response.ok) {
+                        const detail = body.detail || body.error || `Request failed (${response.status})`;
+                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    }
+                    assessmentOutput.value = body.adime;
+                    assessmentResult.hidden = false;
+                    const clinicalCount = body.clinical_context.length;
+                    const exampleCount = body.similar_assessments.length;
+                    assessmentStatus.textContent = `Assessment created from ${fileCount} PDF${fileCount === 1 ? "" : "s"}, with ${clinicalCount} clinical knowledge source${clinicalCount === 1 ? "" : "s"} and ${exampleCount} similar past assessment${exampleCount === 1 ? "" : "s"}.`;
+                    assessmentStatus.className = "status success";
+                } catch (error) {
+                    assessmentStatus.textContent = `Assessment failed: ${error.message}`;
+                    assessmentStatus.className = "status error";
+                } finally {
+                    assessmentSubmit.disabled = false;
                 }
             });
-
-            document.getElementById('add-msg').addEventListener('click', async ()=>{
-                if (!selectedId) { document.getElementById('result').textContent = 'Select a ticket first'; return; }
-                const author = document.getElementById('msg-author').value.trim();
-                const text = document.getElementById('msg-text').value.trim();
-                if (!author || !text) { document.getElementById('result').textContent = 'Author and message required'; return; }
-                try {
-                    await fetchJson(base + '/' + selectedId + '/messages', { method: 'POST', body: JSON.stringify({ message_text: text, author }) });
-                    document.getElementById('msg-text').value = '';
-                    document.getElementById('result').textContent = 'Message added';
-                    selectTicket(selectedId);
-                } catch (err) {
-                    document.getElementById('result').innerHTML = '<div class="error">Add message failed: ' + (err.body?.error || err.status || err) + '</div>';
-                }
-            });
-
-            document.getElementById('set-status').addEventListener('click', async ()=>{
-                if (!selectedId) { document.getElementById('result').textContent = 'Select a ticket first'; return; }
-                const status = document.getElementById('update-status').value;
-                try {
-                    await fetchJson(base + '/' + selectedId + '/status', { method: 'PATCH', body: JSON.stringify({ status }) });
-                    document.getElementById('result').textContent = 'Status updated';
-                    loadTickets();
-                    selectTicket(selectedId);
-                } catch (err) {
-                    document.getElementById('result').innerHTML = '<div class="error">Update failed: ' + (err.body?.error || err.status || err) + '</div>';
-                }
-            });
-
-            // initialize
-            loadTickets();
         </script>
     </body>
 </html>

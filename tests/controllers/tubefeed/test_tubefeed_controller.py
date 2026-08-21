@@ -14,7 +14,11 @@ from ntk.repositories.formula_repo import OTHER_FORMULAS, READY_TO_HANG_FORMULAS
 
 
 def test_tubefeed_run_returns_success_output() -> None:
-    options = CalculateTubefeedOptions(formula="jevity", density=1.5)
+    options = CalculateTubefeedOptions(
+        energy_needs=(1800, 2000),
+        formula="jevity",
+        density=1.5,
+    )
     output = CalculateTubefeedController().run(options)
     assert output.controller == "calculate"
     assert output.exit_code == 0
