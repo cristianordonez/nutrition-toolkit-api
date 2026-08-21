@@ -19,13 +19,8 @@ if typing.TYPE_CHECKING:
 class CalculateTubefeedOptions(BaseModel):
     """Options for Tubefeed workflow."""
 
-    energy_needs: tuple[int, int] | None = Field(
+    energy_needs: tuple[int, int] = Field(
         description="Manually set kcal range",
-        default=None,
-    )
-    protein_needs: tuple[float, float] | None = Field(
-        description="Manually set protein range",
-        default=None,
     )
     formula: str = Field(description="Name of formula")
     density: float = Field(

@@ -30,10 +30,9 @@ def get_api_key_service() -> APIKeyService:
 async def verify_api_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
 ) -> APIKey:
-    """Dependency to get the API key from the request header.
+    """Authenticate the API key supplied as a bearer token.
 
-    :param authorization: Authorization header
-    :param api_key_service: APIKeyService instance
+    :param credentials: Credentials from the Authorization header
     :return: APIKey model
     """
     if credentials is None:
@@ -42,9 +41,8 @@ async def verify_api_key(
             detail="Missing Authorization header",
         )
     try:
-        raw_key = credentials.credentials
         api_key_service = get_api_key_service()
-        return api_key_service.authenticate(raw_key)
+        return api_key_service.authenticate(credentials.credentials)
     except ValueError as err:
         raise HTTPException(
             status_code=401,

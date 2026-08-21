@@ -104,6 +104,12 @@ docker build -t ntk-api-image .
 docker run -d --env database_host=host.docker.internal --add-host=host.docker.internal:host-gateway -p 3000:3000 --name ntk-api ntk-api-image
 ```
 
+- Install the pgvector extension on PostgreSQL database if not installed with the following command:
+
+```PostgreSQL
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
 ## Known Issues
 
 - Due to issues with using Ty with pre-commit due to the tox-uv integration, the type checking tox command must be separated from the linting and formatting check command

@@ -22,7 +22,7 @@ except ImportError as err:
 from ntk.logger import setup_logging
 from ntk.presentation.cli.app import create_root_parser
 
-from .routers import calculate, tickets
+from .routers import assessment, calculate, rag, tickets
 
 app = FastAPI()
 
@@ -45,6 +45,20 @@ app.include_router(
     tickets.router,
     prefix="/api/v1",
     tags=["tickets"],
+)
+
+
+app.include_router(
+    rag.router,
+    prefix="/api/v1",
+    tags=["rag"],
+)
+
+
+app.include_router(
+    assessment.router,
+    prefix="/api/v1",
+    tags=["assessment"],
 )
 
 
