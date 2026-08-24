@@ -16,7 +16,7 @@ if typing.TYPE_CHECKING:
     from collections.abc import Callable
     from uuid import UUID
 
-    from ntk.models.api_key import APIKey, Permission
+    from ntk.models.sql.api_key import APIKey, Permission
     from ntk.repositories.api_key_repo import APIKeyRepo
     from ntk.repositories.permission_repo import PermissionRepo
 

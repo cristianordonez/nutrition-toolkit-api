@@ -6,7 +6,7 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
 from ntk.defaults import DEFAULT_PERMISSIONS
-from ntk.models import APIKey, APIKeyPermission, Permission
+from ntk.models.sql.api_key import APIKey, APIKeyPermission, Permission
 from ntk.repositories.permission_repo import PermissionRepo
 
 
@@ -55,6 +55,18 @@ def test_seed_defaults_adds_missing_permissions(session: Session) -> None:
     repo.seed_defaults()
     seeded_names = {permission.name for permission in repo.list_all()}
     assert seeded_names >= set(DEFAULT_PERMISSIONS)
+
+
+def test_default_permissions_cover_api_routes() -> None:
+    assert set(DEFAULT_PERMISSIONS) == {
+        "admin",
+        "assessments:read",
+        "assessments:write",
+        "calculate:read",
+        "knowledge:read",
+        "knowledge:write",
+        "residents:read",
+    }
 
 
 def test_add_permission_to_api_key_persists_link(session: Session) -> None:

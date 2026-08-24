@@ -21,7 +21,7 @@ class OpenAIService:
         self.embedding_model = embedding_model
         self.client = client or OpenAI(api_key=SETTINGS.open_ai_api_key)
 
-    def create_embedding(self, content: str) -> list[float]:
+    def get_embedding(self, content: str) -> list[float]:
         """Create an embedding vector for one content string."""
         response = self.client.embeddings.create(
             input=content,

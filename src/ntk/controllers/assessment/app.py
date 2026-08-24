@@ -5,23 +5,29 @@ from __future__ import annotations
 import logging
 import typing
 
+from ntk.controllers.assessment.generate import GenerateController
+from ntk.controllers.assessment.ingest import AssessmentIngestController
+from ntk.controllers.assessment.search import AssessmentSearchController
 from ntk.controllers.base import BaseControllerGroup
-from ntk.controllers.calculate.energy import EnergyController
-from ntk.controllers.registry import register_command
+from ntk.controllers.registry import register_command_group
 
 logger = logging.getLogger(__name__)
 
 
-@register_command()
+@register_command_group
 class AssessmentControllerGroup(BaseControllerGroup):
-    """Controller group for calc command. Holds all subcommands."""
+    """Expose assessment generation and ingestion commands."""
 
     name = "assessment"
-    help = "Assessment controller group"
+    help = "Generate and ingest nutrition assessments"
 
     def __init__(self) -> None:
         """Initialize class."""
-        self._subcommands = [EnergyController()]
+        self._subcommands = [
+            GenerateController(),
+            AssessmentIngestController(),
+            AssessmentSearchController(),
+        ]
 
     @property
     def subcommands(self) -> list[typing.Any]:

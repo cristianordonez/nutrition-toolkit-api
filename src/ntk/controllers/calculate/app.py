@@ -7,12 +7,12 @@ import typing
 
 from ntk.controllers.base import BaseControllerGroup
 from ntk.controllers.calculate.energy import EnergyController
-from ntk.controllers.registry import register_command
+from ntk.controllers.registry import register_command_group
 
 logger = logging.getLogger(__name__)
 
 
-@register_command()
+@register_command_group
 class CalculateControllerGroup(BaseControllerGroup):
     """Controller group for calc command. Holds all subcommands."""
 

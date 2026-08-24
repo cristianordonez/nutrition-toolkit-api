@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing
 
-from ntk.models.api_key import APIKey
+from ntk.models.sql.api_key import APIKey
 
 if typing.TYPE_CHECKING:
     from collections.abc import Callable

@@ -6,7 +6,7 @@ import typing
 from datetime import UTC, datetime
 from secrets import token_urlsafe
 
-from ntk.models.api_key import APIKey
+from ntk.models.sql.api_key import APIKey
 from ntk.repositories.permission_repo import PermissionRepo
 
 if typing.TYPE_CHECKING:

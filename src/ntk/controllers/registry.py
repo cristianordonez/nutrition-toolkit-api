@@ -2,28 +2,22 @@ from __future__ import annotations
 
 import typing
 
-if typing.TYPE_CHECKING:
-    from collections.abc import Callable
+from .base import BaseControllerGroup
 
-    from .base import BaseController
+ControllerGroupT = typing.TypeVar("ControllerGroupT", bound=BaseControllerGroup)
 
-T = typing.TypeVar("T", bound="BaseController")
-
-COMMAND_REGISTRY: dict[str, type[BaseController]] = {}
+COMMAND_REGISTRY: dict[str, type[BaseControllerGroup]] = {}
 
 
-def register_command() -> Callable[[type[T]], type[T]]:
-    """Class decorator to register command.
-
-    :param name: name of command
-    :return: class instance
-    """
-
-    def decorator(cls: type[T]) -> type[T]:
-        if cls.name in COMMAND_REGISTRY:
-            msg = f"Command {cls.name} already registered"
-            raise ValueError(msg)
-        COMMAND_REGISTRY[cls.name] = cls
-        return cls
-
-    return decorator
+def register_command_group(
+    cls: type[ControllerGroupT],
+) -> type[ControllerGroupT]:
+    """Register a top-level CLI controller group and return its class."""
+    if not issubclass(cls, BaseControllerGroup):
+        msg = f"{cls.__name__} must inherit from BaseControllerGroup"
+        raise TypeError(msg)
+    if cls.name in COMMAND_REGISTRY:
+        msg = f"Command group '{cls.name}' is already registered"
+        raise ValueError(msg)
+    COMMAND_REGISTRY[cls.name] = cls
+    return cls

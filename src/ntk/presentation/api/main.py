@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from ntk.models.settings import SETTINGS
 
 try:
+    import logfire
     import uvicorn
     from fastapi import FastAPI, HTTPException, status
 except ImportError as err:
@@ -22,11 +24,17 @@ except ImportError as err:
 from ntk.logger import setup_logging
 from ntk.presentation.cli.app import create_root_parser
 
-from .routers import assessment, calculate, rag, tickets
+from .routers import assessment, calculate, knowledge, resident
 
 app = FastAPI()
 
 logger = setup_logging(debug=SETTINGS.debug)
+logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+logfire.configure()
+logfire.instrument_fastapi(app)
+
 
 # Serve static assets (index.html lives in src/ntk/static)
 _STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
@@ -42,16 +50,9 @@ app.include_router(
 
 
 app.include_router(
-    tickets.router,
+    knowledge.router,
     prefix="/api/v1",
-    tags=["tickets"],
-)
-
-
-app.include_router(
-    rag.router,
-    prefix="/api/v1",
-    tags=["rag"],
+    tags=["knowledge"],
 )
 
 
@@ -59,6 +60,13 @@ app.include_router(
     assessment.router,
     prefix="/api/v1",
     tags=["assessment"],
+)
+
+
+app.include_router(
+    resident.router,
+    prefix="/api/v1",
+    tags=["resident"],
 )
 
 

@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import importlib
-import pkgutil
+
+_COMMAND_GROUP_MODULES = (
+    "ntk.controllers.assessment.app",
+    "ntk.controllers.calculate.app",
+    "ntk.controllers.key.app",
+    "ntk.controllers.knowledge.app",
+    "ntk.controllers.resident.app",
+    "ntk.controllers.tubefeed.app",
+)
 
 
-def load_commands(package_name: str) -> None:
+def load_command_groups() -> None:
     """Autoimport all commands so that they appear in registry.
 
     :param package_name: name of package to import all classes from
     """
-    package = importlib.import_module(package_name)
-    for _, module_name, _ in pkgutil.walk_packages(
-        package.__path__,
-        package.__name__ + ".",
-    ):
+    for module_name in _COMMAND_GROUP_MODULES:
         importlib.import_module(module_name)

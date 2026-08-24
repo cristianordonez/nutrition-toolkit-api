@@ -81,7 +81,7 @@ class BaseController(ABC, typing.Generic[T]):
                 )
 
     @abstractmethod
-    def run(self, options: T) -> Output:
+    def run(self, options: T) -> Output | typing.Awaitable[Output]:
         """Run the command."""
 
 
