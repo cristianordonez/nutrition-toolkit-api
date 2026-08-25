@@ -90,11 +90,11 @@ def test_rate_limit_tracks_and_rejects_excess_requests(
 
     redis = Redis()
     monkeypatch.setattr(middleware, "redis", redis)
-    limiter = middleware.rate_limit(1, window=30)
+    limiter = middleware.rate_limit(1, window=30, scope="test-route")
     key = FakeAPIKey(set())
 
     asyncio.run(limiter(key))
-    assert redis.expirations == [("rate_limit:client-key-id", 30)]
+    assert redis.expirations == [("rate_limit:test-route:client-key-id", 30)]
     with pytest.raises(HTTPException, match="Rate limit exceeded"):
         asyncio.run(limiter(key))
 

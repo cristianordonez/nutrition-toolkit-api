@@ -1,100 +1,65 @@
 from __future__ import annotations
 
 import asyncio
-import typing
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 
-from ntk.models.document import Document, StoredDocumentType
-from ntk.presentation.api.routers import rag
+from ntk.controllers.knowledge.search import (
+    KnowledgeSearchResponse,
+)
+from ntk.models.knowledge import KnowledgeIngestResponsePublic, KnowledgeType
+from ntk.models.rag import RagSearchMatch
+from ntk.models.sql.knowledge import Knowledge, KnowledgeChunk
+from ntk.presentation.api.routers import knowledge as rag
 
 
-class FakeOpenAIService:
-    def __init__(self) -> None:
-        self.queries: list[str] = []
-
-    def create_embedding(self, content: str) -> list[float]:
-        self.queries.append(content)
-        return [0.1, 0.2]
-
-
-class FakeCursor:
-    def __init__(self, rows: list[tuple[object, ...]]) -> None:
-        self.rows = rows
-        self.query = ""
-        self.parameters: tuple[object, ...] = ()
-
-    def __enter__(self) -> typing.Self:
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        del args
-
-    def execute(self, query: str, parameters: tuple[object, ...]) -> None:
-        self.query = query
-        self.parameters = parameters
-
-    def fetchall(self) -> list[tuple[object, ...]]:
-        return self.rows
-
-
-class FakeConnection:
-    def __init__(self, cursor: FakeCursor) -> None:
-        self._cursor = cursor
-
-    def __enter__(self) -> typing.Self:
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        del args
-
-    def cursor(self) -> FakeCursor:
-        return self._cursor
-
-
-def test_search_embeds_query_and_clamps_top_k(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_uses_controller_and_clamps_top_k(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     document_id = uuid4()
-    cursor = FakeCursor(
-        [(document_id, "manual.pdf", "Clinical guidance", 0.87)],
+    match = RagSearchMatch(
+        document_id=document_id,
+        filename="manual.pdf",
+        chunk_text="Clinical guidance",
+        similarity=0.87,
     )
-    service = FakeOpenAIService()
-    monkeypatch.setattr(rag, "_OPEN_AI_SERVICE", service)
-    monkeypatch.setattr(rag, "_connect", lambda: FakeConnection(cursor))
 
-    matches = rag.search_documents("  protein needs  ", 100)
+    class Controller:
+        def search(self, text: str, top_k: int) -> object:
+            assert text == "  protein needs  "
+            assert top_k == 100  # noqa: PLR2004
+            return SimpleNamespace(result=KnowledgeSearchResponse(matches=[match]))
 
-    assert service.queries == ["protein needs"]
-    assert cursor.parameters == (
-        "[0.1,0.2]",
-        "nutrition-care-manual",
-        "[0.1,0.2]",
-        20,
-    )
-    assert "embedding_vector <=> %s::vector" in cursor.query
-    assert "WHERE d.document_type = %s" in cursor.query
+    monkeypatch.setattr(rag, "_KNOWLEDGE_SEARCH_CONTROLLER", Controller())
+
+    matches = asyncio.run(rag.search_documents("  protein needs  ", 100))
+
     assert matches[0].document_id == document_id
     assert matches[0].filename == "manual.pdf"
     assert matches[0].chunk_text == "Clinical guidance"
     assert matches[0].similarity == pytest.approx(0.87)
 
 
-def test_search_returns_empty_list_when_no_embeddings(
+def test_search_returns_controller_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    cursor = FakeCursor([])
-    monkeypatch.setattr(rag, "_OPEN_AI_SERVICE", FakeOpenAIService())
-    monkeypatch.setattr(rag, "_connect", lambda: FakeConnection(cursor))
+    class Controller:
+        def search(self, text: str, top_k: int) -> object:
+            assert text == "nutrition"
+            assert top_k == 0
+            return SimpleNamespace(result=KnowledgeSearchResponse(matches=[]))
 
-    assert rag.search_documents("nutrition", 0) == []
-    assert cursor.parameters[-1] == 1
+    monkeypatch.setattr(rag, "_KNOWLEDGE_SEARCH_CONTROLLER", Controller())
+
+    assert asyncio.run(rag.search_documents("nutrition", 0)) == []
 
 
 def test_search_rejects_blank_text() -> None:
     with pytest.raises(HTTPException, match="must not be empty") as exc_info:
-        rag.search_documents("   ", 5)
+        asyncio.run(rag.search_documents("   ", 5))
 
     assert exc_info.value.status_code == 422  # noqa: PLR2004
 
@@ -112,38 +77,59 @@ def test_ingest_pdfs_writes_uploads_and_restores_filenames(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class Controller:
-        def run(self, _: object) -> object:
-            documents = [
-                Document(
-                    filename="temporary.pdf",
-                    document_type=StoredDocumentType.ASSESSMENT,
-                    file_hash="hash",
+        async def run_uploads(
+            self,
+            files: list[FakeUpload],
+            document_type: KnowledgeType,
+            *,
+            overwrite: bool,
+        ) -> object:
+            assert files[0].filename == "assessment.pdf"
+            assert document_type is KnowledgeType.NUTRITION_CARE_MANUAL
+            assert overwrite is True
+            knowledge = Knowledge(
+                filename="assessment.pdf",
+                knowledge_type=KnowledgeType.NUTRITION_CARE_MANUAL,
+                file_hash="hash",
+            )
+            knowledge.chunks.append(
+                KnowledgeChunk(
+                    knowledge_id=knowledge.id,
+                    chunk_index=0,
+                    content="Clinical guidance",
                 ),
-            ]
-            return SimpleNamespace(result=rag.IngestResponse(documents=documents))
+            )
+            return SimpleNamespace(
+                result=KnowledgeIngestResponsePublic.from_documents([knowledge]),
+            )
 
-    monkeypatch.setattr(rag, "IngestController", Controller)
+    monkeypatch.setattr(rag, "_KNOWLEDGE_INGEST_CONTROLLER", Controller())
     upload = FakeUpload("assessment.pdf")
 
     response = asyncio.run(
-        rag.ingest_pdfs(  # ty: ignore[invalid-argument-type]
-            [upload],
-            StoredDocumentType.ASSESSMENT,
+        rag.ingest_pdfs(
+            [upload],  # ty: ignore[invalid-argument-type]
+            KnowledgeType.NUTRITION_CARE_MANUAL,
             overwrite=True,
         ),
     )
 
     assert response.documents[0].filename == "assessment.pdf"
+    assert response.chunk_count == 1
+    assert response.model_dump()["chunk_count"] == 1
+    assert response.documents[0].chunks[0].content == "Clinical guidance"
 
 
 def test_ingest_pdfs_rejects_empty_and_unsupported_uploads() -> None:
     with pytest.raises(HTTPException, match="At least one"):
-        asyncio.run(rag.ingest_pdfs([], StoredDocumentType.ASSESSMENT))
+        asyncio.run(
+            rag.ingest_pdfs([], KnowledgeType.NUTRITION_CARE_MANUAL),
+        )
 
     with pytest.raises(HTTPException, match="not a PDF or text file"):
         asyncio.run(
-            rag.ingest_pdfs(  # ty: ignore[invalid-argument-type]
-                [FakeUpload("assessment.csv")],
-                StoredDocumentType.ASSESSMENT,
+            rag.ingest_pdfs(
+                [FakeUpload("assessment.csv")],  # ty: ignore[invalid-argument-type]
+                KnowledgeType.NUTRITION_CARE_MANUAL,
             ),
         )

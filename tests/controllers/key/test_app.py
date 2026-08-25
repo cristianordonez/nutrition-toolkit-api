@@ -22,11 +22,15 @@ def test_key_controller_group_subcommands(
         app_module.CreateController,
         app_module.ListController,
         app_module.RevokeController,
+        app_module.GrantPermissionsController,
+        app_module.RevokePermissionsController,
     ]
     assert [command.name for command in group.subcommands] == [
         "create",
         "list",
         "revoke",
+        "grant-permissions",
+        "revoke-permissions",
     ]
     assert COMMAND_REGISTRY["key"] is app_module.KeyControllerGroup
 

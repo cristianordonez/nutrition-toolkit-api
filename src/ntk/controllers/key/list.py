@@ -6,9 +6,9 @@ from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
 from ntk.database.db import get_session
-from ntk.models.api_key import APIKey  # noqa: TC001
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
+from ntk.models.sql.api_key import APIKey  # noqa: TC001
 from ntk.repositories.api_key_repo import APIKeyRepo
 from ntk.repositories.permission_repo import PermissionRepo
 from ntk.services.api_key_service import APIKeyService

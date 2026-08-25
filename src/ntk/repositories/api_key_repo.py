@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from sqlmodel import select
 
-from ntk.models.api_key import APIKey
+from ntk.models.sql.api_key import APIKey
 
 if typing.TYPE_CHECKING:
     from collections.abc import Sequence

@@ -14,7 +14,7 @@ from ntk.services.redis_service import redis
 if typing.TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from ntk.models.api_key import APIKey
+    from ntk.models.sql.api_key import APIKey
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -94,11 +94,17 @@ def require_any_permission(
     return permission_checker
 
 
-def rate_limit(limit: int, window: int = 60) -> typing.Callable[..., Awaitable[None]]:
+def rate_limit(
+    limit: int,
+    window: int = 60,
+    *,
+    scope: str = "global",
+) -> typing.Callable[..., Awaitable[None]]:
     """Dependency to limit number of requests per minute.
 
-    :param limit: number of requests allowed per minute
+    :param limit: number of requests allowed during the configured window
     :param window: number of seconds before counter resets
+    :param scope: stable route identifier used to isolate request counters
     :return: A dependency function that enforces number of requests, using redis
     """
 
@@ -106,7 +112,7 @@ def rate_limit(limit: int, window: int = 60) -> typing.Callable[..., Awaitable[N
         api_key: APIKey = Depends(verify_api_key),
     ) -> None:
         client_id = f"{api_key.name}-{api_key.id}"
-        key = f"rate_limit:{client_id}"
+        key = f"rate_limit:{scope}:{client_id}"
         count = await redis.incr(key)  # ty: ignore[invalid-await]
         if count == 1:
             await redis.expire(key, window)

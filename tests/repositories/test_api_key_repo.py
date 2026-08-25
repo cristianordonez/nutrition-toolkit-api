@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from ntk.models import APIKey
+from ntk.models.sql.api_key import APIKey
 from ntk.repositories.api_key_repo import APIKeyRepo
 
 

@@ -3,7 +3,7 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>RAG Documents</title>
+        <title>Nutrition Toolkit</title>
         <style>
             :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
             body { align-items: center; background: #f4f7fb; color: #172033; display: flex; justify-content: center; margin: 0; min-height: 100vh; padding: 24px; }
@@ -29,7 +29,7 @@
             .search-section { border-top: 1px solid #dce3ef; margin-top: 32px; padding-top: 28px; }
             .search-fields { align-items: end; display: grid; gap: 12px; grid-template-columns: 1fr 100px auto; }
             .search-fields button { margin-top: 0; }
-            #search-results { display: grid; gap: 12px; margin-top: 18px; }
+            .search-results { display: grid; gap: 12px; margin-top: 18px; }
             .search-result { border: 1px solid #dce3ef; border-radius: 8px; padding: 14px; }
             .search-result strong { display: block; margin-bottom: 6px; }
             .search-result p { color: #344054; margin: 0 0 8px; white-space: pre-wrap; }
@@ -41,37 +41,48 @@
     </head>
     <body>
         <main>
-            <h1>RAG PDF ingestion</h1>
-            <p>Upload one or more PDFs to split and store them for retrieval testing.</p>
+            <h1>Nutrition Toolkit</h1>
+            <p>Test knowledge retrieval and note generation workflows.</p>
 
-            <form id="ingest-form">
-                <div class="fields">
-                    <div class="full-width">
-                        <label for="files">PDF or text files</label>
-                        <input id="files" name="files" type="file" accept="application/pdf,text/plain,.pdf,.txt" multiple required />
-                        <span class="hint">You can select multiple documents.</span>
-                    </div>
-                    <div class="full-width">
-                        <label for="document-type">Document type</label>
-                        <select id="document-type" name="document_type" required>
-                            <option value="clinical-knowledge" selected>Clinical Knowledge</option>
-                            <option value="single-assessment">Single Assessment</option>
-                            <option value="pcc-progress-report">PCC Nutrition Assessment History</option>
-                        </select>
-                        <span class="hint">Matching documents are skipped by default.</span>
-                    </div>
-                    <div class="full-width">
-                        <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing document</label>
-                        <span class="hint">Creates new OpenAI embeddings and replaces stored chunks.</span>
-                    </div>
+            <h2>API access</h2>
+            <div class="fields">
+                <div class="full-width">
+                    <label for="api-key">API key</label>
+                    <input id="api-key" type="password" autocomplete="off" required />
+                    <span class="hint">Kept only in this page while it is open. It is not stored or included in form data.</span>
                 </div>
-                <button id="submit" type="submit">Ingest PDFs</button>
-            </form>
-            <div id="status" class="status" role="status"></div>
+            </div>
 
             <section class="search-section">
-                <h2>Search RAG documents</h2>
-                <p>Find the document chunks most similar to your question.</p>
+                <h2>Ingest knowledge</h2>
+                <form id="ingest-form">
+                    <div class="fields">
+                        <div class="full-width">
+                            <label for="files">PDF or text files</label>
+                            <input id="files" name="files" type="file" accept="application/pdf,text/plain,.pdf,.txt" multiple required />
+                            <span class="hint">You can select multiple documents.</span>
+                        </div>
+                        <div class="full-width">
+                            <label for="document-type">Document type</label>
+                            <select id="document-type" name="document_type" required>
+                                <option value="nutrition-care-manual" selected>Nutrition Care Manual</option>
+                                <option value="diet-manual">Diet Manual</option>
+                            </select>
+                            <span class="hint">Matching documents are skipped by default.</span>
+                        </div>
+                        <div class="full-width">
+                            <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing document</label>
+                            <span class="hint">Creates new OpenAI embeddings and replaces stored chunks.</span>
+                        </div>
+                    </div>
+                    <button id="submit" type="submit">Ingest PDFs</button>
+                </form>
+                <div id="status" class="status" role="status"></div>
+            </section>
+
+            <section class="search-section">
+                <h2>Search knowledge</h2>
+                <p>Find clinical knowledge chunks most similar to your question.</p>
                 <form id="search-form">
                     <div class="search-fields">
                         <div>
@@ -86,35 +97,101 @@
                     </div>
                 </form>
                 <div id="search-status" class="status" role="status"></div>
-                <div id="search-results" aria-live="polite"></div>
+                <div id="search-results" class="search-results" aria-live="polite"></div>
             </section>
 
             <section class="search-section">
-                <h2>Create patient assessment</h2>
-                <p>Upload one or more patient PDFs. Their contents will be combined into a single patient assessment.</p>
+                <h2>Extract resident data</h2>
+                <p>Combine resident PDF or CSV files into one structured resident snapshot.</p>
+                <form id="resident-extract-form">
+                    <div class="fields">
+                        <div class="full-width">
+                            <label for="resident-extract-files">Resident PDF or CSV files</label>
+                            <input id="resident-extract-files" name="files" type="file" accept="application/pdf,text/csv,.pdf,.csv" multiple required />
+                        </div>
+                        <div class="full-width">
+                            <label for="resident-extract-context">Optional extraction context</label>
+                            <input id="resident-extract-context" name="context" type="text" placeholder="e.g. prioritize current dialysis orders" />
+                        </div>
+                    </div>
+                    <button id="resident-extract-submit" type="submit">Extract resident data</button>
+                </form>
+                <div id="resident-extract-status" class="status" role="status"></div>
+                <div id="resident-extract-result" hidden>
+                    <label for="resident-extract-output">Structured resident snapshot</label>
+                    <textarea id="resident-extract-output" readonly></textarea>
+                </div>
+            </section>
+
+            <section class="search-section">
+                <h2>Generate</h2>
+                <p>Upload one or more resident PDF or CSV files. Their contents will be combined with retrieved clinical knowledge and prior note examples.</p>
                 <form id="assessment-form">
                     <div class="fields">
                         <div class="full-width">
-                            <label for="assessment-files">Patient PDFs</label>
-                            <input id="assessment-files" name="files" type="file" accept="application/pdf,.pdf" multiple required />
-                            <span id="assessment-file-summary" class="hint">Select all reports for the current patient.</span>
+                            <label for="assessment-files">Resident PDF or CSV files</label>
+                            <input id="assessment-files" name="files" type="file" accept="application/pdf,text/csv,.pdf,.csv" multiple required />
+                            <span id="assessment-file-summary" class="hint">Select all reports for the current resident.</span>
                         </div>
                         <div class="full-width">
                             <label for="assessment-query">Optional focus or retrieval query</label>
                             <input id="assessment-query" name="query" type="text" placeholder="e.g. wound healing and unintended weight loss" />
                         </div>
                     </div>
-                    <button id="assessment-submit" type="submit">Create ADIME assessment</button>
+                    <button id="assessment-submit" type="submit">Generate</button>
                 </form>
                 <div id="assessment-status" class="status" role="status"></div>
                 <div id="assessment-result" hidden>
-                    <label for="assessment-output">Completed ADIME</label>
+                    <label for="assessment-output">Completed note</label>
                     <textarea id="assessment-output" readonly></textarea>
                 </div>
+            </section>
+
+            <section class="search-section">
+                <h2>Ingest completed notes</h2>
+                <p>Store completed PDF or text notes for similarity search.</p>
+                <form id="assessment-ingest-form">
+                    <div class="fields">
+                        <div class="full-width">
+                            <label for="assessment-ingest-files">Completed note files</label>
+                            <input id="assessment-ingest-files" name="files" type="file" accept="application/pdf,text/plain,.pdf,.txt" multiple required />
+                        </div>
+                        <div class="full-width">
+                            <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing note</label>
+                        </div>
+                        <div class="full-width">
+                            <label for="assessment-created-by">Created by</label>
+                            <input id="assessment-created-by" name="created_by" type="text" value="self" required />
+                        </div>
+                    </div>
+                    <button id="assessment-ingest-submit" type="submit">Ingest notes</button>
+                </form>
+                <div id="assessment-ingest-status" class="status" role="status"></div>
+            </section>
+
+            <section class="search-section">
+                <h2>Search notes</h2>
+                <p>Find previously ingested notes similar to a resident or clinical scenario.</p>
+                <form id="assessment-search-form">
+                    <div class="search-fields">
+                        <div>
+                            <label for="assessment-search-text">Search text</label>
+                            <input id="assessment-search-text" name="text" type="text" placeholder="e.g. dialysis resident with weight loss" required />
+                        </div>
+                        <div>
+                            <label for="assessment-search-top-k">Results</label>
+                            <input id="assessment-search-top-k" name="top_k" type="number" min="1" max="20" value="5" required />
+                        </div>
+                        <button id="assessment-search-submit" type="submit">Search</button>
+                    </div>
+                </form>
+                <div id="assessment-search-status" class="status" role="status"></div>
+                <div id="assessment-search-results" class="search-results" aria-live="polite"></div>
             </section>
         </main>
 
         <script>
+            const apiKeyInput = document.getElementById("api-key");
             const form = document.getElementById("ingest-form");
             const submit = document.getElementById("submit");
             const status = document.getElementById("status");
@@ -122,6 +199,12 @@
             const searchSubmit = document.getElementById("search-submit");
             const searchStatus = document.getElementById("search-status");
             const searchResults = document.getElementById("search-results");
+            const residentExtractForm = document.getElementById("resident-extract-form");
+            const residentExtractFiles = document.getElementById("resident-extract-files");
+            const residentExtractSubmit = document.getElementById("resident-extract-submit");
+            const residentExtractStatus = document.getElementById("resident-extract-status");
+            const residentExtractResult = document.getElementById("resident-extract-result");
+            const residentExtractOutput = document.getElementById("resident-extract-output");
             const assessmentForm = document.getElementById("assessment-form");
             const assessmentFiles = document.getElementById("assessment-files");
             const assessmentFileSummary = document.getElementById("assessment-file-summary");
@@ -129,12 +212,20 @@
             const assessmentStatus = document.getElementById("assessment-status");
             const assessmentResult = document.getElementById("assessment-result");
             const assessmentOutput = document.getElementById("assessment-output");
+            const assessmentIngestForm = document.getElementById("assessment-ingest-form");
+            const assessmentIngestFiles = document.getElementById("assessment-ingest-files");
+            const assessmentIngestSubmit = document.getElementById("assessment-ingest-submit");
+            const assessmentIngestStatus = document.getElementById("assessment-ingest-status");
+            const assessmentSearchForm = document.getElementById("assessment-search-form");
+            const assessmentSearchSubmit = document.getElementById("assessment-search-submit");
+            const assessmentSearchStatus = document.getElementById("assessment-search-status");
+            const assessmentSearchResults = document.getElementById("assessment-search-results");
 
             assessmentFiles.addEventListener("change", () => {
                 const count = assessmentFiles.files.length;
                 assessmentFileSummary.textContent = count
                     ? `${count} PDF${count === 1 ? "" : "s"} selected. All files will be analyzed together.`
-                    : "Select all reports for the current patient.";
+                    : "Select all reports for the current resident.";
             });
 
             function showStatus(message, kind) {
@@ -142,8 +233,22 @@
                 status.className = `status ${kind}`;
             }
 
-            function renderSearchResults(matches) {
-                searchResults.replaceChildren();
+            function authorizedFetch(resource, options = {}) {
+                const apiKey = apiKeyInput.value.trim();
+                if (!apiKey) {
+                    throw new Error("API key is required");
+                }
+                const headers = new Headers(options.headers);
+                headers.set("Authorization", `Bearer ${apiKey}`);
+                return fetch(resource, { ...options, headers });
+            }
+
+            function getIngestResult(body) {
+                return body?.result && typeof body.result === "object" ? body.result : body;
+            }
+
+            function renderSearchResults(container, matches) {
+                container.replaceChildren();
                 for (const match of matches) {
                     const result = document.createElement("article");
                     result.className = "search-result";
@@ -157,7 +262,7 @@
                     similarity.textContent = `Similarity: ${Number(match.similarity).toFixed(4)}`;
 
                     result.append(filename, content, similarity);
-                    searchResults.append(result);
+                    container.append(result);
                 }
             }
 
@@ -168,7 +273,7 @@
                 showStatus("Ingesting PDFs…", "success");
 
                 try {
-                    const response = await fetch("/api/v1/rag/ingest", {
+                    const response = await authorizedFetch("/api/v1/knowledge/ingest", {
                         method: "POST",
                         body: new FormData(form),
                     });
@@ -177,8 +282,13 @@
                         const detail = body.detail || body.error || `Request failed (${response.status})`;
                         throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
                     }
-                    const documents = body.documents || [];
-                    const chunkCount = documents.reduce((total, document) => total + (document.chunk_count || 0), 0);
+                    const result = getIngestResult(body);
+                    const documents = Array.isArray(result?.documents) ? result.documents : [];
+                    const nestedChunkCount = documents.reduce(
+                        (total, knowledge) => total + (Array.isArray(knowledge.chunks) ? knowledge.chunks.length : 0),
+                        0,
+                    );
+                    const chunkCount = Number.isInteger(result?.chunk_count) ? result.chunk_count : nestedChunkCount;
                     const message = `Created ${chunkCount} chunk${chunkCount === 1 ? "" : "s"} from ${documents.length} PDF${documents.length === 1 ? "" : "s"}.`;
                     showStatus(message, "success");
                     alert(message);
@@ -198,13 +308,13 @@
 
                 try {
                     const query = new URLSearchParams(new FormData(searchForm));
-                    const response = await fetch(`/api/v1/rag/search?${query}`);
+                    const response = await authorizedFetch(`/api/v1/knowledge/search?${query}`);
                     const body = await response.json();
                     if (!response.ok) {
                         const detail = body.detail || body.error || `Request failed (${response.status})`;
                         throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
                     }
-                    renderSearchResults(body);
+                    renderSearchResults(searchResults, body);
                     searchStatus.textContent = body.length
                         ? `Found ${body.length} matching chunk${body.length === 1 ? "" : "s"}.`
                         : "No embedded document chunks are available yet.";
@@ -217,11 +327,41 @@
                 }
             });
 
+            residentExtractForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                residentExtractSubmit.disabled = true;
+                residentExtractResult.hidden = true;
+                residentExtractStatus.textContent = "Extracting resident data…";
+                residentExtractStatus.className = "status success";
+
+                try {
+                    const response = await authorizedFetch("/api/v1/resident/extract", {
+                        method: "POST",
+                        body: new FormData(residentExtractForm),
+                    });
+                    const body = await response.json();
+                    if (!response.ok) {
+                        const detail = body.detail || body.error || `Request failed (${response.status})`;
+                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    }
+                    const fileCount = residentExtractFiles.files.length;
+                    residentExtractOutput.value = JSON.stringify(body, null, 2);
+                    residentExtractResult.hidden = false;
+                    residentExtractStatus.textContent = `Extracted resident data from ${fileCount} file${fileCount === 1 ? "" : "s"}.`;
+                    residentExtractStatus.className = "status success";
+                } catch (error) {
+                    residentExtractStatus.textContent = `Resident extraction failed: ${error.message}`;
+                    residentExtractStatus.className = "status error";
+                } finally {
+                    residentExtractSubmit.disabled = false;
+                }
+            });
+
             assessmentForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
                 assessmentSubmit.disabled = true;
                 assessmentResult.hidden = true;
-                assessmentStatus.textContent = "Extracting patient data and creating assessment…";
+                assessmentStatus.textContent = "Extracting resident data and generating note…";
                 assessmentStatus.className = "status success";
 
                 try {
@@ -229,8 +369,8 @@
                     const fileCount = assessmentFiles.files.length;
                     const query = String(data.get("query") || "").trim();
                     data.delete("query");
-                    const suffix = query ? `?query=${encodeURIComponent(query)}` : "";
-                    const response = await fetch(`/api/v1/assessment${suffix}`, {
+                    const suffix = query ? `?context=${encodeURIComponent(query)}` : "";
+                    const response = await authorizedFetch(`/api/v1/assessment/generate${suffix}`, {
                         method: "POST",
                         body: data,
                     });
@@ -239,17 +379,75 @@
                         const detail = body.detail || body.error || `Request failed (${response.status})`;
                         throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
                     }
-                    assessmentOutput.value = body.adime;
+                    assessmentOutput.value = body.content;
                     assessmentResult.hidden = false;
-                    const clinicalCount = body.clinical_context.length;
-                    const exampleCount = body.similar_assessments.length;
-                    assessmentStatus.textContent = `Assessment created from ${fileCount} PDF${fileCount === 1 ? "" : "s"}, with ${clinicalCount} clinical knowledge source${clinicalCount === 1 ? "" : "s"} and ${exampleCount} similar past assessment${exampleCount === 1 ? "" : "s"}.`;
+                    assessmentStatus.textContent = `Generated note from ${fileCount} resident file${fileCount === 1 ? "" : "s"}.`;
                     assessmentStatus.className = "status success";
                 } catch (error) {
-                    assessmentStatus.textContent = `Assessment failed: ${error.message}`;
+                    assessmentStatus.textContent = `Generate failed: ${error.message}`;
                     assessmentStatus.className = "status error";
                 } finally {
                     assessmentSubmit.disabled = false;
+                }
+            });
+
+            assessmentIngestForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                assessmentIngestSubmit.disabled = true;
+                assessmentIngestStatus.textContent = "Ingesting notes…";
+                assessmentIngestStatus.className = "status success";
+
+                try {
+                    const response = await authorizedFetch("/api/v1/assessment/ingest", {
+                        method: "POST",
+                        body: new FormData(assessmentIngestForm),
+                    });
+                    const body = await response.json();
+                    if (!response.ok) {
+                        const detail = body.detail || body.error || `Request failed (${response.status})`;
+                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    }
+                    const result = getIngestResult(body);
+                    const assessments = Array.isArray(result?.documents) ? result.documents : [];
+                    const assessmentCount = Number.isInteger(result?.chunk_count) ? result.chunk_count : assessments.length;
+                    const fileCount = assessmentIngestFiles.files.length;
+                    const message = `${assessmentCount} note${assessmentCount === 1 ? "" : "s"} ingested from ${fileCount} file${fileCount === 1 ? "" : "s"}.`;
+                    assessmentIngestStatus.textContent = message;
+                    assessmentIngestStatus.className = "status success";
+                    alert(message);
+                } catch (error) {
+                    assessmentIngestStatus.textContent = `Note ingestion failed: ${error.message}`;
+                    assessmentIngestStatus.className = "status error";
+                } finally {
+                    assessmentIngestSubmit.disabled = false;
+                }
+            });
+
+            assessmentSearchForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                assessmentSearchSubmit.disabled = true;
+                assessmentSearchResults.replaceChildren();
+                assessmentSearchStatus.textContent = "Searching notes…";
+                assessmentSearchStatus.className = "status success";
+
+                try {
+                    const query = new URLSearchParams(new FormData(assessmentSearchForm));
+                    const response = await authorizedFetch(`/api/v1/assessment/search?${query}`);
+                    const body = await response.json();
+                    if (!response.ok) {
+                        const detail = body.detail || body.error || `Request failed (${response.status})`;
+                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    }
+                    renderSearchResults(assessmentSearchResults, body);
+                    assessmentSearchStatus.textContent = body.length
+                        ? `Found ${body.length} matching note chunk${body.length === 1 ? "" : "s"}.`
+                        : "No matching note chunks were found.";
+                    assessmentSearchStatus.className = "status success";
+                } catch (error) {
+                    assessmentSearchStatus.textContent = `Note search failed: ${error.message}`;
+                    assessmentSearchStatus.className = "status error";
+                } finally {
+                    assessmentSearchSubmit.disabled = false;
                 }
             });
         </script>

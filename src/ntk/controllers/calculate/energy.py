@@ -30,7 +30,7 @@ class EnergyOptions(BaseModel):
         description="Activity level of person in scale from 1.2-1.9",
         default=1.2,
     )
-    dialysis: bool = Field(description="If patient is on hemodialysis", default=False)
+    dialysis: bool = Field(description="If resident is on hemodialysis", default=False)
     amputation: float | None = Field(
         description="Percentage of amputation. Hand=0.7 | Total leg=16.1 | Total Arm=4.9 | Foot=1.5 | Forearm and hand=2.3 | Calf and foot=5.8",  # noqa: E501
         default=None,

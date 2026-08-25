@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC
 
-from ntk.models.food import Food, FoodCategory, FoodNutrient, Nutrient
+from ntk.models.sql.food import Food, FoodCategory, FoodNutrient, Nutrient
 
 DEFAULT_AMOUNT = 20.0
 

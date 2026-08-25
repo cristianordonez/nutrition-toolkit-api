@@ -6,7 +6,7 @@ import typing
 from sqlmodel import Session, delete, select
 
 from ntk.defaults import DEFAULT_PERMISSIONS
-from ntk.models import APIKeyPermission, Permission
+from ntk.models.sql.api_key import APIKeyPermission, Permission
 
 if typing.TYPE_CHECKING:
     from uuid import UUID

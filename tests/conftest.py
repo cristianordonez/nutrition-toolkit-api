@@ -12,13 +12,25 @@ import pytest
 
 from ntk.services.api_key_service import APIKeyService
 
+_TEST_SETTINGS = {
+    "NTK_DATABASE_URL": "postgresql+psycopg://test:test@localhost:5432/ntk_test",
+    "NTK_OPEN_AI_API_KEY": "test-openai-key",
+    "NTK_REDIS_DSN": "redis://localhost:6379/0",
+}
+
 if typing.TYPE_CHECKING:
     from collections.abc import Callable
     from uuid import UUID
 
-    from ntk.models.api_key import APIKey, Permission
+    from ntk.models.sql.api_key import APIKey, Permission
     from ntk.repositories.api_key_repo import APIKeyRepo
     from ntk.repositories.permission_repo import PermissionRepo
+
+
+def pytest_configure() -> None:
+    """Provide safe defaults before pytest imports application test modules."""
+    for key, value in _TEST_SETTINGS.items():
+        os.environ.setdefault(key, value)
 
 
 class FakeAPIKeyRepo:

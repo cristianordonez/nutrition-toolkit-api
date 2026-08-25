@@ -5,8 +5,8 @@ import typing
 
 from sqlmodel import Session, SQLModel, create_engine
 
-# import all models so that they are initialized below
-import ntk.models  # noqa: F401
+# Import every SQL model so its table is registered before create_all.
+import ntk.models.sql  # noqa: F401
 from ntk.models.settings import SETTINGS
 from ntk.repositories.permission_repo import PermissionRepo
 
@@ -30,7 +30,8 @@ def get_session() -> Generator[Session, None, None]:
         yield session
 
 
-SQLModel.metadata.create_all(engine)
-session = next(get_session())
-permission_repo = PermissionRepo(session)
-permission_repo.seed_defaults()
+def initialize_database() -> None:
+    """Create registered tables and seed built-in permissions explicitly."""
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        PermissionRepo(session).seed_defaults()

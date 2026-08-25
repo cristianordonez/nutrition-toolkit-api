@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+ADMIN_PERMISSION = "admin"
+ASSESSMENTS_READ_PERMISSION = "assessments:read"
+ASSESSMENTS_WRITE_PERMISSION = "assessments:write"
+CALCULATE_READ_PERMISSION = "calculate:read"
+KNOWLEDGE_READ_PERMISSION = "knowledge:read"
+KNOWLEDGE_WRITE_PERMISSION = "knowledge:write"
+RESIDENTS_READ_PERMISSION = "residents:read"
+
 DEFAULT_PERMISSIONS = [
-    "calculate:read",
-    "tickets:read",
-    "tickets:write",
-    "admin",
+    ADMIN_PERMISSION,
+    ASSESSMENTS_READ_PERMISSION,
+    ASSESSMENTS_WRITE_PERMISSION,
+    CALCULATE_READ_PERMISSION,
+    KNOWLEDGE_READ_PERMISSION,
+    KNOWLEDGE_WRITE_PERMISSION,
+    RESIDENTS_READ_PERMISSION,
 ]

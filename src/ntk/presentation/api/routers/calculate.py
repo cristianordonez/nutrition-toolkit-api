@@ -1,6 +1,6 @@
-from __future__ import annotations
+"""FastAPI routes for nutrition calculations."""
 
-import typing
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
@@ -9,21 +9,31 @@ from ntk.controllers.calculate.energy import (
     EnergyOptions,
     EnergyResponse,
 )
-from ntk.presentation.api.middleware import require_any_permission
-
-if typing.TYPE_CHECKING:
-    from ntk.models.api_key import APIKey
+from ntk.controllers.tubefeed.calculate import (
+    CalculateTubefeedController,
+    CalculateTubefeedOptions,
+    CalculateTubefeedResponse,
+)
+from ntk.defaults import ADMIN_PERMISSION, CALCULATE_READ_PERMISSION
+from ntk.presentation.api.middleware import rate_limit, require_any_permission
 
 router = APIRouter()
 
 
-@router.get("/calculate/", response_model=EnergyResponse)
+@router.get(
+    "/calculate/",
+    response_model=EnergyResponse,
+    dependencies=[
+        Depends(
+            require_any_permission(
+                [ADMIN_PERMISSION, CALCULATE_READ_PERMISSION],
+            ),
+        ),
+        Depends(rate_limit(120, window=3600, scope="calculate-energy")),
+    ],
+)
 async def calculate_energy(
     options: EnergyOptions,
-    _: typing.Annotated[
-        APIKey,
-        Depends(require_any_permission(["admin", "calculate:read"])),
-    ],
 ) -> EnergyResponse:
     """Calculate nutrition needs based on user metrics.
 
@@ -34,10 +44,23 @@ async def calculate_energy(
     return output.result
 
 
-@router.get("/calculate/tubefeed")
-async def calculate_tubefeed() -> dict[str, int]:
+@router.get(
+    "/calculate/tubefeed",
+    response_model=CalculateTubefeedResponse,
+    dependencies=[
+        Depends(
+            require_any_permission(
+                [ADMIN_PERMISSION, CALCULATE_READ_PERMISSION],
+            ),
+        ),
+        Depends(rate_limit(120, window=3600, scope="calculate-tubefeed")),
+    ],
+)
+async def calculate_tubefeed(
+    options: CalculateTubefeedOptions,
+) -> CalculateTubefeedResponse:
     """Calculate tubefeed energy needs.
 
     :return: A dictionary containing the calculated tubefeed energy needs.
     """
-    return {"kcal": 500}
+    return CalculateTubefeedController().run(options).result

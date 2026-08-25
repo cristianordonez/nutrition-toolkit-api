@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from .document_repo import DocumentRepo
-from .ticket_repo import TicketRepo
+from .assessment_repo import AssessmentRepo
+from .knowledge_repo import KnowledgeRepo
+from .resident_repo import ResidentRepo
 
 __all__ = [
-    "DocumentRepo",
-    "TicketRepo",
+    "AssessmentRepo",
+    "KnowledgeRepo",
+    "ResidentRepo",
 ]

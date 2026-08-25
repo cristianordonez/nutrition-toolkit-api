@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from ntk.models.api_key import APIKey, Permission
+from ntk.models.sql.api_key import APIKey, Permission
 
 if typing.TYPE_CHECKING:
     from collections.abc import Callable

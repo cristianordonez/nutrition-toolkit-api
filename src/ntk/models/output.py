@@ -6,9 +6,7 @@ import typing
 
 from pydantic import BaseModel
 
-from ntk.models.base import ConsoleRenderableModel
-
-T = typing.TypeVar("T", bound=ConsoleRenderableModel)
+T = typing.TypeVar("T", bound=BaseModel)
 
 
 class Output(BaseModel, typing.Generic[T]):

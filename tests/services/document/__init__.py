@@ -1,1 +1,1 @@
-"""Document service tests."""
+"""Document extraction service tests."""

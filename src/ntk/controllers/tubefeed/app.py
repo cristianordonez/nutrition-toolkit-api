@@ -6,13 +6,13 @@ import logging
 import typing
 
 from ntk.controllers.base import BaseControllerGroup
-from ntk.controllers.registry import register_command
+from ntk.controllers.registry import register_command_group
 from ntk.controllers.tubefeed.calculate import CalculateTubefeedController
 
 logger = logging.getLogger(__name__)
 
 
-@register_command()
+@register_command_group
 class TubefeedControllerGroup(BaseControllerGroup):
     """Controller group for tubefeed command. Holds all subcommands."""
 
