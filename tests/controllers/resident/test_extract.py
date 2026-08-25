@@ -8,19 +8,18 @@ from ntk.controllers.resident.extract import (
     ResidentExtractController,
     ResidentExtractOptions,
 )
-from ntk.models.resident_data import ResidentContext
-from ntk.models.sql.resident import ResidentSnapshot
+from ntk.models.sql.resident import ResidentContext
 
 
 class Agent:
-    async def extract(
+    async def run(
         self,
         files: list[pathlib.Path],
         context: str | None,
     ) -> ResidentContext:
         assert files == [pathlib.Path("resident.pdf")]
         assert context == "dialysis"
-        return ResidentContext(resident_snapshot=ResidentSnapshot())
+        return ResidentContext()
 
 
 def test_resident_group_and_extract_controller() -> None:
@@ -38,4 +37,4 @@ def test_resident_group_and_extract_controller() -> None:
         ),
     )
     assert output.controller == "extract"
-    assert output.result.resident_snapshot.age is None
+    assert output.result.age is None

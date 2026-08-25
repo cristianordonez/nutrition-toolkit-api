@@ -25,6 +25,8 @@ class AssessmentIngestOptions(BaseModel):
     """Options for ingesting completed nutrition assessments."""
 
     path: pathlib.Path = Field(description="Assessment PDF, text file, or directory")
+    overwrite: bool = Field(default=False, description="Replace the uploaded source")
+    created_by: str = Field(default="self", description="Assessment author")
 
 
 class AssessmentIngestResponse(ConsoleRenderableModel):
@@ -60,6 +62,9 @@ class AssessmentIngestController(BaseController):
     async def run_uploads(
         self,
         files: typing.Sequence[ReadableUpload],
+        *,
+        overwrite: bool = False,
+        created_by: str = "self",
     ) -> Output[AssessmentIngestResponse]:
         """Validate uploaded assessment files and ingest their chunks."""
         async with materialize_uploads(
@@ -74,6 +79,8 @@ class AssessmentIngestController(BaseController):
             return self.run(
                 AssessmentIngestOptions(
                     path=uploads.directory,
+                    overwrite=overwrite,
+                    created_by=created_by,
                 ),
             )
 
@@ -95,6 +102,8 @@ class AssessmentIngestController(BaseController):
                 for path in paths
                 for assessment in service.ingest_assessment(
                     path,
+                    overwrite=options.overwrite,
+                    created_by=options.created_by,
                 )
             ]
             return Output(

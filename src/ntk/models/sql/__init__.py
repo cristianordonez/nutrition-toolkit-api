@@ -9,14 +9,10 @@ from .knowledge import Knowledge, KnowledgeChunk, KnowledgeChunkEmbedding
 from .resident import (
     EdemaData,
     LabResult,
-    MedicationData,
     Resident,
     ResidentSnapshot,
     ResidentSnapshotAssessment,
-    SupplementData,
-    TubeFeedingData,
     WeightHistoryEntry,
-    WoundData,
 )
 
 __all__ = [
@@ -32,15 +28,12 @@ __all__ = [
     "KnowledgeChunk",
     "KnowledgeChunkEmbedding",
     "LabResult",
-    "MedicationData",
     "Nutrient",
     "Permission",
     "ProgressNote",
     "Resident",
     "ResidentSnapshot",
     "ResidentSnapshotAssessment",
-    "SupplementData",
-    "TubeFeedingData",
     "WeightHistoryEntry",
-    "WoundData",
+    "Wound",
 ]

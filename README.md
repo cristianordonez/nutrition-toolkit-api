@@ -124,6 +124,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 - [Ruff integration][ruff]
 - [Ty type checking][ty]
 - [Sphinx][sphinx-rtd]
+- [Logfire][logfire]
 
 [customization]: https://code.visualstudio.com/docs/copilot/concepts/customization
 [mcp-server]: https://modelcontextprotocol.io/extensions/apps/build#manual-setup
@@ -133,3 +134,4 @@ CREATE EXTENSION IF NOT EXISTS vector;
 [ruff]: https://docs.astral.sh/ruff/
 [sphinx-rtd]: https://sphinx-rtd-tutorial.readthedocs.io/en/latest/sphinx-config.html
 [ty]: https://docs.astral.sh/ty/
+[logfire]: https://logfire-us.pydantic.dev/cristianordonez/nutrition-toolkit/agents/resident_data_agent/metrics?last=%221d%22

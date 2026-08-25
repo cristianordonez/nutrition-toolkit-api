@@ -4,7 +4,7 @@ import abc
 import functools
 import typing
 
-import pdfplumber
+import pymupdf
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -29,24 +29,23 @@ class BaseExtractor(abc.ABC):
     @functools.cached_property
     def _document_text(self) -> str:
         """Extract and cache readable content without retaining an open file."""
-        if not self._is_pdf(self.path):
-            return self.path.read_text(encoding="utf-8", errors="replace")
-        with pdfplumber.open(self.path) as pdf:
-            return "\n".join(
-                text
-                for page in pdf.pages
-                if (text := (page.extract_text() or "").strip())
-            )
+        if not self.is_expected_format():
+            msg = f"Attempted to read unsupported file format: {self.path}"
+            raise TypeError(msg)
+        with pymupdf.open(self.path) as document:
+            pages = [
+                document.load_page(page_number).get_text().strip()
+                for page_number in range(document.page_count)
+            ]
+        return "\n".join(page_text for page_text in pages if page_text)
 
     @functools.cached_property
     def _first_page_text(self) -> str:
         """Extract and cache first-page text without retaining an open PDF."""
-        if not self._is_pdf(self.path):
-            return ""
-        with pdfplumber.open(self.path) as pdf:
-            if not pdf.pages:
+        with pymupdf.open(self.path) as document:
+            if document.page_count == 0:
                 return ""
-            return (pdf.pages[0].extract_text() or "").strip()
+            return document.load_page(0).get_text().strip()
 
     def _first_page_contains(self, *markers: str) -> bool:
         """Return whether first-page text contains any marker."""

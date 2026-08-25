@@ -208,3 +208,6 @@ __marimo__/
 
 # hatch
 src/*/_version.py
+
+# Other
+test.json

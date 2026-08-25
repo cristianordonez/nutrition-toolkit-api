@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import functools
 import typing
-
-from pypdf import PdfReader
+from hashlib import sha256
 
 from ntk.models.knowledge import KnowledgeType
+from ntk.models.sql.knowledge import Knowledge
 from ntk.utils.tokens import sliding_window
 
 from .base import BaseExtractor
@@ -17,19 +16,17 @@ class KnowledgeExtractor(BaseExtractor):
 
     knowledge_type: typing.ClassVar[KnowledgeType]
 
-    @functools.cached_property
-    def reader(self) -> PdfReader:
-        """Return a cached PDF reader for the knowledge document."""
-        return PdfReader(self.path)
-
-    def create_chunks(self) -> list[str]:
-        """Create searchable chunks from the document."""
-        entire_text = "\n".join(page.extract_text() for page in self.reader.pages)
-        return sliding_window(entire_text)
-
     def extract(self) -> list[str]:
         """Extract searchable text chunks from the knowledge document."""
-        return self.create_chunks()
+        return sliding_window(self._document_text)
+
+    def create_knowledge(self) -> Knowledge:
+        """Create the persisted identity for this knowledge source."""
+        return Knowledge(
+            filename=self.path.name,
+            knowledge_type=self.knowledge_type,
+            file_hash=sha256(self.path.read_bytes()).hexdigest(),
+        )
 
 
 @register_extractor

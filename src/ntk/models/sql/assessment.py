@@ -21,7 +21,7 @@ class AssessmentSource(StrEnum):
 
 
 class Assessment(SQLModel, table=True):
-    """One deidentified searchable nutrition assessment extracted from a source document."""
+    """One searchable nutrition assessment extracted from a source document."""
 
     __tablename__ = "assessment"
 

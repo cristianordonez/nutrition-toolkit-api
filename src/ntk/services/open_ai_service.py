@@ -21,7 +21,7 @@ class OpenAIService:
         self.embedding_model = embedding_model
         self.client = client or OpenAI(api_key=SETTINGS.open_ai_api_key)
 
-    def get_embedding(self, content: str) -> list[float]:
+    def create_embedding(self, content: str) -> list[float]:
         """Create an embedding vector for one content string."""
         response = self.client.embeddings.create(
             input=content,
@@ -31,3 +31,11 @@ class OpenAIService:
             msg = "OpenAI returned no embedding vector"
             raise RuntimeError(msg)
         return response.data[0].embedding
+
+    def get_embedding(self, content: str) -> list[float]:
+        """Return one embedding vector using the configured provider."""
+        return self.create_embedding(content)
+
+    def get_embeddings(self, contents: list[str]) -> list[list[float]]:
+        """Return one embedding vector for each supplied string."""
+        return [self.create_embedding(content) for content in contents]

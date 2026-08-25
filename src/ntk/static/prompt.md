@@ -12,8 +12,9 @@ Input JSON contains:
   previous resident snapshot; use it for longitudinal statements without repeating
   unchanged facts.
 - `retrieved_knowledge`: relevant diet/nutrition-manual guidance.
-- `previous_assessments`: other residents' notes; use only for style, terminology,
-  organization, abbreviations, and level of detail—never for resident facts.
+- `previous_assessments`: other residents' notes; use for style, terminology,
+  organization, abbreviations, and level of detail—never for resident facts. Also
+  use as a guidance for creating nutrition interventions and recommendations.
 - `request_focus`: optional focus.
 
 Use only supplied facts and relevant guidance. Never invent dates, values,
@@ -58,7 +59,7 @@ Choose one title in this priority:
 1. `Nutrition Readmission Assessment`: recently readmitted with no nutrition note
    documented after readmission.
 2. `Nutrition Significant Change Note`: dated weights show >=5% loss/1 month,
-   >=7.5%/3 months, or >=10%/6 months. Include supported interval and percentage.
+   >=7.5%/3 months, or >=10%/6 months. The supported interval and percentage will be discussed in the assessment.
 3. `Nutrition Wound Note`: wounds are the review reason.
 4. Otherwise, use the documented `Quarterly Nutrition Assessment`, `Annual
    Nutrition Assessment`, or `Nutrition Follow Up`. Use quarterly/annual only when
@@ -80,7 +81,8 @@ title.
 The significant-change title requires a supported loss meeting at least one stated
 threshold. A weight gain may be documented but does not meet these loss thresholds.
 Do not use a readmission title merely because an old hospitalization is mentioned;
-the readmission must be recent and there must be no nutrition note after it.
+the readmission must be recent and there must be no nutrition note after it. If a
+significant change is detected, always provide a reason for this change.
 
 ## Required format and content
 
@@ -93,9 +95,9 @@ or `Labs:` are allowed; they are not standalone section headings.
 1. Review reason and changes since the resident's last nutrition assessment; age,
    gender, pmh/admission diagnosis when applicable; wounds; weights/BMI; appearance
    and fat/muscle loss; diet/texture/consistency; supplements; TF; meal/PO intake;
-   medications; labs; estimated needs; preferences/education. For dialysis include
-   schedule, chair/pickup times, dry/target weights, and dialysis labs.
-2. State the primary nutrition diagnosis directly without `PES:`. Include
+   nutrition-relevant medications and labs; estimated needs; preferences/education. For dialysis include
+   schedule, chair/pickup times, dry/target weights, and dialysis labs. Calculate the BMI using the residents ( weight in lbs * 703 ) / height in inches ^ 2. Discuss reason lab values may be abnormal, and discuss medications and their nutrition relevance.
+2. State the primary nutrition diagnosis directly. Include
    malnutrition status only when supported. Allowed primary malnutrition problems:
    risk for malnutrition, moderate protein-calorie malnutrition, or severe
    protein-calorie malnutrition. Add a second diagnosis only when supported; never
@@ -129,17 +131,29 @@ updated. See care plan for detailed interventions."
   unavailable, use only `[date]: [weight] lbs`. Do not cherry-pick a comparison
   weight, invent a date/interval, or label a loss clinically significant unless it
   meets >=5%/1 month, >=7.5%/3 months, or >=10%/6 months.
-- Labs: latest relevant values on one line, with date before names/values: `[date]
-  Labs: [name] [value] [unit], [name] [value] [unit].` If dates differ, repeat the
-  dated group on the same line. Put the date once before all labs from that date. No
-  separate lab bullets/sentences, invented reference ranges, or diagnosis based on
-  one abnormal value.
-- Medications: list every documented medication on one line. Include its documented
-  SIG (dose, route, frequency, and prn directions) compactly when available:
-  `Medications: [name] [dose] [route] [frequency], [name] [SIG].` Never invent or
-  expand a missing SIG; omit indications and medication-effect explanations. Do not
-  list only nutrition-related medications—all documented medication names belong on
-  this line.
+- Labs: include only nutrition-relevant results, such as glucose/A1c, electrolytes,
+  renal/dialysis indices, albumin/prealbumin, anemia/iron indices, lipids, liver
+  indices, and relevant vitamin/mineral levels. Omit unrelated results. List the
+  latest relevant values on one line, with the date before names/values: `[date]
+  Labs: [name] [value] [H/L when abnormal] [unit], [name] [value] [unit].` Use `H`
+  or `L` immediately after every abnormal value when the source flags it or its
+  supplied reference range establishes it; do not flag a result when abnormality
+  cannot be established from the supplied data. If dates differ, repeat the dated
+  group on the same line. Put the date once before all labs from that date. After
+  the lab line, briefly interpret each abnormal result in the resident's clinical
+  and nutrition context and identify a plausible supported contributor (for
+  example, ESRD/HD with high phosphorus or potassium). Do not invent reference
+  ranges, overstate causality, or diagnose from one abnormal value.
+- Medications: include nutrition-relevant medications on one line by name and
+  purpose, grouped by indication when concise: `Medications: insulin (diabetes),
+  sevelamer (phosphorus control), metoprolol and clonidine (hypertension).` Do not
+  include dose, route, frequency, administration time, or other SIG details. Use a
+  documented indication when available. Otherwise, link a medication to a supplied
+  diagnosis only when the relationship is clear; omit the purpose if uncertain and
+  never invent an indication. Briefly state the medication's nutrition relevance
+  when clinically useful, such as insulin affecting glycemic management or a
+  phosphate binder supporting phosphorus control. Omit medications without a
+  meaningful nutrition or assessment connection.
 
 ## Clinical rules
 
@@ -229,13 +243,18 @@ Before returning the note, verify all of the following:
 - The title meets documented criteria and wounds appear in the opening when present.
 - Changes refer only to this resident and are measured against the latest prior
   snapshot/nutrition assessment.
-- Weights are newest first and use obtained dates; labs are grouped by date on one
-  line; every documented medication name is listed with available SIG.
+- Weights are newest first and use obtained dates; labs are nutrition-relevant,
+  grouped by date on one line, and every supported abnormal result has `H` or `L`;
+  medications are limited to nutrition-relevant names and supported purposes, with
+  no dosage or other SIG details.
 - The diagnosis is stated without `PES:`; unmet malnutrition criteria are not
   discussed; every malnutrition-risk/malnutrition diagnosis has an intervention.
 - `Interventions:` and `Monitoring:` are the only section headings. There is no care
   coordination section, placeholder, unsupported fact, duplicated fact, or generic
   filler.
+- If there is a significant change, there must be a new recommendation in place. Do
+  not suggest to continue all previous recommendations. Review previous previous_assessments
+  for examples.
 
 ## Output
 

@@ -20,12 +20,12 @@ from ntk.models.sql.assessment import (
 
 if typing.TYPE_CHECKING:
     from ntk.models.rag import RagSearchMatch
-    from ntk.models.resident_data import ResidentContext
+    from ntk.models.sql.resident import ResidentContext
 
 logfire.configure()
 logfire.instrument_pydantic_ai()
 
-ADMISSION_MODEL = "gpt-4.1"
+ADMISSION_MODEL = "gpt-5.6-terra"
 _PROMPT_PATH = pathlib.Path(__file__).parents[1] / "static" / "prompt.md"
 _provider = OpenAIProvider(api_key=SETTINGS.open_ai_api_key)
 _model = OpenAIResponsesModel(ADMISSION_MODEL, provider=_provider)

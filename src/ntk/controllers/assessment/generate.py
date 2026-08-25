@@ -85,26 +85,20 @@ class GenerateController(BaseController):
     async def run(self, options: GenerateOptions) -> Output[Assessment]:
         """Extract data, retrieve evidence and examples, then generate a note."""
         resident_agent = self.resident_data_agent or ResidentDataAgent()
-        resident_data = await resident_agent.extract(options.files, options.context)
-        retrieval_query = self._retrieval_query(
-            resident_data.to_console(),
-            options.context,
-        )
-        # get patient context
-        # use context to get deterministic calculations, progress note selection
-        # get knowledge
-        # get deidentified style examples
-        # send to agent to make assessment
+        resident_data = await resident_agent.run(options.files, options.context)
+        query = resident_data.summary()
+        if options.context:
+            query = f"{options.context}\n{query}"
         knowledge_search = self.knowledge_search or KnowledgeSearchController()
         assessment_search = self.assessment_search or AssessmentSearchController()
         knowledge_output, assessment_output = await asyncio.gather(
             asyncio.to_thread(
                 knowledge_search.run,
-                KnowledgeSearchOptions(text=retrieval_query),
+                KnowledgeSearchOptions(text=query),
             ),
             asyncio.to_thread(
                 assessment_search.run,
-                AssessmentSearchOptions(text=retrieval_query),
+                AssessmentSearchOptions(text=query),
             ),
         )
         knowledge = knowledge_output.result.matches
@@ -117,10 +111,3 @@ class GenerateController(BaseController):
             options.context,
         )
         return Output(result=assessment, controller=self.name, exit_code=0)
-
-    @staticmethod
-    def _retrieval_query(resident_data: str, context: str | None) -> str:
-        """Build the semantic query from current resident facts and user focus."""
-        if context and context.strip():
-            return f"{context.strip()}\n{resident_data}"
-        return resident_data

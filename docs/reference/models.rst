@@ -8,5 +8,3 @@ Models
    :template: pydantic_model.rst
 
    Output
-   ApiClient
-   Formula

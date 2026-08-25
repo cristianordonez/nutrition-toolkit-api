@@ -97,7 +97,6 @@ def test_ingest_pdfs_writes_uploads_and_restores_filenames(
                     knowledge_id=knowledge.id,
                     chunk_index=0,
                     content="Clinical guidance",
-                    metadata={"page": 1},
                 ),
             )
             return SimpleNamespace(

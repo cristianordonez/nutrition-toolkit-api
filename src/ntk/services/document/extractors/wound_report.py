@@ -4,12 +4,7 @@ import csv
 import io
 from datetime import UTC, datetime
 
-from ntk.models.resident_data import (
-    ResidentWoundData,
-    SourceReference,
-    WoundReportExtraction,
-)
-from ntk.models.sql.resident import WoundData
+from ntk.models.sql.resident import CsvWoundReportExtraction, SourceReference, Wound
 
 from .base import BaseExtractor
 from .registry import register_extractor
@@ -34,41 +29,47 @@ class WoundReportExtractor(BaseExtractor):
         text = self._document_text
         return any(marker in text for marker in _WOUND_REPORT_MARKERS)
 
-    def extract(self) -> WoundReportExtraction:
-        """Extract wound rows grouped by resident."""
-        residents = self._parse_residents(self._document_text)
-        return WoundReportExtraction(
+    def extract(self, facility_id: str | None = None) -> CsvWoundReportExtraction:
+        """Extract wound rows for one resident from a potentially shared report."""
+        facility_id, wounds = self._parse_report(
+            self._document_text,
+            facility_id=facility_id,
+        )
+        return CsvWoundReportExtraction(
+            facility_id=facility_id,
+            wounds=wounds,
             source=SourceReference(
-                source_name=self.path.name,
+                source=str(self.path),
                 source_type="WHA Wound Type Tabular Report",
-                page_start=None,
-                page_end=None,
                 extracted_at=self._extracted_at(),
             ),
-            residents=residents,
         )
 
     @classmethod
-    def _parse_residents(cls, text: str) -> list[ResidentWoundData]:
+    def _parse_report(
+        cls,
+        text: str,
+        *,
+        facility_id: str | None = None,
+    ) -> tuple[str | None, list[Wound]]:
+        """Return wound rows matching one resident in the report."""
         header, rows = cls._wound_rows(text)
         if not header:
-            return []
-        residents_by_id: dict[str, ResidentWoundData] = {}
+            return facility_id, []
+
+        selected_id = facility_id.strip() if facility_id else None
+        wounds: list[Wound] = []
         for row in rows:
             values = cls._row_values(header, row)
-            facility_id = values.get("Patient Number", "").strip()
-            if not facility_id:
+            row_facility_id = cls._optional_value(values, _HEADER_PATIENT_NUMBER)
+            if row_facility_id is None:
                 continue
-            wound = cls._wound_from_values(values)
-            resident = residents_by_id.setdefault(
-                facility_id,
-                ResidentWoundData(
-                    facility_id=facility_id,
-                    resident_name=values.get("Name", "").strip() or None,
-                ),
-            )
-            resident.wounds.append(wound)
-        return list(residents_by_id.values())
+            if selected_id is None:
+                selected_id = row_facility_id
+            if row_facility_id.casefold() != selected_id.casefold():
+                continue
+            wounds.append(cls._wound_from_values(values))
+        return selected_id, wounds
 
     @staticmethod
     def _wound_rows(text: str) -> tuple[list[str], list[list[str]]]:
@@ -87,17 +88,28 @@ class WoundReportExtractor(BaseExtractor):
             for index, column in enumerate(header)
         }
 
-    @staticmethod
-    def _wound_from_values(values: dict[str, str]) -> WoundData:
-        return WoundData(
-            type=values.get("Wound Type", "").strip() or "Unknown",
-            location=values.get("Wound Location", "").strip() or "Unknown",
+    @classmethod
+    def _wound_from_values(cls, values: dict[str, str]) -> Wound:
+        return Wound(
+            type=cls._optional_value(values, "Wound Type") or "Unknown",
+            location=cls._optional_value(values, "Wound Location") or "Unknown",
             weeks_in_treatment=WoundReportExtractor._parse_int(
                 values.get("Weeks In Treatment"),
             ),
-            stage=values.get("Stage", "").strip() or None,
-            progress=values.get("Wound Progress", "").strip() or None,
+            progress=cls._optional_value(values, "Wound Progress"),
+            stage=cls._optional_value(values, "Stage"),
+            size=cls._optional_value(values, "Size (LxWxD) cm"),
+            assessment_note=cls._optional_value(values, "Assessment Note"),
+            physician_orders=cls._optional_value(values, "Physician Orders"),
+            physician_orders_notes=cls._optional_value(
+                values,
+                "Physician Orders Notes",
+            ),
         )
+
+    @staticmethod
+    def _optional_value(values: dict[str, str], column: str) -> str | None:
+        return values.get(column, "").strip() or None
 
     @staticmethod
     def _parse_int(value: str | None) -> int | None:

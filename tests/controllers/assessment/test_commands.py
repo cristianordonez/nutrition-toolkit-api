@@ -14,15 +14,17 @@ from ntk.controllers.assessment.ingest import (
     AssessmentIngestOptions,
     AssessmentIngestResponse,
 )
-from ntk.models.resident_data import ResidentContext
 from ntk.models.sql.assessment import (
     Assessment,
     AssessmentSource,
 )
-from ntk.models.sql.resident import ResidentSnapshot
+from ntk.models.sql.resident import ResidentContext
 
 if typing.TYPE_CHECKING:
     import pathlib
+
+    from ntk.controllers.assessment.search import AssessmentSearchOptions
+    from ntk.controllers.knowledge.search import KnowledgeSearchOptions
 
 
 def test_generate_controller_extracts_retrieves_and_generates_assessment(
@@ -30,10 +32,11 @@ def test_generate_controller_extracts_retrieves_and_generates_assessment(
 ) -> None:
     path = tmp_path / "resident.pdf"
     path.write_bytes(b"pdf")
-    resident_data = ResidentContext(resident_snapshot=ResidentSnapshot())
+    resident_data = ResidentContext(age=80, diagnoses=["ESRD"])
+    search_queries: dict[str, str] = {}
 
     class Agent:
-        async def extract(
+        async def run(
             self,
             files: list[pathlib.Path],
             context: str | None,
@@ -43,8 +46,15 @@ def test_generate_controller_extracts_retrieves_and_generates_assessment(
             return resident_data
 
     class Search:
-        def run(self, options: object) -> object:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def run(
+            self,
+            options: AssessmentSearchOptions | KnowledgeSearchOptions,
+        ) -> object:
             assert "wound" in str(options)
+            search_queries[self.name] = options.text
             return SimpleNamespace(result=SimpleNamespace(matches=[]))
 
     class Admission:
@@ -62,14 +72,17 @@ def test_generate_controller_extracts_retrieves_and_generates_assessment(
     controller = GenerateController(
         resident_data_agent=Agent(),  # ty: ignore[invalid-argument-type]
         admission_agent=Admission(),  # ty: ignore[invalid-argument-type]
-        knowledge_search=Search(),  # ty: ignore[invalid-argument-type]
-        assessment_search=Search(),  # ty: ignore[invalid-argument-type]
+        knowledge_search=Search("knowledge"),  # ty: ignore[invalid-argument-type]
+        assessment_search=Search("assessment"),  # ty: ignore[invalid-argument-type]
     )
     output = asyncio.run(
         controller.run(GenerateOptions(files=[path], context="wound")),
     )
     assert output.result.content == "Completed assessment"
     assert output.result.to_console() == "Completed assessment"
+    assert search_queries["assessment"] == (
+        "wound\nResident: 80-year-old\nDiagnoses: ESRD"
+    )
 
 
 def test_assessment_ingest_uses_fixed_document_type(

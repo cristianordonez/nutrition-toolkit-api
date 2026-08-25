@@ -11,7 +11,7 @@ from ntk.controllers.resident.extract import (
 )
 from ntk.controllers.uploads import UploadValidationError
 from ntk.defaults import ADMIN_PERMISSION, RESIDENTS_READ_PERMISSION
-from ntk.models.resident_data import ResidentContext
+from ntk.models.sql.resident import ResidentContext
 from ntk.presentation.api.middleware import rate_limit, require_any_permission
 
 router = APIRouter()
@@ -27,7 +27,7 @@ _RESIDENT_EXTRACT_CONTROLLER = ResidentExtractController()
                 [ADMIN_PERMISSION, RESIDENTS_READ_PERMISSION],
             ),
         ),
-        Depends(rate_limit(20, window=3600, scope="resident-extract")),
+        Depends(rate_limit(40, window=3600, scope="resident-extract")),
     ],
 )
 async def extract_resident_data(

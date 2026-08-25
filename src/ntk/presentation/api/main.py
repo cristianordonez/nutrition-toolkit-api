@@ -21,6 +21,7 @@ except ImportError as err:
     raise SystemExit(msg) from err
 
 
+from ntk.database.db import initialize_database
 from ntk.logger import setup_logging
 from ntk.presentation.cli.app import create_root_parser
 
@@ -93,6 +94,7 @@ async def root() -> HTMLResponse:
 
 def start(args: list[str] | None = None) -> None:
     """Start the FastAPI server."""
+    initialize_database()
     if args is None:
         args = sys.argv[1:]
     parser = create_root_parser()

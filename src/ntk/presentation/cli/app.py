@@ -12,6 +12,7 @@ import typing
 from ntk import __version__
 from ntk.controllers import load_command_groups
 from ntk.controllers.registry import COMMAND_REGISTRY
+from ntk.database.db import initialize_database
 from ntk.logger import setup_logging
 
 if typing.TYPE_CHECKING:
@@ -31,6 +32,7 @@ async def _resolve_output(output: typing.Awaitable[Output]) -> Output:
 
 def main(args: list[str] | None = None) -> None:
     """Run CLI portion of application."""
+    initialize_database()
     if args is None:
         args = sys.argv[1:]
     root = create_root_parser()

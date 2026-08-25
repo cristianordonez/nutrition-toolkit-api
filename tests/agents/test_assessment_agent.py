@@ -10,8 +10,7 @@ import pytest
 
 from ntk.agents.assessment_agent import AdmissionAgent
 from ntk.models.rag import RagSearchMatch
-from ntk.models.resident_data import ResidentContext
-from ntk.models.sql.resident import ResidentSnapshot
+from ntk.models.sql.resident import ResidentContext
 
 RESIDENT_AGE = 80
 
@@ -38,35 +37,31 @@ def _match(filename: str, text: str) -> RagSearchMatch:
 def test_admission_agent_passes_explicit_input_contract() -> None:
     fake = FakeAgent("  Nutrition Readmission Assessment  ")
     agent = AdmissionAgent(agent=fake)  # ty: ignore[invalid-argument-type]
-    resident = ResidentContext(resident_snapshot=ResidentSnapshot(age=RESIDENT_AGE))
+    resident = ResidentContext(age=RESIDENT_AGE)
     knowledge = [_match("manual.pdf", "clinical guidance")]
     previous = [_match("assessment.pdf", "style example")]
-
     assessment = asyncio.run(
         agent.generate(resident, knowledge, previous, "wound healing"),
     )
-
     payload = json.loads(fake.prompt)
-    assert payload["resident_data"]["resident_snapshot"]["age"] == RESIDENT_AGE
+    assert payload["resident_data"]["age"] == RESIDENT_AGE
     assert payload["resident_data"]["progress_notes"] == []
-    assert "id" not in payload["resident_data"]["resident_snapshot"]
+    assert "resident_id" not in payload["resident_data"]
     assert payload["retrieved_knowledge"][0]["chunk_text"] == "clinical guidance"
     assert payload["previous_assessments"][0]["chunk_text"] == "style example"
     assert payload["request_focus"] == "wound healing"
     assert assessment.content == "Nutrition Readmission Assessment"
     assert assessment.source.value == "generated"
     assert assessment.source_filename is None
-    assert assessment.created_by == "gpt-4.1"
     assert assessment.to_console() == assessment.content
 
 
 def test_admission_agent_rejects_empty_note() -> None:
     agent = AdmissionAgent(agent=FakeAgent("  "))  # ty: ignore[invalid-argument-type]
-
     with pytest.raises(RuntimeError, match="empty note"):
         asyncio.run(
             agent.generate(
-                ResidentContext(resident_snapshot=ResidentSnapshot()),
+                ResidentContext(),
                 [],
                 [],
             ),
@@ -89,4 +84,8 @@ def test_assessment_prompt_defines_inputs_and_style() -> None:
     assert "(current - prior) / prior x 100" in prompt
     assert "Do not present an old diet" in prompt
     assert "wound status is unknown" in prompt
-    assert "all documented medication names" in prompt
+    assert "include dose, route, frequency" in prompt
+    assert "grouped by indication" in prompt
+    assert "include only nutrition-relevant results" in prompt
+    assert "every abnormal value" in prompt
+    assert "briefly interpret each abnormal result" in prompt

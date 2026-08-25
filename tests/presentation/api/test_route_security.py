@@ -43,7 +43,7 @@ _ROUTE_POLICIES = [
         60,
         "assessment-search",
     ),
-    ("resident", "/resident/extract", "residents:read", 20, "resident-extract"),
+    ("resident", "/resident/extract", "residents:read", 40, "resident-extract"),
 ]
 
 
@@ -71,7 +71,6 @@ def test_route_requires_permission_and_rate_limit(
         for dependency in route.dependant.dependencies  # codespell:ignore dependant
         if dependency.call is not None
     }
-
     assert closures["permission_checker"]["permissions"] == ["admin", permission]
     assert closures["rate_limiter"]["limit"] == limit
     assert closures["rate_limiter"]["window"] == 3600  # noqa: PLR2004

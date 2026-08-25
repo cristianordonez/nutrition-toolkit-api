@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
-from ntk.models.resident_data import OrderReportExtraction, PccOrder, SourceReference
-from ntk.models.sql.resident import MedicationData, SupplementData, TubeFeedingData
+from ntk.models.sql.resident import (
+    PccOrder,
+    PccOrderReportExtraction,
+    SourceReference,
+)
 
 from .base import BaseExtractor
 from .registry import register_extractor
@@ -20,41 +23,6 @@ _CATEGORY_RE = re.compile(
 _RESIDENT_RE = re.compile(
     r"^Resident\s*:\s*(?P<name>.+?)\s*\((?P<id>[A-Z]{0,4}\d+)\)",
 )
-_FREQUENCY_PATTERNS = (
-    (re.compile(r"\b(one time a day|once daily|qd|daily)\b", re.IGNORECASE), "QD"),
-    (re.compile(r"\b(two times a day|bid|twice daily)\b", re.IGNORECASE), "BID"),
-    (re.compile(r"\b(three times a day|tid)\b", re.IGNORECASE), "TID"),
-    (re.compile(r"\b(four times a day|qid)\b", re.IGNORECASE), "QID"),
-    (
-        re.compile(
-            r"\b(every \d+ hours|every \d+ hour|q\d+h|q \d+ h)\b",
-            re.IGNORECASE,
-        ),
-        None,
-    ),
-    (re.compile(r"\b(at bedtime|bedtime|hs)\b", re.IGNORECASE), "HS"),
-    (re.compile(r"\b(as needed|prn)\b", re.IGNORECASE), "PRN"),
-)
-_AMOUNT_RE = re.compile(
-    r"\b(?P<amount>\d+(?:\.\d+)?\s*(?:ounces?|oz|ml|mL|grams?|gm|tabs?|tablets?))\b",
-    re.IGNORECASE,
-)
-_TEXTURE_RE = re.compile(
-    r"\bdiet\s+(?P<texture>[A-Za-z ]+?)\s+texture\b",
-    re.IGNORECASE,
-)
-_CONSISTENCY_RE = re.compile(
-    r"\b(?P<consistency>[A-Za-z ]+?)\s+consistency\b",
-    re.IGNORECASE,
-)
-_RATE_RE = re.compile(
-    r"\b(?P<rate>\d+(?:\.\d+)?\s*(?:mL|ml|cc|units?)\s*/?\s*(?:hr|hour|day)?)\b",
-    re.IGNORECASE,
-)
-_FLUSH_RE = re.compile(
-    r"\b(?P<flush>(?:flush|fwf|water flush)[^.]+)",
-    re.IGNORECASE,
-)
 
 
 @register_extractor
@@ -65,39 +33,24 @@ class PccOrderReportExtractor(BaseExtractor):
         """Return whether the document is a PCC order listing report."""
         return self._first_page_contains("Order Listing Report")
 
-    def extract(self) -> OrderReportExtraction:
-        """Extract nutrition-relevant facts from an order listing report."""
+    def extract(self) -> PccOrderReportExtraction:
+        """Extract the resident and order rows from a PCC order report."""
         document_text = self._document_text
         resident_name, facility_id = self._parse_resident(document_text)
-        orders = self._parse_orders(document_text, resident_name, facility_id)
-        active_orders = [
-            order
-            for order in orders
-            if (order.order_status or "").casefold() == "active"
-        ]
-        return OrderReportExtraction(
+        return PccOrderReportExtraction(
+            facility_id=facility_id,
+            orders=self._parse_orders(document_text, resident_name, facility_id),
             source=SourceReference(
-                source_name=self.path.name,
+                source=str(self.path),
                 source_type="PCC Order Listing Report",
-                page_start=1,
-                page_end=None,
                 extracted_at=datetime.now(tz=UTC),
             ),
-            facility_id=facility_id,
-            orders=orders,
-            medications=self._extract_medications(active_orders),
-            diet=self._extract_diet(active_orders),
-            diet_texture=self._extract_diet_texture(active_orders),
-            liquid_consistency=self._extract_liquid_consistency(active_orders),
-            supplements=self._extract_supplements(active_orders),
-            tubefeed_order=self._extract_tubefeed(active_orders),
         )
 
     @staticmethod
     def _parse_resident(text: str) -> tuple[str | None, str | None]:
         for line in text.splitlines():
-            match = _RESIDENT_RE.match(line.strip())
-            if match:
+            if match := _RESIDENT_RE.match(line.strip()):
                 return match.group("name").strip(), match.group("id").strip()
         return None, None
 
@@ -108,50 +61,57 @@ class PccOrderReportExtractor(BaseExtractor):
         resident_name: str | None,
         facility_id: str | None,
     ) -> list[PccOrder]:
+        """Parse rows without depending on report-header coordinates."""
         if resident_name is None or facility_id is None:
             return []
-        marker = f"{resident_name} ({facility_id})"
-        blocks: list[list[str]] = []
-        current: list[str] = []
+
+        resident_marker = f"{resident_name} ({facility_id})"
+        orders: list[PccOrder] = []
+        row_lines: list[str] = []
+
         for raw_line in text.splitlines():
             line = raw_line.strip()
             if not line or cls._is_report_chrome(line):
                 continue
-            if line.startswith(marker):
-                if current:
-                    blocks.append(current)
-                current = [line.removeprefix(marker).strip()]
-            elif current:
-                current.append(line)
-        if current:
-            blocks.append(current)
-        return [
-            order
-            for block in blocks
-            if (order := cls._parse_order_block(block, resident_name)) is not None
-        ]
+            if line.startswith(resident_marker):
+                cls._append_order(orders, row_lines)
+                row_lines = [line.removeprefix(resident_marker).strip()]
+            elif row_lines:
+                row_lines.append(line)
+
+        cls._append_order(orders, row_lines)
+        return orders
+
+    @classmethod
+    def _append_order(cls, orders: list[PccOrder], row_lines: list[str]) -> None:
+        if order := cls._parse_order_text(" ".join(row_lines)):
+            orders.append(order)
 
     @staticmethod
-    def _parse_order_block(block: list[str], resident_name: str) -> PccOrder | None:
-        text = " ".join(block)
-        match = _CATEGORY_RE.search(text)
+    def _parse_order_text(order_text: str) -> PccOrder | None:
+        match = _CATEGORY_RE.search(order_text)
         if match is None:
             return None
+
         category = " ".join(match.group("category").split())
-        summary = text[: match.start()].strip()
-        trailing = text[match.end() :].strip()
-        if category == "Dietary -" and trailing.endswith("Supplements"):
+        summary_parts = [order_text[: match.start()].strip()]
+        trailing_text = order_text[match.end() :].strip()
+        if category == "Dietary -" and trailing_text.endswith("Supplements"):
             category = "Dietary - Supplements"
-            trailing = trailing.removesuffix("Supplements").strip()
-        if trailing:
-            summary = f"{summary} {trailing}".strip()
+            trailing_text = trailing_text.removesuffix("Supplements").strip()
+        if trailing_text:
+            summary_parts.append(trailing_text)
+
         return PccOrder(
-            resident_name=resident_name,
-            order_summary=summary,
-            order_category=category,
-            order_status=match.group("status"),
-            revision_date=match.group("revision_date"),
-            supply_last_order_date=match.group("supply_last_order_date"),
+            summary=" ".join(part for part in summary_parts if part),
+            category=category,
+            status=match.group("status"),
+            revision_date=PccOrderReportExtractor._parse_date(
+                match.group("revision_date"),
+            ),
+            supply_last_order_date=PccOrderReportExtractor._parse_date(
+                match.group("supply_last_order_date"),
+            ),
             supply_reorder=match.group("supply_reorder"),
         )
 
@@ -159,165 +119,23 @@ class PccOrderReportExtractor(BaseExtractor):
     def _is_report_chrome(line: str) -> bool:
         return (
             line.startswith(
-                ("Facility #:", "Date:", "Time:", "Resident Order", "Page "),
+                (
+                    "Order Listing Report",
+                    "Facility #:",
+                    "Date:",
+                    "Time:",
+                    "Resident:",
+                    "Resident :",
+                    "Resident Order",
+                    "Page ",
+                ),
             )
             or line == "Name Summary Category Status Date Last Order Date Reorder"
         )
 
     @staticmethod
-    def _extract_medications(orders: list[PccOrder]) -> list[MedicationData]:
-        medications = []
-        for order in orders:
-            summary = order.order_summary
-            summary_lower = summary.casefold()
-            if order.order_category != "Pharmacy":
-                continue
-            if not (
-                "by mouth" in summary_lower
-                or "oral" in summary_lower
-                or "insulin" in summary_lower
-            ):
-                continue
-            medications.append(
-                MedicationData(
-                    name=PccOrderReportExtractor._extract_medication_name(summary),
-                    dose=PccOrderReportExtractor._extract_amount(summary),
-                    route=PccOrderReportExtractor._extract_route(summary),
-                    frequency=PccOrderReportExtractor._extract_frequency(summary),
-                    indication=PccOrderReportExtractor._extract_indication(summary),
-                ),
-            )
-        return medications
-
-    @staticmethod
-    def _extract_diet(orders: list[PccOrder]) -> str | None:
-        diet_order = PccOrderReportExtractor._first_order(orders, "Dietary - Diet")
-        if diet_order is None:
+    def _parse_date(value: str | None) -> date | None:
+        if value is None:
             return None
-        summary = diet_order.order_summary
-        diet_match = re.search(
-            r"^(?P<diet>.+?\bdiet\b)",
-            summary,
-            flags=re.IGNORECASE,
-        )
-        return diet_match.group("diet").strip() if diet_match else summary
-
-    @staticmethod
-    def _extract_diet_texture(orders: list[PccOrder]) -> str | None:
-        diet_order = PccOrderReportExtractor._first_order(orders, "Dietary - Diet")
-        if diet_order is None:
-            return None
-        match = _TEXTURE_RE.search(diet_order.order_summary)
-        return match.group("texture").strip() if match else None
-
-    @staticmethod
-    def _extract_liquid_consistency(orders: list[PccOrder]) -> str | None:
-        diet_order = PccOrderReportExtractor._first_order(orders, "Dietary - Diet")
-        if diet_order is None:
-            return None
-        match = _CONSISTENCY_RE.search(diet_order.order_summary)
-        return match.group("consistency").strip() if match else None
-
-    @staticmethod
-    def _extract_supplements(orders: list[PccOrder]) -> list[SupplementData]:
-        supplements = []
-        for order in orders:
-            if order.order_category != "Dietary - Supplements":
-                continue
-            supplements.append(
-                SupplementData(
-                    name=PccOrderReportExtractor._extract_supplement_name(
-                        order.order_summary,
-                    ),
-                    amount=PccOrderReportExtractor._extract_amount(order.order_summary),
-                    frequency=PccOrderReportExtractor._extract_frequency(
-                        order.order_summary,
-                    ),
-                ),
-            )
-        return supplements
-
-    @staticmethod
-    def _extract_tubefeed(orders: list[PccOrder]) -> TubeFeedingData | None:
-        enteral_order = PccOrderReportExtractor._first_order(orders, "Enteral Feed")
-        if enteral_order is None:
-            return None
-        summary = enteral_order.order_summary
-        flush_match = _FLUSH_RE.search(summary)
-        return TubeFeedingData(
-            formula=PccOrderReportExtractor._extract_tubefeed_formula(summary),
-            rate=(
-                rate_match.group("rate").strip()
-                if (rate_match := _RATE_RE.search(summary))
-                else None
-            ),
-            schedule=PccOrderReportExtractor._extract_frequency(summary),
-            flushes=flush_match.group("flush").strip() if flush_match else None,
-        )
-
-    @staticmethod
-    def _first_order(orders: list[PccOrder], category: str) -> PccOrder | None:
-        return next(
-            (order for order in orders if order.order_category == category),
-            None,
-        )
-
-    @staticmethod
-    def _extract_medication_name(summary: str) -> str:
-        before_instruction = re.split(
-            r"\b(?:Give|Inject|Apply|Insert|Administer|Take)\b",
-            summary,
-            maxsplit=1,
-            flags=re.IGNORECASE,
-        )[0]
-        return (
-            before_instruction.strip() or summary.split(" for ", maxsplit=1)[0].strip()
-        )
-
-    @staticmethod
-    def _extract_route(summary: str) -> str | None:
-        summary_lower = summary.casefold()
-        if "by mouth" in summary_lower or " oral " in f" {summary_lower} ":
-            return "by mouth"
-        if "insulin" in summary_lower:
-            return "insulin"
-        return None
-
-    @staticmethod
-    def _extract_indication(summary: str) -> str | None:
-        parts = re.split(r"\bfor\b", summary, maxsplit=1, flags=re.IGNORECASE)
-        return parts[1].strip() if len(parts) > 1 else None
-
-    @staticmethod
-    def _extract_amount(summary: str) -> str | None:
-        match = _AMOUNT_RE.search(summary)
-        return match.group("amount").strip() if match else None
-
-    @staticmethod
-    def _extract_frequency(summary: str) -> str | None:
-        for pattern, normalized in _FREQUENCY_PATTERNS:
-            match = pattern.search(summary)
-            if match:
-                return normalized or match.group(1)
-        return None
-
-    @staticmethod
-    def _extract_supplement_name(summary: str) -> str:
-        name = re.split(
-            r"\b(?:PO|by mouth|one time|two times|three times|four times|"
-            r"bid|qd|tid|qid)\b",
-            summary,
-            maxsplit=1,
-            flags=re.IGNORECASE,
-        )[0]
-        return name.strip() or summary
-
-    @staticmethod
-    def _extract_tubefeed_formula(summary: str) -> str | None:
-        formula = re.split(
-            r"\b(?:at|@|rate|flush|fwf|water flush|one time|two times|continuous)\b",
-            summary,
-            maxsplit=1,
-            flags=re.IGNORECASE,
-        )[0]
-        return formula.strip() or None
+        month, day, year = (int(part) for part in value.split("/"))
+        return date(year, month, day)

@@ -13,12 +13,11 @@ from ntk.controllers.assessment.search import (
     AssessmentSearchResponse,
 )
 from ntk.models.rag import RagSearchMatch
-from ntk.models.resident_data import ResidentContext
 from ntk.models.sql.assessment import (
     Assessment,
     AssessmentSource,
 )
-from ntk.models.sql.resident import ResidentSnapshot
+from ntk.models.sql.resident import ResidentContext
 from ntk.presentation.api.routers import assessment, resident
 
 _SEARCH_LIMIT = 4
@@ -34,7 +33,7 @@ class Upload:
 
 
 def _resident_data() -> ResidentContext:
-    return ResidentContext(resident_snapshot=ResidentSnapshot(age=70))
+    return ResidentContext(age=70)
 
 
 def _assessment(filename: str | None, content: str) -> Assessment:
@@ -194,15 +193,17 @@ def test_assessment_search_route_uses_controller(
     )
 
     class Controller:
-        def search(self, text: str, top_k: int) -> object:
+        async def search(self, text: str, top_k: int) -> object:
             assert text == "weight loss"
             assert top_k == _SEARCH_LIMIT
             return SimpleNamespace(result=AssessmentSearchResponse(matches=[match]))
 
     monkeypatch.setattr(assessment, "_ASSESSMENT_SEARCH_CONTROLLER", Controller())
-    assert assessment.search_assessments("weight loss", _SEARCH_LIMIT) == [match]
+    assert asyncio.run(
+        assessment.search_assessments("weight loss", _SEARCH_LIMIT),
+    ) == [match]
 
 
 def test_assessment_search_route_rejects_blank_text() -> None:
     with pytest.raises(HTTPException, match="must not be empty"):
-        assessment.search_assessments(" ", 5)
+        asyncio.run(assessment.search_assessments(" ", 5))

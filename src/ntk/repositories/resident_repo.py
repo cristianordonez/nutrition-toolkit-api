@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing
 
-from sqlmodel import select
+from sqlmodel import col, select
 
 from ntk.models.sql.resident import Resident, ResidentSnapshot
 
@@ -41,7 +41,7 @@ class ResidentRepo:
         statement = (
             select(ResidentSnapshot)
             .where(ResidentSnapshot.resident_id == resident_id)
-            .order_by(ResidentSnapshot.created_at.desc())
+            .order_by(col(ResidentSnapshot.created_at).desc())
             .limit(1)
         )
         return self.session.exec(statement).first()

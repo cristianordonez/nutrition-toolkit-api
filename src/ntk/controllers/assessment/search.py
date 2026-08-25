@@ -67,7 +67,9 @@ class AssessmentSearchController(BaseController):
         self.connection_factory = connection_factory
 
     async def search(
-        self, text: str, top_k: int = 5
+        self,
+        text: str,
+        top_k: int = 5,
     ) -> Output[AssessmentSearchResponse]:
         """Build search options and run the assessment search workflow."""
         return self.run(AssessmentSearchOptions(text=text, top_k=top_k))
@@ -82,7 +84,7 @@ class AssessmentSearchController(BaseController):
             msg = "Search text must not be empty"
             raise ValueError(msg)
         service = self.open_ai_service or OpenAIService()
-        embedding = service.get_embedding(query)
+        embedding = service.get_embeddings([query])[0]
         vector = "[" + ",".join(str(value) for value in embedding) + "]"
         connect = self.connection_factory or self._connect
         with connect() as connection, connection.cursor() as cursor:

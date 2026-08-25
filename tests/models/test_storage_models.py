@@ -65,7 +65,6 @@ def test_knowledge_chunk_and_embedding_link_to_knowledge() -> None:
         knowledge_id=knowledge.id,
         chunk_index=0,
         content="Clinical guidance",
-        metadata={"page": 2},
     )
     embedding = KnowledgeChunkEmbedding(
         knowledge_chunk_id=chunk.id,
@@ -76,7 +75,6 @@ def test_knowledge_chunk_and_embedding_link_to_knowledge() -> None:
 
     assert knowledge.chunks == [chunk]
     assert chunk.knowledge is knowledge
-    assert chunk.chunk_metadata == {"page": 2}
     assert embedding.knowledge_chunk_id == chunk.id
 
 

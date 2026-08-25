@@ -30,7 +30,8 @@ def get_session() -> Generator[Session, None, None]:
         yield session
 
 
-SQLModel.metadata.create_all(engine)
-session = next(get_session())
-permission_repo = PermissionRepo(session)
-permission_repo.seed_defaults()
+def initialize_database() -> None:
+    """Create registered tables and seed built-in permissions explicitly."""
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        PermissionRepo(session).seed_defaults()

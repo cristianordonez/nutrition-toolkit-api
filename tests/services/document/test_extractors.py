@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import typing
 
+import pymupdf
 import pytest
-from pypdf import PdfWriter
 
 from ntk.services.document import DocumentExtractorService
 from ntk.services.document.extractors.knowledge_extractor import DietManualExtractor
@@ -11,27 +11,20 @@ from ntk.services.document.extractors.knowledge_extractor import DietManualExtra
 if typing.TYPE_CHECKING:
     import pathlib
 
-    from pypdf.generic import Destination
 
-
-def test_knowledge_extractor_exposes_cached_pdf_reader(
+def test_knowledge_extractor_reads_pdf_with_pymupdf(
     tmp_path: pathlib.Path,
 ) -> None:
     path = tmp_path / "manual.pdf"
-    writer = PdfWriter()
-    writer.add_blank_page(width=72, height=72)
-    writer.add_outline_item("Chapter 1", 0)
-    with path.open("wb") as stream:
-        writer.write(stream)
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "Diet Manual clinical guidance")
+        document.set_toc([[1, "Chapter 1", 1]])
+        document.save(path)
 
     extractor = DietManualExtractor(path)
-    reader = extractor.reader
 
-    assert len(reader.pages) == 1
-    assert len(reader.outline) == 1
-    destination = typing.cast("Destination", reader.outline[0])
-    assert reader.get_destination_page_number(destination) == 0
-    assert extractor.reader is reader
+    assert extractor._document_text == "Diet Manual clinical guidance"  # noqa: SLF001
 
 
 @pytest.mark.parametrize("filename", ["missing.txt", "missing.pdf"])

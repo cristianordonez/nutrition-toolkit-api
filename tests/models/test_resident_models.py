@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import JSON
 from sqlalchemy.types import TypeDecorator
@@ -13,7 +13,7 @@ from ntk.models.sql.resident import (
     ResidentSnapshotAssessment,
 )
 
-_CURRENT_WEIGHT = 120.5
+_WEIGHT_LB = 130
 
 
 def test_resident_snapshot_models_use_expected_tables_and_foreign_keys() -> None:
@@ -25,17 +25,16 @@ def test_resident_snapshot_models_use_expected_tables_and_foreign_keys() -> None
     assert snapshot_table.name == "resident_snapshot"
     assert assessment_table.name == "resident_snapshot_assessment"
     assert {
-        foreign_key.target_fullname
-        for foreign_key in snapshot_table.c.resident_id.foreign_keys
+        key.target_fullname for key in snapshot_table.c.resident_id.foreign_keys
     } == {"resident.id"}
     assert {
-        foreign_key.target_fullname
-        for foreign_key in assessment_table.c.resident_snapshot_id.foreign_keys
+        key.target_fullname
+        for key in assessment_table.c.resident_snapshot_id.foreign_keys
     } == {"resident_snapshot.id"}
 
 
 def test_resident_snapshot_defaults_support_incomplete_extracted_data() -> None:
-    resident = Resident(facility_id=uuid4())
+    resident = Resident(facility_id="EN140175")
     snapshot = ResidentSnapshot(resident_id=resident.id)
     assessment = ResidentSnapshotAssessment(
         resident_snapshot_id=snapshot.id,
@@ -45,54 +44,34 @@ def test_resident_snapshot_defaults_support_incomplete_extracted_data() -> None:
 
     assert isinstance(resident.id, UUID)
     assert resident.created_at.tzinfo is UTC
-    assert snapshot.payload == {}
     assert snapshot.weight_history == []
-    assert snapshot.medications == []
-    assert snapshot.latest_labs == []
-    assert snapshot.past_medical_history == []
-    assert snapshot.supplements == []
-    assert snapshot.allergies == []
+    assert snapshot.labs == []
     assert snapshot.diagnoses == []
+    assert snapshot.orders == []
+    assert snapshot.allergies == []
     assert snapshot.wounds == []
     assert snapshot.edema.present is None
-    assert snapshot.edema.locations == []
-    assert snapshot.notes == []
-    assert snapshot.diet_restrictions == []
+    assert snapshot.dialysis.type is None
     assert snapshot.food_preferences == []
-    assert snapshot.comparison == {}
-    assert snapshot.current_weight is None
+    assert snapshot.diet_restrictions == []
     assert assessment.resident_snapshot_id == snapshot.id
     assert assessment.created_at.tzinfo is UTC
 
 
-def test_resident_snapshot_preserves_structured_clinical_fields() -> None:
+def test_resident_snapshot_preserves_current_structured_fields() -> None:
     snapshot = ResidentSnapshot.model_validate(
         {
-            "resident_id": uuid4(),
-            "payload": {"source": "pcc"},
-            "current_weight": _CURRENT_WEIGHT,
-            "weight_date": date(2026, 8, 21),
-            "bmi": 22.0,
-            "weight_history": [{"date": "2026-07-21", "weight_lb": 130}],
-            "medications": [{"name": "Metformin", "frequency": "BID"}],
-            "diet": "CCD",
-            "diet_texture": "mechanical soft",
-            "liquid_consistency": "nectar thick",
-            "diet_restrictions": ["concentrated sweets"],
-            "food_preferences": ["yogurt"],
-            "tubefeed_order": {
-                "formula": "Glucerna 1.5",
-                "rate": "75 mL/hr",
-            },
-            "latest_labs": [{"name": "A1c", "value": "7.2"}],
-            "latest_labs_date": date(2026, 8, 21),
+            "weight_history": [
+                {"date": "2026-07-21", "weight_lb": _WEIGHT_LB},
+            ],
+            "labs": [{"name": "Albumin", "result": "3.0", "unit": "g/dL"}],
+            "admission_date": date(2025, 1, 1),
             "age": 82,
             "gender": "female",
             "height": 62.0,
-            "past_medical_history": ["T2DM"],
-            "supplements": [{"name": "Glucerna", "frequency": "QD"}],
+            "diagnoses": ["T2DM"],
+            "orders": [{"summary": "Renal diet"}],
             "allergies": ["shellfish"],
-            "diagnoses": [{"name": "T2DM"}],
             "wounds": [
                 {
                     "type": "pressure injury",
@@ -100,41 +79,34 @@ def test_resident_snapshot_preserves_structured_clinical_fields() -> None:
                     "stage": "3",
                 },
             ],
+            "diet": "CCD",
+            "meal_intake": "75%",
+            "food_preferences": ["yogurt"],
+            "diet_restrictions": ["concentrated sweets"],
             "edema": {"present": True, "severity": "1+"},
-            "notes": [{"date": "2026-08-21", "note": "Intake improved."}],
-            "dialysis": True,
-            "dialysis_dry_weight": 118.0,
-            "dialysis_target_weight": 117.0,
-            "admission_date": date(2025, 1, 1),
+            "dialysis": {"type": "HD", "dry_weight": 118.0},
             "readmission_date": date(2026, 8, 1),
-            "comparison": {"weight": "130 lb -> 120.5 lb; -7.3%"},
         },
     )
 
-    assert snapshot.current_weight == _CURRENT_WEIGHT
-    assert snapshot.latest_labs_date == date(2026, 8, 21)
-    assert snapshot.medications[0].name == "Metformin"
-    assert snapshot.supplements[0].frequency == "QD"
-    assert snapshot.tubefeed_order is not None
-    assert snapshot.tubefeed_order.formula == "Glucerna 1.5"
-    assert snapshot.notes[0].note == "Intake improved."
-    assert snapshot.comparison["weight"].endswith("-7.3%")
+    assert snapshot.weight_history[0].weight_lb == _WEIGHT_LB
+    assert snapshot.labs[0].name == "Albumin"
+    assert snapshot.orders[0].summary == "Renal diet"
+    assert snapshot.wounds[0].stage == "3"
+    assert snapshot.edema.present is True
+    assert snapshot.dialysis.type == "HD"
+    assert snapshot.dialysis.dry_weight == 118.0  # noqa: PLR2004
     for field_name in (
-        "payload",
-        "medications",
         "weight_history",
-        "diet_restrictions",
-        "food_preferences",
-        "tubefeed_order",
-        "latest_labs",
-        "past_medical_history",
-        "supplements",
-        "allergies",
+        "labs",
         "diagnoses",
+        "orders",
+        "allergies",
         "wounds",
+        "food_preferences",
+        "diet_restrictions",
         "edema",
-        "notes",
-        "comparison",
+        "dialysis",
     ):
         column_type = ResidentSnapshot.__table__.c[field_name].type  # ty: ignore[unresolved-attribute]
         assert isinstance(column_type, (JSON, TypeDecorator))
@@ -144,14 +116,18 @@ def test_resident_snapshot_restores_typed_json_after_database_load() -> None:
     engine = create_engine("sqlite://")
     Resident.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     ResidentSnapshot.__table__.create(engine)  # ty: ignore[unresolved-attribute]
-    resident = Resident(facility_id=uuid4())
+    resident = Resident(facility_id="EN140175")
     snapshot = ResidentSnapshot.model_validate(
         {
             "resident_id": resident.id,
-            "medications": [{"name": "Metformin"}],
-            "tubefeed_order": {"formula": "Glucerna 1.5"},
+            "weight_history": [
+                {"date": "2026-07-21", "weight_lb": _WEIGHT_LB},
+            ],
+            "labs": [{"name": "Albumin", "result": "3.0"}],
+            "orders": [{"summary": "Renal diet"}],
+            "wounds": [{"type": "Pressure Injury", "location": "Sacrum"}],
             "edema": {"present": True},
-            "notes": [{"note": "Meal intake improved."}],
+            "dialysis": {"type": "HD"},
         },
     )
 
@@ -161,8 +137,9 @@ def test_resident_snapshot_restores_typed_json_after_database_load() -> None:
         session.commit()
         session.refresh(snapshot)
 
-    assert snapshot.medications[0].name == "Metformin"
-    assert snapshot.tubefeed_order is not None
-    assert snapshot.tubefeed_order.formula == "Glucerna 1.5"
+    assert snapshot.weight_history[0].weight_lb == _WEIGHT_LB
+    assert snapshot.labs[0].name == "Albumin"
+    assert snapshot.orders[0].summary == "Renal diet"
+    assert snapshot.wounds[0].location == "Sacrum"
     assert snapshot.edema.present is True
-    assert snapshot.notes[0].note == "Meal intake improved."
+    assert snapshot.dialysis.type == "HD"

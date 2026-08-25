@@ -85,7 +85,7 @@ class KnowledgeSearchController(BaseController):
             msg = "Search text must not be empty"
             raise ValueError(msg)
         service = self.open_ai_service or OpenAIService()
-        embedding = service.get_embedding(query)
+        embedding = service.get_embeddings([query])[0]
         vector = "[" + ",".join(str(value) for value in embedding) + "]"
         connect = self.connection_factory or self._connect
         with connect() as connection, connection.cursor() as cursor:

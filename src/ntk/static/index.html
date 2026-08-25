@@ -42,7 +42,7 @@
     <body>
         <main>
             <h1>Nutrition Toolkit</h1>
-            <p>Test knowledge retrieval and nutrition assessment workflows.</p>
+            <p>Test knowledge retrieval and note generation workflows.</p>
 
             <h2>API access</h2>
             <div class="fields">
@@ -124,8 +124,8 @@
             </section>
 
             <section class="search-section">
-                <h2>Create resident assessment</h2>
-                <p>Upload one or more resident PDF or CSV files. Their contents will be combined with retrieved clinical knowledge and prior assessment examples.</p>
+                <h2>Generate</h2>
+                <p>Upload one or more resident PDF or CSV files. Their contents will be combined with retrieved clinical knowledge and prior note examples.</p>
                 <form id="assessment-form">
                     <div class="fields">
                         <div class="full-width">
@@ -138,40 +138,40 @@
                             <input id="assessment-query" name="query" type="text" placeholder="e.g. wound healing and unintended weight loss" />
                         </div>
                     </div>
-                    <button id="assessment-submit" type="submit">Create assessment</button>
+                    <button id="assessment-submit" type="submit">Generate</button>
                 </form>
                 <div id="assessment-status" class="status" role="status"></div>
                 <div id="assessment-result" hidden>
-                    <label for="assessment-output">Completed nutrition assessment</label>
+                    <label for="assessment-output">Completed note</label>
                     <textarea id="assessment-output" readonly></textarea>
                 </div>
             </section>
 
             <section class="search-section">
-                <h2>Ingest completed assessments</h2>
-                <p>Store completed assessment PDFs or text files for similarity search.</p>
+                <h2>Ingest completed notes</h2>
+                <p>Store completed PDF or text notes for similarity search.</p>
                 <form id="assessment-ingest-form">
                     <div class="fields">
                         <div class="full-width">
-                            <label for="assessment-ingest-files">Assessment files</label>
+                            <label for="assessment-ingest-files">Completed note files</label>
                             <input id="assessment-ingest-files" name="files" type="file" accept="application/pdf,text/plain,.pdf,.txt" multiple required />
                         </div>
                         <div class="full-width">
-                            <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing assessment</label>
+                            <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing note</label>
                         </div>
                         <div class="full-width">
                             <label for="assessment-created-by">Created by</label>
                             <input id="assessment-created-by" name="created_by" type="text" value="self" required />
                         </div>
                     </div>
-                    <button id="assessment-ingest-submit" type="submit">Ingest assessments</button>
+                    <button id="assessment-ingest-submit" type="submit">Ingest notes</button>
                 </form>
                 <div id="assessment-ingest-status" class="status" role="status"></div>
             </section>
 
             <section class="search-section">
-                <h2>Search assessments</h2>
-                <p>Find previously ingested assessments similar to a resident or clinical scenario.</p>
+                <h2>Search notes</h2>
+                <p>Find previously ingested notes similar to a resident or clinical scenario.</p>
                 <form id="assessment-search-form">
                     <div class="search-fields">
                         <div>
@@ -361,7 +361,7 @@
                 event.preventDefault();
                 assessmentSubmit.disabled = true;
                 assessmentResult.hidden = true;
-                assessmentStatus.textContent = "Extracting resident data and creating assessment…";
+                assessmentStatus.textContent = "Extracting resident data and generating note…";
                 assessmentStatus.className = "status success";
 
                 try {
@@ -381,10 +381,10 @@
                     }
                     assessmentOutput.value = body.content;
                     assessmentResult.hidden = false;
-                    assessmentStatus.textContent = `Created assessment from ${fileCount} resident file${fileCount === 1 ? "" : "s"}.`;
+                    assessmentStatus.textContent = `Generated note from ${fileCount} resident file${fileCount === 1 ? "" : "s"}.`;
                     assessmentStatus.className = "status success";
                 } catch (error) {
-                    assessmentStatus.textContent = `Assessment failed: ${error.message}`;
+                    assessmentStatus.textContent = `Generate failed: ${error.message}`;
                     assessmentStatus.className = "status error";
                 } finally {
                     assessmentSubmit.disabled = false;
@@ -394,7 +394,7 @@
             assessmentIngestForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
                 assessmentIngestSubmit.disabled = true;
-                assessmentIngestStatus.textContent = "Ingesting assessments…";
+                assessmentIngestStatus.textContent = "Ingesting notes…";
                 assessmentIngestStatus.className = "status success";
 
                 try {
@@ -411,12 +411,12 @@
                     const assessments = Array.isArray(result?.documents) ? result.documents : [];
                     const assessmentCount = Number.isInteger(result?.chunk_count) ? result.chunk_count : assessments.length;
                     const fileCount = assessmentIngestFiles.files.length;
-                    const message = `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"} ingested from ${fileCount} file${fileCount === 1 ? "" : "s"}.`;
+                    const message = `${assessmentCount} note${assessmentCount === 1 ? "" : "s"} ingested from ${fileCount} file${fileCount === 1 ? "" : "s"}.`;
                     assessmentIngestStatus.textContent = message;
                     assessmentIngestStatus.className = "status success";
                     alert(message);
                 } catch (error) {
-                    assessmentIngestStatus.textContent = `Assessment ingestion failed: ${error.message}`;
+                    assessmentIngestStatus.textContent = `Note ingestion failed: ${error.message}`;
                     assessmentIngestStatus.className = "status error";
                 } finally {
                     assessmentIngestSubmit.disabled = false;
@@ -427,7 +427,7 @@
                 event.preventDefault();
                 assessmentSearchSubmit.disabled = true;
                 assessmentSearchResults.replaceChildren();
-                assessmentSearchStatus.textContent = "Searching assessments…";
+                assessmentSearchStatus.textContent = "Searching notes…";
                 assessmentSearchStatus.className = "status success";
 
                 try {
@@ -440,11 +440,11 @@
                     }
                     renderSearchResults(assessmentSearchResults, body);
                     assessmentSearchStatus.textContent = body.length
-                        ? `Found ${body.length} matching assessment chunk${body.length === 1 ? "" : "s"}.`
-                        : "No matching assessment chunks were found.";
+                        ? `Found ${body.length} matching note chunk${body.length === 1 ? "" : "s"}.`
+                        : "No matching note chunks were found.";
                     assessmentSearchStatus.className = "status success";
                 } catch (error) {
-                    assessmentSearchStatus.textContent = `Assessment search failed: ${error.message}`;
+                    assessmentSearchStatus.textContent = `Note search failed: ${error.message}`;
                     assessmentSearchStatus.className = "status error";
                 } finally {
                     assessmentSearchSubmit.disabled = false;

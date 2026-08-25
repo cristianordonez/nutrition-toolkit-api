@@ -66,7 +66,9 @@ class KnowledgeRepo:
         self.session.add_all(chunk_models)
         self.session.flush()
         embedding_models = self.create_chunk_embedding(
-            chunk_models, embeddings, model_name
+            chunk_models,
+            embeddings,
+            model_name,
         )
         self.session.add_all(embedding_models)
         self.session.commit()

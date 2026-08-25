@@ -49,7 +49,7 @@ def test_index_includes_assessment_workflows() -> None:
     assert 'id="assessment-ingest-form"' in index
     assert 'id="assessment-ingest-files"' in index
     assert "assessmentIngestFiles.files.length" in index
-    assert "assessment${assessmentCount" in index
+    assert "note${assessmentCount" in index
     assert "ingested from ${fileCount} file" in index
     assert "alert(message)" in index
     assert 'name="created_by"' in index

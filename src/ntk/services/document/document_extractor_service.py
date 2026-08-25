@@ -7,21 +7,22 @@ from hashlib import sha256
 
 from ntk.models.knowledge import KnowledgeType
 from ntk.models.sql.assessment import Assessment, AssessmentSource
+from ntk.services.open_ai_service import OpenAIService
 
 from .extractors.registry import EXTRACTOR_REGISTRY
 
 if typing.TYPE_CHECKING:
     import pathlib
 
-    from ntk.models.resident_data import ProgressNote
     from ntk.models.sql.knowledge import Knowledge
+    from ntk.models.sql.resident import ProgressNote
     from ntk.repositories.assessment_repo import AssessmentRepo
     from ntk.repositories.knowledge_repo import KnowledgeRepo
-    from ntk.services.open_ai_service import OpenAIService
 
     from .extractors.base import BaseExtractor
     from .extractors.knowledge_extractor import KnowledgeExtractor
     from .extractors.pcc_progress_notes import PccProgressNotesExtractor
+    from .extractors.wound_report import WoundReportExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,6 @@ _EXTRACTOR_MODULES = (
         "ntk.services.document.extractors.knowledge_extractor",
         "DietManualExtractor",
     ),
-    ("ntk.services.document.extractors.misc_extractor", "MiscExtractor"),
 )
 
 _KNOWLEDGE_EXTRACTORS = {
@@ -86,20 +86,25 @@ class DocumentExtractorService:
         self.assessment_repository = assessment_repository
         self.knowledge_repository = knowledge_repository
         self.open_ai_service = open_ai_service
-        self._extractor_cache: dict[pathlib.Path, BaseExtractor] = {}
+        self.extractors = load_extractors()
+        self._extractor_cache: dict[pathlib.Path, BaseExtractor | None] = {}
 
-    @classmethod
-    def find_extractor(cls, path: pathlib.Path) -> BaseExtractor:
+    def _find_extractor(self, path: pathlib.Path) -> BaseExtractor | None:
         """Return the first extractor that recognizes the document.
 
-        ``MiscExtractor`` is the fallback when no specialized format matches.
+        Returns None when no extractor found for current document.
         """
-        cls._validate_path(path)
-        extractors = tuple(extractor_type(path) for extractor_type in load_extractors())
+        self._validate_path(path)
+        extractors = tuple(extractor_type(path) for extractor_type in self.extractors)
         for extractor in extractors:
             if extractor.is_expected_format():
                 return extractor
-        return extractors[-1]
+        return None
+
+    @classmethod
+    def find_extractor(cls, path: pathlib.Path) -> BaseExtractor | None:
+        """Return the first registered extractor that recognizes the document."""
+        return cls().get_extractor(path)
 
     @classmethod
     def find_knowledge_extractor(
@@ -110,18 +115,17 @@ class DocumentExtractorService:
         """Return the extractor registered for the requested knowledge type."""
         cls._validate_path(path)
         extractor_name = _KNOWLEDGE_EXTRACTORS[knowledge_type]
-        load_extractors()
         extractor = EXTRACTOR_REGISTRY[extractor_name](path)
         if not extractor.is_expected_format():
             msg = f"Document is not a {knowledge_type.value}: {path.name}"
             raise TypeError(msg)
         return typing.cast("KnowledgeExtractor", extractor)
 
-    def get_extractor(self, path: pathlib.Path) -> BaseExtractor:
+    def get_extractor(self, path: pathlib.Path) -> BaseExtractor | None:
         """Return and cache the recognized extractor for one source path."""
         resolved_path = path.resolve()
         if resolved_path not in self._extractor_cache:
-            self._extractor_cache[resolved_path] = self.find_extractor(resolved_path)
+            self._extractor_cache[resolved_path] = self._find_extractor(resolved_path)
         return self._extractor_cache[resolved_path]
 
     def get_extractor_name(self, path: pathlib.Path) -> str:
@@ -133,15 +137,22 @@ class DocumentExtractorService:
         path: pathlib.Path,
         *,
         expected_extractor: str | None = None,
+        resident_facility_id: str | None = None,
     ) -> object:
         """Extract file data with its recognized extractor."""
         extractor = self.get_extractor(path)
+        if extractor is None:
+            msg = f"No extractor found for {path}"
+            raise TypeError(msg)
         extractor_name = type(extractor).__name__
         if expected_extractor is not None and extractor_name != expected_extractor:
             msg = (
                 f"Expected {expected_extractor} for {path.name}, found {extractor_name}"
             )
             raise TypeError(msg)
+        if extractor_name == "WoundReportExtractor":
+            wound_extractor = typing.cast("WoundReportExtractor", extractor)
+            return wound_extractor.extract(facility_id=resident_facility_id)
         return extractor.extract()
 
     def ingest_assessment(
@@ -150,6 +161,7 @@ class DocumentExtractorService:
         *,
         assessment_source: AssessmentSource = AssessmentSource.UPLOADED,
         created_by: str = "self",
+        overwrite: bool = False,
     ) -> list[Assessment]:
         """Chunk, embed, and persist assessments from PCC progress notes."""
         notes = self.get_progress_notes_from_report(path)
@@ -164,22 +176,15 @@ class DocumentExtractorService:
         ]
         open_ai_service = self._open_ai_service()
         repo = self._assessment_repository()
-        unique_assessments = []
-        unique_embeddings = []
-        for assessment in assessments:
-            if repo.is_duplicate_assessment(assessment):
-                logger.info(
-                    "Skipping duplicate assessment: %s",
-                    assessment.content_hash,
-                )
-                continue
-            unique_assessments.append(assessment)
-            embeddings = open_ai_service.get_embedding(assessment.content)
-            unique_embeddings.append(embeddings)
-        return repo.ingest_many(
-            unique_assessments,
-            unique_embeddings,
+        embeddings = [
+            open_ai_service.get_embedding(assessment.content)
+            for assessment in assessments
+        ]
+        return repo.ingest(
+            assessments,
+            embeddings,
             open_ai_service.embedding_model,
+            overwrite=overwrite,
         )
 
     def get_progress_notes_from_report(self, path: pathlib.Path) -> list[ProgressNote]:
@@ -190,7 +195,7 @@ class DocumentExtractorService:
             msg = f"Document is not a PCC progress notes report: {path.name}"
             raise TypeError(msg)
         progress_extractor = typing.cast("PccProgressNotesExtractor", extractor)
-        return progress_extractor.create_chunks()
+        return progress_extractor.extract().progress_notes
 
     @staticmethod
     def create_assessment_from_progress_note(
@@ -214,7 +219,7 @@ class DocumentExtractorService:
         return Assessment(
             content=content,
             source=assessment_source,
-            source_filename=note.source.source_name,
+            source_filename=note.source.source,
             content_hash=sha256(normalized_content.encode()).hexdigest(),
             assessment_index=assessment_index,
             assessment_date=note.note_date.date() if note.note_date else None,
@@ -230,15 +235,18 @@ class DocumentExtractorService:
     ) -> Knowledge:
         """Chunk, embed, and persist one knowledge source."""
         knowledge_extractor = self.find_knowledge_extractor(path, knowledge_type)
+        chunks = knowledge_extractor.extract()
+        if chunks is None:
+            msg = "Knowledge chunk extraction is not implemented"
+            raise NotImplementedError(msg)
         repository = self._knowledge_repository()
-        knowledge = repository.create_knowledge(path, knowledge_type)
+        knowledge = knowledge_extractor.create_knowledge()
         existing = repository.find_existing_knowledge(
             knowledge_type,
             knowledge.file_hash,
         )
         if existing is not None and not overwrite:
             return existing
-        chunks = knowledge_extractor.create_chunks()
         open_ai_service = self._open_ai_service()
         embeddings = [open_ai_service.get_embedding(chunk) for chunk in chunks]
         return repository.ingest(
@@ -269,7 +277,5 @@ class DocumentExtractorService:
 
     def _open_ai_service(self) -> OpenAIService:
         if self.open_ai_service is None:
-            from ntk.services.open_ai_service import OpenAIService  # noqa: PLC0415
-
             self.open_ai_service = OpenAIService()
         return self.open_ai_service

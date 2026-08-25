@@ -87,11 +87,16 @@ async def ingest_assessments(
         list[UploadFile],
         File(description="One or more completed assessment PDF or text files"),
     ],
+    *,
+    overwrite: typing.Annotated[bool, Form()] = False,
+    created_by: typing.Annotated[str, Form()] = "self",
 ) -> AssessmentIngestResponse:
     """Ingest completed assessments for retrieval."""
     try:
         output = await _ASSESSMENT_INGEST_CONTROLLER.run_uploads(
             files,
+            overwrite=overwrite,
+            created_by=created_by,
         )
     except UploadValidationError as err:
         raise HTTPException(

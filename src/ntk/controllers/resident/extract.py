@@ -17,7 +17,7 @@ from ntk.controllers.uploads import (
 from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
-    from ntk.models.resident_data import ResidentContext
+    from ntk.models.sql.resident import ResidentContext
 
 
 class ResidentExtractOptions(BaseModel):
@@ -66,5 +66,5 @@ class ResidentExtractController(BaseController):
     async def run(self, options: ResidentExtractOptions) -> Output[ResidentContext]:
         """Run resident data extraction."""
         agent = self.agent or ResidentDataAgent()
-        resident_data = await agent.extract(options.files, options.context)
+        resident_data = await agent.run(options.files, options.context)
         return Output(result=resident_data, controller=self.name, exit_code=0)

@@ -110,14 +110,7 @@ def test_knowledge_repo_stores_duplicate_chunks_under_separate_sources() -> None
             )
             repository.ingest(
                 knowledge_source,
-                [
-                    KnowledgeChunk(
-                        knowledge_id=knowledge_source.id,
-                        chunk_index=0,
-                        content="Shared educational heading",
-                        metadata={},
-                    ),
-                ],
+                ["Shared educational heading"],
                 [[0.1]],
                 "embedding-model",
             )
