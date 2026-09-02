@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import logging
-import typing
 
 from sqlmodel import Session, delete, select
 
 from ntk.defaults import DEFAULT_PERMISSIONS
 from ntk.models.sql.api_key import APIKeyPermission, Permission
-
-if typing.TYPE_CHECKING:
-    from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +72,13 @@ class PermissionRepo:
 
     def remove_permission_from_api_key(
         self,
-        api_key_id: UUID,
-        permission_id: UUID,
+        api_key_id: int,
+        permission_id: int,
     ) -> None:
         """Remove permission from database.
 
-        :param api_key_id: UUID for API key from which to remove permission
-        :param permission_id: UUID for permission to remove
+        :param api_key_id: ID for API key from which to remove permission
+        :param permission_id: ID for permission to remove
         """
         statement = delete(APIKeyPermission).where(
             APIKeyPermission.api_key_id == api_key_id,  # ty: ignore[invalid-argument-type]
@@ -93,13 +89,13 @@ class PermissionRepo:
 
     def add_permission_to_api_key(
         self,
-        api_key_id: UUID,
-        permission_id: UUID,
+        api_key_id: int,
+        permission_id: int,
     ) -> None:
         """Add permission to database.
 
-        :param api_key_id: UUID for API key to which to add permission
-        :param permission_id: UUID for permission to add
+        :param api_key_id: ID for API key to which to add permission
+        :param permission_id: ID for permission to add
         """
         statement = select(APIKeyPermission).where(
             APIKeyPermission.api_key_id == api_key_id,

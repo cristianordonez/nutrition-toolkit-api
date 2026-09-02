@@ -8,6 +8,7 @@ from secrets import token_urlsafe
 
 from ntk.models.sql.api_key import APIKey
 from ntk.repositories.permission_repo import PermissionRepo
+from ntk.utils.misc import require_id
 
 if typing.TYPE_CHECKING:
     from ntk.repositories.api_key_repo import APIKeyRepo
@@ -87,8 +88,8 @@ class APIKeyService:
             api_key.name,
         )
         self.permission_repo.remove_permission_from_api_key(
-            api_key.id,
-            permission_model.id,
+            require_id(api_key.id),
+            require_id(permission_model.id),
         )
 
     def grant_permission(self, api_key: APIKey, permission: str) -> None:
@@ -107,8 +108,8 @@ class APIKeyService:
             api_key.name,
         )
         self.permission_repo.add_permission_to_api_key(
-            api_key.id,
-            permission_model.id,
+            require_id(api_key.id),
+            require_id(permission_model.id),
         )
 
     def create(

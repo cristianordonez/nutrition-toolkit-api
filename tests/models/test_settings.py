@@ -5,6 +5,7 @@ import typing
 from pydantic import PostgresDsn
 
 from ntk.models.settings import Settings
+from ntk.utils.parallel import PoolMode
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
@@ -16,6 +17,22 @@ DEFAULT_DATABASE_URL = (
     "postgresql+psycopg://admin:pw@test.database.us-east-2:5432/nutrition-toolkit"
 )
 TEST_REDIS_DSN = "redis://localhost:6379/0"
+
+
+def test_document_ingestion_pool_defaults() -> None:
+    settings = Settings()
+
+    assert settings.document_ingestion_pool_mode is PoolMode.THREAD
+    assert settings.document_ingestion_workers == 3  # noqa: PLR2004
+    assert settings.progress_note_extraction_concurrency == 8  # noqa: PLR2004
+
+
+def test_progress_note_extraction_concurrency_is_configurable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NTK_PROGRESS_NOTE_EXTRACTION_CONCURRENCY", "5")
+
+    assert Settings().progress_note_extraction_concurrency == 5  # noqa: PLR2004
 
 
 def test_settings_loads_environment_variables(

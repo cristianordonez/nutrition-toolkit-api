@@ -35,6 +35,10 @@
             .search-result p { color: #344054; margin: 0 0 8px; white-space: pre-wrap; }
             .similarity { color: #66758b; font-size: .8rem; }
             textarea { border: 1px solid #b9c4d5; border-radius: 7px; box-sizing: border-box; font: inherit; min-height: 240px; padding: 12px; resize: vertical; width: 100%; }
+            .drop-zone { align-items: center; border: 2px dashed #98a6ba; border-radius: 10px; color: #526074; cursor: pointer; display: flex; flex-direction: column; gap: 6px; justify-content: center; min-height: 120px; padding: 20px; text-align: center; transition: border-color .15s, background .15s; }
+            .drop-zone:hover, .drop-zone:focus, .drop-zone.drag-over { background: #eef4ff; border-color: #155eef; outline: none; }
+            .drop-zone strong { color: #172033; }
+            .visually-hidden { height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px; clip: rect(0 0 0 0); white-space: nowrap; }
             @media (max-width: 540px) { .fields { grid-template-columns: 1fr; } }
             @media (max-width: 540px) { .search-fields { grid-template-columns: 1fr; } }
         </style>
@@ -72,7 +76,7 @@
                         </div>
                         <div class="full-width">
                             <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing document</label>
-                            <span class="hint">Creates new OpenAI embeddings and replaces stored chunks.</span>
+                            <span class="hint">Creates new local embeddings and replaces stored chunks.</span>
                         </div>
                     </div>
                     <button id="submit" type="submit">Ingest PDFs</button>
@@ -101,25 +105,25 @@
             </section>
 
             <section class="search-section">
-                <h2>Extract resident data</h2>
-                <p>Combine resident PDF or CSV files into one structured resident snapshot.</p>
-                <form id="resident-extract-form">
+                <h2>Ingest resident documents</h2>
+                <p>Drop one or more resident PDF, CSV, or text files to extract and persist their facts.</p>
+                <form id="document-ingest-form">
                     <div class="fields">
                         <div class="full-width">
-                            <label for="resident-extract-files">Resident PDF or CSV files</label>
-                            <input id="resident-extract-files" name="files" type="file" accept="application/pdf,text/csv,.pdf,.csv" multiple required />
-                        </div>
-                        <div class="full-width">
-                            <label for="resident-extract-context">Optional extraction context</label>
-                            <input id="resident-extract-context" name="context" type="text" placeholder="e.g. prioritize current dialysis orders" />
+                            <label id="document-drop-zone" class="drop-zone" for="document-ingest-files" tabindex="0">
+                                <strong>Drop resident documents here</strong>
+                                <span>or click to browse</span>
+                                <span id="document-file-summary" class="hint">PDF, CSV, and text files are supported.</span>
+                            </label>
+                            <input id="document-ingest-files" class="visually-hidden" name="files" type="file" accept="application/pdf,text/csv,text/plain,.pdf,.csv,.txt" multiple required />
                         </div>
                     </div>
-                    <button id="resident-extract-submit" type="submit">Extract resident data</button>
+                    <button id="document-ingest-submit" type="submit">Ingest documents</button>
                 </form>
-                <div id="resident-extract-status" class="status" role="status"></div>
-                <div id="resident-extract-result" hidden>
-                    <label for="resident-extract-output">Structured resident snapshot</label>
-                    <textarea id="resident-extract-output" readonly></textarea>
+                <div id="document-ingest-status" class="status" role="status"></div>
+                <div id="document-ingest-result" hidden>
+                    <label for="document-ingest-output">Ingestion result</label>
+                    <textarea id="document-ingest-output" readonly></textarea>
                 </div>
             </section>
 
@@ -148,13 +152,13 @@
             </section>
 
             <section class="search-section">
-                <h2>Ingest completed notes</h2>
-                <p>Store completed PDF or text notes for similarity search.</p>
+                <h2>Ingest a completed assessment</h2>
+                <p>Chunk, embed, and store a completed assessment PDF for similarity search.</p>
                 <form id="assessment-ingest-form">
                     <div class="fields">
                         <div class="full-width">
-                            <label for="assessment-ingest-files">Completed note files</label>
-                            <input id="assessment-ingest-files" name="files" type="file" accept="application/pdf,text/plain,.pdf,.txt" multiple required />
+                            <label for="assessment-ingest-files">Completed assessment file</label>
+                            <input id="assessment-ingest-files" name="file" type="file" accept="application/pdf,.pdf" required />
                         </div>
                         <div class="full-width">
                             <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing note</label>
@@ -164,7 +168,7 @@
                             <input id="assessment-created-by" name="created_by" type="text" value="self" required />
                         </div>
                     </div>
-                    <button id="assessment-ingest-submit" type="submit">Ingest notes</button>
+                    <button id="assessment-ingest-submit" type="submit">Ingest assessment</button>
                 </form>
                 <div id="assessment-ingest-status" class="status" role="status"></div>
             </section>
@@ -199,12 +203,14 @@
             const searchSubmit = document.getElementById("search-submit");
             const searchStatus = document.getElementById("search-status");
             const searchResults = document.getElementById("search-results");
-            const residentExtractForm = document.getElementById("resident-extract-form");
-            const residentExtractFiles = document.getElementById("resident-extract-files");
-            const residentExtractSubmit = document.getElementById("resident-extract-submit");
-            const residentExtractStatus = document.getElementById("resident-extract-status");
-            const residentExtractResult = document.getElementById("resident-extract-result");
-            const residentExtractOutput = document.getElementById("resident-extract-output");
+            const documentIngestForm = document.getElementById("document-ingest-form");
+            const documentIngestFiles = document.getElementById("document-ingest-files");
+            const documentDropZone = document.getElementById("document-drop-zone");
+            const documentFileSummary = document.getElementById("document-file-summary");
+            const documentIngestSubmit = document.getElementById("document-ingest-submit");
+            const documentIngestStatus = document.getElementById("document-ingest-status");
+            const documentIngestResult = document.getElementById("document-ingest-result");
+            const documentIngestOutput = document.getElementById("document-ingest-output");
             const assessmentForm = document.getElementById("assessment-form");
             const assessmentFiles = document.getElementById("assessment-files");
             const assessmentFileSummary = document.getElementById("assessment-file-summary");
@@ -220,6 +226,50 @@
             const assessmentSearchSubmit = document.getElementById("assessment-search-submit");
             const assessmentSearchStatus = document.getElementById("assessment-search-status");
             const assessmentSearchResults = document.getElementById("assessment-search-results");
+
+            function updateDocumentFileSummary() {
+                const files = Array.from(documentIngestFiles.files);
+                documentFileSummary.textContent = files.length
+                    ? `${files.length} file${files.length === 1 ? "" : "s"}: ${files.map((file) => file.name).join(", ")}`
+                    : "PDF, CSV, and text files are supported.";
+            }
+
+            function addDroppedDocumentFiles(files) {
+                const transfer = new DataTransfer();
+                const seen = new Set();
+                for (const file of [...documentIngestFiles.files, ...files]) {
+                    const identity = `${file.name}:${file.size}:${file.lastModified}`;
+                    if (!seen.has(identity)) {
+                        transfer.items.add(file);
+                        seen.add(identity);
+                    }
+                }
+                documentIngestFiles.files = transfer.files;
+                updateDocumentFileSummary();
+            }
+
+            documentIngestFiles.addEventListener("change", updateDocumentFileSummary);
+            for (const eventName of ["dragenter", "dragover"]) {
+                documentDropZone.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    documentDropZone.classList.add("drag-over");
+                });
+            }
+            for (const eventName of ["dragleave", "drop"]) {
+                documentDropZone.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    documentDropZone.classList.remove("drag-over");
+                });
+            }
+            documentDropZone.addEventListener("drop", (event) => {
+                addDroppedDocumentFiles(event.dataTransfer.files);
+            });
+            documentDropZone.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    documentIngestFiles.click();
+                }
+            });
 
             assessmentFiles.addEventListener("change", () => {
                 const count = assessmentFiles.files.length;
@@ -327,33 +377,40 @@
                 }
             });
 
-            residentExtractForm.addEventListener("submit", async (event) => {
+            documentIngestForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                residentExtractSubmit.disabled = true;
-                residentExtractResult.hidden = true;
-                residentExtractStatus.textContent = "Extracting resident data…";
-                residentExtractStatus.className = "status success";
+                if (!documentIngestFiles.files.length) {
+                    documentIngestStatus.textContent = "Select at least one document.";
+                    documentIngestStatus.className = "status error";
+                    return;
+                }
+                documentIngestSubmit.disabled = true;
+                documentIngestResult.hidden = true;
+                documentIngestStatus.textContent = "Ingesting resident documents…";
+                documentIngestStatus.className = "status success";
 
                 try {
-                    const response = await authorizedFetch("/api/v1/resident/extract", {
+                    const uploadedCount = documentIngestFiles.files.length;
+                    const response = await authorizedFetch("/api/v1/document/ingest", {
                         method: "POST",
-                        body: new FormData(residentExtractForm),
+                        body: new FormData(documentIngestForm),
                     });
                     const body = await response.json();
                     if (!response.ok) {
                         const detail = body.detail || body.error || `Request failed (${response.status})`;
                         throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
                     }
-                    const fileCount = residentExtractFiles.files.length;
-                    residentExtractOutput.value = JSON.stringify(body, null, 2);
-                    residentExtractResult.hidden = false;
-                    residentExtractStatus.textContent = `Extracted resident data from ${fileCount} file${fileCount === 1 ? "" : "s"}.`;
-                    residentExtractStatus.className = "status success";
+                    const ingestedCount = Array.isArray(body.documents) ? body.documents.length : 0;
+                    const skippedCount = uploadedCount - ingestedCount;
+                    documentIngestOutput.value = JSON.stringify(body, null, 2);
+                    documentIngestResult.hidden = false;
+                    documentIngestStatus.textContent = `Ingested ${ingestedCount} new document${ingestedCount === 1 ? "" : "s"}${skippedCount ? `; skipped ${skippedCount} existing document${skippedCount === 1 ? "" : "s"}` : ""}.`;
+                    documentIngestStatus.className = "status success";
                 } catch (error) {
-                    residentExtractStatus.textContent = `Resident extraction failed: ${error.message}`;
-                    residentExtractStatus.className = "status error";
+                    documentIngestStatus.textContent = `Document ingestion failed: ${error.message}`;
+                    documentIngestStatus.className = "status error";
                 } finally {
-                    residentExtractSubmit.disabled = false;
+                    documentIngestSubmit.disabled = false;
                 }
             });
 
@@ -398,7 +455,7 @@
                 assessmentIngestStatus.className = "status success";
 
                 try {
-                    const response = await authorizedFetch("/api/v1/assessment/ingest", {
+                    const response = await authorizedFetch("/api/v1/assessments/ingestion", {
                         method: "POST",
                         body: new FormData(assessmentIngestForm),
                     });
@@ -410,8 +467,7 @@
                     const result = getIngestResult(body);
                     const assessments = Array.isArray(result?.documents) ? result.documents : [];
                     const assessmentCount = Number.isInteger(result?.chunk_count) ? result.chunk_count : assessments.length;
-                    const fileCount = assessmentIngestFiles.files.length;
-                    const message = `${assessmentCount} note${assessmentCount === 1 ? "" : "s"} ingested from ${fileCount} file${fileCount === 1 ? "" : "s"}.`;
+                    const message = `${assessmentCount} assessment chunk${assessmentCount === 1 ? "" : "s"} ingested.`;
                     assessmentIngestStatus.textContent = message;
                     assessmentIngestStatus.className = "status success";
                     alert(message);
@@ -432,7 +488,7 @@
 
                 try {
                     const query = new URLSearchParams(new FormData(assessmentSearchForm));
-                    const response = await authorizedFetch(`/api/v1/assessment/search?${query}`);
+                    const response = await authorizedFetch(`/api/v1/search/assessment?${query}`);
                     const body = await response.json();
                     if (!response.ok) {
                         const detail = body.detail || body.error || `Request failed (${response.status})`;

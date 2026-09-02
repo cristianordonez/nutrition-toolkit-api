@@ -4,13 +4,9 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from ntk.controllers.base import BaseController
-from ntk.database.db import get_session
+from ntk.controllers.key.base import APIKeyController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.repositories.api_key_repo import APIKeyRepo
-from ntk.repositories.permission_repo import PermissionRepo
-from ntk.services.api_key_service import APIKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +35,7 @@ class GrantResponse(ConsoleRenderableModel):
         return f"Granted permissions: {', '.join(self.permissions or [])}"
 
 
-class GrantPermissionsController(BaseController):
+class GrantPermissionsController(APIKeyController):
     """Controller for granting API key permissions."""
 
     name = "grant-permissions"
@@ -53,17 +49,14 @@ class GrantPermissionsController(BaseController):
         :return: Output model
         """
         logger.debug(options)
-        session = next(get_session())
-        repo = APIKeyRepo(session)
-        permission_repo = PermissionRepo(session)
-        service = APIKeyService(repo, permission_repo)
-        api_keys = service.get_api_keys(plaintext_key=options.api_key)
-        if len(api_keys) == 0:
-            msg = f"No API key found for '{options.api_key}'"
-            logger.error(msg)
-            raise ValueError(msg)
-        api_key = api_keys[0]
-        for permission in options.permissions:
-            service.grant_permission(api_key, permission)
+        with self.service() as service:
+            api_keys = service.get_api_keys(plaintext_key=options.api_key)
+            if len(api_keys) == 0:
+                msg = f"No API key found for '{options.api_key}'"
+                logger.error(msg)
+                raise ValueError(msg)
+            api_key = api_keys[0]
+            for permission in options.permissions:
+                service.grant_permission(api_key, permission)
         results = GrantResponse(permissions=options.permissions)
         return Output(result=results, controller=self.name, exit_code=0)

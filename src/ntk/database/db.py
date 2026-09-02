@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import typing
 
 from sqlmodel import Session, SQLModel, create_engine
@@ -13,8 +12,6 @@ from ntk.repositories.permission_repo import PermissionRepo
 if typing.TYPE_CHECKING:
     from collections.abc import Generator
 
-logger = logging.getLogger(__name__)
-
 
 engine = create_engine(
     str(SETTINGS.database_url),
@@ -26,7 +23,7 @@ engine = create_engine(
 
 def get_session() -> Generator[Session, None, None]:
     """Generate database session."""
-    with Session(engine) as session:
+    with Session(engine, expire_on_commit=False) as session:
         yield session
 
 

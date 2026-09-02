@@ -5,9 +5,14 @@ from __future__ import annotations
 import logging
 import typing
 
-from ntk.controllers.assessment.generate import GenerateController
-from ntk.controllers.assessment.ingest import AssessmentIngestController
-from ntk.controllers.assessment.search import AssessmentSearchController
+from ntk.controllers.assessment.finalize import (
+    AssessmentFinalizeCommandController,
+)
+from ntk.controllers.assessment.generate import (
+    AssessmentGenerateCommandController,
+)
+from ntk.controllers.assessment.get import AssessmentGetCommandController
+from ntk.controllers.assessment.import_assessments import AssessmentImportController
 from ntk.controllers.base import BaseControllerGroup
 from ntk.controllers.registry import register_command_group
 
@@ -24,9 +29,10 @@ class AssessmentControllerGroup(BaseControllerGroup):
     def __init__(self) -> None:
         """Initialize class."""
         self._subcommands = [
-            GenerateController(),
-            AssessmentIngestController(),
-            AssessmentSearchController(),
+            AssessmentFinalizeCommandController(),
+            AssessmentGenerateCommandController(),
+            AssessmentGetCommandController(),
+            AssessmentImportController(),
         ]
 
     @property

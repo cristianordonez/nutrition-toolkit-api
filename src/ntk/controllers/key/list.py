@@ -4,14 +4,10 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from ntk.controllers.base import BaseController
-from ntk.database.db import get_session
+from ntk.controllers.key.base import APIKeyController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 from ntk.models.sql.api_key import APIKey  # noqa: TC001
-from ntk.repositories.api_key_repo import APIKeyRepo
-from ntk.repositories.permission_repo import PermissionRepo
-from ntk.services.api_key_service import APIKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +38,7 @@ class ListResponse(ConsoleRenderableModel):
         return result
 
 
-class ListController(BaseController):
+class ListController(APIKeyController):
     """Controller for calculating energy needs."""
 
     name = "list"
@@ -56,10 +52,7 @@ class ListController(BaseController):
         :return: Output model
         """
         logger.debug(options)
-        session = next(get_session())
-        repo = APIKeyRepo(session)
-        permission_repo = PermissionRepo(session)
-        service = APIKeyService(repo, permission_repo)
-        api_keys = service.get_api_keys(plaintext_key=options.api_key)
+        with self.service() as service:
+            api_keys = service.get_api_keys(plaintext_key=options.api_key)
         results = ListResponse(api_keys=api_keys)
         return Output(result=results, controller=self.name, exit_code=0)

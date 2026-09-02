@@ -5,6 +5,7 @@ import os
 import sys
 import types
 import typing
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -14,6 +15,8 @@ from ntk.services.api_key_service import APIKeyService
 
 _TEST_SETTINGS = {
     "NTK_DATABASE_URL": "postgresql+psycopg://test:test@localhost:5432/ntk_test",
+    "NTK_FATSECRET_CLIENT_ID": "test-fatsecret-client-id",
+    "NTK_FATSECRET_CLIENT_SECRET": "test-fatsecret-client-secret",
     "NTK_OPEN_AI_API_KEY": "test-openai-key",
     "NTK_REDIS_DSN": "redis://localhost:6379/0",
 }
@@ -125,6 +128,7 @@ def load_controller_module(
     os.environ.setdefault("DATABASE_PASSWORD", "test-password")
     db_module: typing.Any = types.ModuleType("ntk.database.db")
     db_module.get_session = lambda: iter([object()])
+    db_module.engine = object()
     monkeypatch.setitem(sys.modules, "ntk.database.db", db_module)
 
     def _load(module_name: str) -> types.ModuleType:
@@ -141,7 +145,7 @@ def patch_key_controller_dependencies(
     """Patch key controller dependencies with lightweight test doubles."""
 
     def _patch(
-        module: typing.Any,  # noqa: ANN401
+        _module: typing.Any,  # noqa: ANN401
         *,
         api_keys: list[SimpleNamespace] | None = None,
         revoked_key: SimpleNamespace | None = None,
@@ -179,10 +183,16 @@ def patch_key_controller_dependencies(
             def revoke_api_key(self, _: str) -> SimpleNamespace | None:
                 return revoked_key
 
-        monkeypatch.setattr(module, "get_session", lambda: iter([object()]))
-        monkeypatch.setattr(module, "APIKeyRepo", lambda session: session)
-        monkeypatch.setattr(module, "PermissionRepo", lambda session: session)
-        monkeypatch.setattr(module, "APIKeyService", FakeAPIKeyService)
+        from ntk.controllers.key import base  # noqa: PLC0415
+
+        @contextmanager
+        def fake_controller_session(_session: object) -> typing.Iterator[object]:
+            yield object()
+
+        monkeypatch.setattr(base, "controller_session", fake_controller_session)
+        monkeypatch.setattr(base, "APIKeyRepo", lambda session: session)
+        monkeypatch.setattr(base, "PermissionRepo", lambda session: session)
+        monkeypatch.setattr(base, "APIKeyService", FakeAPIKeyService)
         return calls
 
     return _patch

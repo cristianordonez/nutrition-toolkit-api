@@ -7,9 +7,11 @@ import importlib
 _COMMAND_GROUP_MODULES = (
     "ntk.controllers.assessment.app",
     "ntk.controllers.calculate.app",
+    "ntk.controllers.documents.app",
     "ntk.controllers.key.app",
     "ntk.controllers.knowledge.app",
-    "ntk.controllers.resident.app",
+    "ntk.controllers.residents.app",
+    "ntk.controllers.search.app",
     "ntk.controllers.tubefeed.app",
 )
 

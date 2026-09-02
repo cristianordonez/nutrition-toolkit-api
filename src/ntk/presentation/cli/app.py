@@ -9,6 +9,8 @@ import pathlib
 import sys
 import typing
 
+import logfire
+
 from ntk import __version__
 from ntk.controllers import load_command_groups
 from ntk.controllers.registry import COMMAND_REGISTRY
@@ -23,6 +25,9 @@ if typing.TYPE_CHECKING:
 
         def to_console(self) -> str:
             """Return the CLI representation."""
+
+
+logfire.configure()
 
 
 async def _resolve_output(output: typing.Awaitable[Output]) -> Output:

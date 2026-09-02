@@ -2,15 +2,15 @@
 """SQL models for persisted clinical nutrition knowledge."""
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import JSON, Column, Enum, UniqueConstraint
 from sqlmodel import Field, Index, Relationship, SQLModel
 
 from ntk.models.knowledge import KnowledgeType
+from ntk.services.embedding_service import EMBEDDING_DIMENSIONS
 
-KNOWLEDGE_EMBEDDING_DIMENSIONS = 1536
+KNOWLEDGE_EMBEDDING_DIMENSIONS = EMBEDDING_DIMENSIONS
 
 
 class Knowledge(SQLModel, table=True):
@@ -18,7 +18,7 @@ class Knowledge(SQLModel, table=True):
 
     __tablename__ = "knowledge"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     filename: str
     knowledge_type: KnowledgeType = Field(
         sa_column=Column(
@@ -44,8 +44,8 @@ class KnowledgeChunk(SQLModel, table=True):
     __tablename__ = "knowledge_chunks"
     __table_args__ = (UniqueConstraint("knowledge_id", "chunk_index"),)
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    knowledge_id: UUID = Field(foreign_key="knowledge.id", index=True)
+    id: int | None = Field(default=None, primary_key=True)
+    knowledge_id: int = Field(foreign_key="knowledge.id", index=True)
     chunk_index: int
     content: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -65,8 +65,8 @@ class KnowledgeChunkEmbedding(SQLModel, table=True):
         ),
     )
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    knowledge_chunk_id: UUID = Field(foreign_key="knowledge_chunks.id", index=True)
+    id: int | None = Field(default=None, primary_key=True)
+    knowledge_chunk_id: int = Field(foreign_key="knowledge_chunks.id", index=True)
     embedding_vector: list[float] = Field(
         sa_column=Column(
             VECTOR(KNOWLEDGE_EMBEDDING_DIMENSIONS).with_variant(JSON, "sqlite"),

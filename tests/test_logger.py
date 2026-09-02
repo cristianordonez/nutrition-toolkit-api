@@ -72,3 +72,4 @@ def test_setup_logging_adds_handlers(tmp_path: Path) -> None:
 def test_setup_logging_debug_sets_log_level() -> None:
     logger = setup_logging(debug=True)
     assert logger.level == logging.DEBUG
+    assert logging.getLogger("sentence_transformers.util.file_io").level == logging.INFO

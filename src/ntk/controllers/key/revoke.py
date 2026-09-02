@@ -4,14 +4,10 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from ntk.controllers.base import BaseController
-from ntk.database.db import get_session
+from ntk.controllers.key.base import APIKeyController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 from ntk.models.sql.api_key import APIKey  # noqa: TC001
-from ntk.repositories.api_key_repo import APIKeyRepo
-from ntk.repositories.permission_repo import PermissionRepo
-from ntk.services.api_key_service import APIKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +35,7 @@ class RevokeResponse(ConsoleRenderableModel):
         return f"Key revoked: {self.revoked_key}"
 
 
-class RevokeController(BaseController):
+class RevokeController(APIKeyController):
     """Handles revoking API keys."""
 
     name = "revoke"
@@ -55,11 +51,8 @@ class RevokeController(BaseController):
         results = RevokeResponse(revoked_key=None)
         try:
             logger.debug(options)
-            session = next(get_session())
-            repo = APIKeyRepo(session)
-            permission_repo = PermissionRepo(session)
-            service = APIKeyService(repo, permission_repo)
-            revoked_key = service.revoke_api_key(options.api_key)
+            with self.service() as service:
+                revoked_key = service.revoke_api_key(options.api_key)
             results.revoked_key = revoked_key
             ec = 0
         except ValueError:

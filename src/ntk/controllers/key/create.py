@@ -4,13 +4,9 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from ntk.controllers.base import BaseController
-from ntk.database.db import get_session
+from ntk.controllers.key.base import APIKeyController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.repositories.api_key_repo import APIKeyRepo
-from ntk.repositories.permission_repo import PermissionRepo
-from ntk.services.api_key_service import APIKeyService
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +32,7 @@ class CreateKeyResponse(ConsoleRenderableModel):
         )
 
 
-class CreateController(BaseController):
+class CreateController(APIKeyController):
     """Controller for creating new API token."""
 
     name = "create"
@@ -49,11 +45,8 @@ class CreateController(BaseController):
         :param options: pydantic basemodel instance holding options
         :return: Output model
         """
-        session = next(get_session())
-        repo = APIKeyRepo(session)
-        permission_repo = PermissionRepo(session)
-        service = APIKeyService(repo, permission_repo)
-        plaintext_key = service.create(options.name, options.permissions)
+        with self.service() as service:
+            plaintext_key = service.create(options.name, options.permissions)
         response = CreateKeyResponse(
             plaintext_key=plaintext_key,
             api_key_name=options.name,

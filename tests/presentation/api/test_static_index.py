@@ -48,26 +48,29 @@ def test_index_includes_assessment_workflows() -> None:
     assert "/api/v1/assessment/generate" in index
     assert 'id="assessment-ingest-form"' in index
     assert 'id="assessment-ingest-files"' in index
-    assert "assessmentIngestFiles.files.length" in index
-    assert "note${assessmentCount" in index
-    assert "ingested from ${fileCount} file" in index
+    assert 'name="file" type="file" accept="application/pdf,.pdf"' in index
+    assert "assessment chunk${assessmentCount" in index
     assert "alert(message)" in index
     assert 'name="created_by"' in index
-    assert "/api/v1/assessment/ingest" in index
+    assert "/api/v1/assessments/ingestion" in index
     assert 'id="assessment-search-form"' in index
     assert 'id="assessment-search-text"' in index
     assert 'id="assessment-search-results"' in index
-    assert "/api/v1/assessment/search" in index
+    assert "/api/v1/search/assessment" in index
 
 
-def test_index_includes_resident_extract_workflow() -> None:
+def test_index_includes_document_ingest_drop_zone() -> None:
     index = (pathlib.Path(__file__).parents[3] / "src/ntk/static/index.html").read_text(
         encoding="utf-8",
     )
 
-    assert 'id="resident-extract-form"' in index
-    assert 'id="resident-extract-files"' in index
-    assert 'name="context"' in index
-    assert "/api/v1/resident/extract" in index
+    assert 'id="document-ingest-form"' in index
+    assert 'id="document-drop-zone"' in index
+    assert 'id="document-ingest-files"' in index
+    assert 'name="files" type="file"' in index
+    assert "multiple required" in index
+    assert 'documentDropZone.addEventListener("drop"' in index
+    assert "new DataTransfer()" in index
+    assert "/api/v1/document/ingest" in index
     assert "JSON.stringify(body, null, 2)" in index
-    assert 'id="resident-extract-output"' in index
+    assert 'id="document-ingest-output"' in index

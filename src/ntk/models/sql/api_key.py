@@ -2,7 +2,6 @@
 """SQL models for API keys and permissions."""
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -12,8 +11,8 @@ class APIKeyPermission(SQLModel, table=True):
 
     __tablename__ = "api_key_permission"
 
-    api_key_id: UUID = Field(foreign_key="api_key.id", primary_key=True)
-    permission_id: UUID = Field(foreign_key="permission.id", primary_key=True)
+    api_key_id: int = Field(foreign_key="api_key.id", primary_key=True)
+    permission_id: int = Field(foreign_key="permission.id", primary_key=True)
 
 
 class Permission(SQLModel, table=True):
@@ -21,7 +20,7 @@ class Permission(SQLModel, table=True):
 
     __tablename__ = "permission"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     api_keys: list["APIKey"] = Relationship(
         back_populates="permissions",
@@ -34,7 +33,7 @@ class APIKey(SQLModel, table=True):
 
     __tablename__ = "api_key"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str
     api_key_hash: str
     active: bool = True

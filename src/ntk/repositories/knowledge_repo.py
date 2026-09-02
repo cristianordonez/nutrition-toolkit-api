@@ -15,11 +15,11 @@ from ntk.models.sql.knowledge import (
     KnowledgeChunk,
     KnowledgeChunkEmbedding,
 )
+from ntk.utils.misc import require_id
 
 if typing.TYPE_CHECKING:
     import pathlib
     from collections.abc import Sequence
-    from uuid import UUID
 
     from ntk.models.knowledge import KnowledgeType
 
@@ -56,7 +56,7 @@ class KnowledgeRepo:
             )
             return existing
         if existing is not None:
-            self._delete_chunks(existing.id)
+            self._delete_chunks(require_id(existing.id))
             existing.filename = knowledge.filename
             existing.synced_at = datetime.now(UTC)
             knowledge = existing
@@ -90,7 +90,7 @@ class KnowledgeRepo:
         """
         return [
             KnowledgeChunkEmbedding(
-                knowledge_chunk_id=chunk.id,
+                knowledge_chunk_id=require_id(chunk.id),
                 embedding_vector=embedding,
                 model_name=model_name or "",
             )
@@ -110,7 +110,7 @@ class KnowledgeRepo:
         """
         return [
             KnowledgeChunk(
-                knowledge_id=knowledge.id,
+                knowledge_id=require_id(knowledge.id),
                 chunk_index=i,
                 content=chunk,
             )
@@ -142,7 +142,7 @@ class KnowledgeRepo:
             file_hash=sha256(path.read_bytes()).hexdigest(),
         )
 
-    def count_chunks(self, document_id: UUID) -> int:
+    def count_chunks(self, document_id: int) -> int:
         """Return the number of chunks stored for a knowledge source."""
         return len(
             self.session.exec(
@@ -152,7 +152,7 @@ class KnowledgeRepo:
             ).all(),
         )
 
-    def _delete_chunks(self, knowledge_id: UUID) -> None:
+    def _delete_chunks(self, knowledge_id: int) -> None:
         chunk_ids = self.session.exec(
             select(KnowledgeChunk.id).where(
                 KnowledgeChunk.knowledge_id == knowledge_id,
