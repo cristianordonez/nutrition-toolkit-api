@@ -15,6 +15,8 @@ from ntk.services.api_key_service import APIKeyService
 
 _TEST_SETTINGS = {
     "NTK_DATABASE_URL": "postgresql+psycopg://test:test@localhost:5432/ntk_test",
+    "NTK_FATSECRET_CLIENT_ID": "test-fatsecret-client-id",
+    "NTK_FATSECRET_CLIENT_SECRET": "test-fatsecret-client-secret",
     "NTK_OPEN_AI_API_KEY": "test-openai-key",
     "NTK_REDIS_DSN": "redis://localhost:6379/0",
 }
