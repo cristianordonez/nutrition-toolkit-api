@@ -16,6 +16,7 @@ from ntk.controllers.uploads import (
 )
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
+from ntk.models.sql.resident import ResidentAssessment  # noqa: TC001 - Pydantic runtime
 from ntk.repositories.assessment_repo import AssessmentRepo
 from ntk.repositories.facility_repo import FacilityRepo
 from ntk.repositories.progress_note_repo import ProgressNoteRepo
@@ -27,8 +28,6 @@ from ntk.services.resident_data.resident_resolver import ResidentResolver
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
-
-    from ntk.models.sql.resident import ResidentAssessment
 
 
 class AssessmentImportOptions(BaseModel):
