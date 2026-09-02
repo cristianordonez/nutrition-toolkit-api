@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 from sqlmodel import SQLModel
@@ -7,67 +9,87 @@ from sqlmodel import SQLModel
 from ntk.models.knowledge import (
     KnowledgeType,
 )
-from ntk.models.sql.assessment import (
-    ASSESSMENT_EMBEDDING_DIMENSIONS,
-    Assessment,
-    AssessmentEmbedding,
-    AssessmentSource,
-)
 from ntk.models.sql.knowledge import (
     KNOWLEDGE_EMBEDDING_DIMENSIONS,
     Knowledge,
     KnowledgeChunk,
     KnowledgeChunkEmbedding,
 )
+from ntk.models.sql.resident import (
+    AssessmentSource,
+    ResidentAssessment,
+    ResidentAssessmentEmbedding,
+)
+from ntk.services.embedding_service import EMBEDDING_DIMENSIONS
 
 
-def test_storage_uses_separate_assessment_and_knowledge_tables() -> None:
-    assert Assessment.__tablename__ == "assessment"
-    assert AssessmentEmbedding.__tablename__ == "assessment_embeddings"
+def test_storage_uses_one_resident_assessment_table() -> None:
+    assert ResidentAssessment.__tablename__ == "resident_assessment"
+    assert ResidentAssessmentEmbedding.__tablename__ == "resident_assessment_embeddings"
     assert Knowledge.__tablename__ == "knowledge"
     assert KnowledgeChunk.__tablename__ == "knowledge_chunks"
     assert KnowledgeChunkEmbedding.__tablename__ == "knowledge_chunks_embeddings"
-    assert "document" not in SQLModel.metadata.tables
-    assert "document_chunks" not in SQLModel.metadata.tables
-    assert "document_embeddings" not in SQLModel.metadata.tables
+    assert "assessment" not in SQLModel.metadata.tables
 
 
 def test_assessment_and_embedding_link_directly() -> None:
-    assessment = Assessment(
-        source=AssessmentSource.UPLOADED,
+    assessment = ResidentAssessment(
+        id=1,
+        resident_id=1,
+        assessment_source=AssessmentSource.IMPORTED,
         source_filename="assessment.pdf",
         assessment_index=0,
         content="Nutrition assessment",
         content_hash="content-hash",
+        assessment_date=date(2026, 8, 31),
         created_by="dietitian",
     )
-    embedding = AssessmentEmbedding(
-        assessment_id=assessment.id,
+    embedding = ResidentAssessmentEmbedding(
+        resident_assessment_id=1,
         embedding_vector=[0.1, 0.2],
         model_name="text-embedding-3-small",
+        resident_assessment=assessment,
     )
 
-    assert assessment.source is AssessmentSource.UPLOADED
+    assert assessment.assessment_source is AssessmentSource.IMPORTED
     assert assessment.source_filename == "assessment.pdf"
     assert assessment.created_by == "dietitian"
-    assert embedding.assessment_id == assessment.id
-    assert "created_by" in Assessment.__table__.c  # ty: ignore[unresolved-attribute]
-    assert "style_source" not in Assessment.__table__.c  # ty: ignore[unresolved-attribute]
+    assert embedding.resident_assessment_id == assessment.id
+    assert embedding.resident_assessment is assessment
+    assert assessment.embeddings == [embedding]
+    assert "created_by" in ResidentAssessment.__table__.c  # ty: ignore[unresolved-attribute]
+    assert "assessment" not in SQLModel.metadata.tables
+    assert "assessment_embeddings" not in SQLModel.metadata.tables
+    foreign_key = next(
+        iter(
+            ResidentAssessmentEmbedding.__table__.c.resident_assessment_id.foreign_keys,  # ty: ignore[unresolved-attribute]
+        ),
+    )
+    assert foreign_key.target_fullname == "resident_assessment.id"
+
+
+def test_assessment_sources_are_generated_or_imported() -> None:
+    assert list(AssessmentSource) == [
+        AssessmentSource.GENERATED,
+        AssessmentSource.IMPORTED,
+    ]
 
 
 def test_knowledge_chunk_and_embedding_link_to_knowledge() -> None:
     knowledge = Knowledge(
+        id=1,
         filename="manual.pdf",
         knowledge_type=KnowledgeType.NUTRITION_CARE_MANUAL,
         file_hash="file-hash",
     )
     chunk = KnowledgeChunk(
-        knowledge_id=knowledge.id,
+        id=1,
+        knowledge_id=1,
         chunk_index=0,
         content="Clinical guidance",
     )
     embedding = KnowledgeChunkEmbedding(
-        knowledge_chunk_id=chunk.id,
+        knowledge_chunk_id=1,
         embedding_vector=[0.1, 0.2],
         model_name="text-embedding-3-small",
     )
@@ -79,12 +101,14 @@ def test_knowledge_chunk_and_embedding_link_to_knowledge() -> None:
 
 
 def test_embedding_tables_use_indexed_postgres_vectors() -> None:
+    assert EMBEDDING_DIMENSIONS == 384  # noqa: PLR2004
+    assert KNOWLEDGE_EMBEDDING_DIMENSIONS == 384  # noqa: PLR2004
     dialect = postgresql.dialect()
     expectations = {
-        AssessmentEmbedding: (
-            "assessment_embeddings",
-            "ix_assessment_embeddings_embedding_vector_hnsw",
-            ASSESSMENT_EMBEDDING_DIMENSIONS,
+        ResidentAssessmentEmbedding: (
+            "resident_assessment_embeddings",
+            "ix_resident_assessment_embeddings_embedding_vector_hnsw",
+            EMBEDDING_DIMENSIONS,
         ),
         KnowledgeChunkEmbedding: (
             "knowledge_chunks_embeddings",

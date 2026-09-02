@@ -1,0 +1,1 @@
+"""Resident data extractor tests."""

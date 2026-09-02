@@ -8,12 +8,12 @@ import typing
 from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
+from ntk.controllers.session import controller_session
 from ntk.controllers.uploads import (
     ReadableUpload,
     UploadRequirements,
     materialize_uploads,
 )
-from ntk.database.db import get_session
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.knowledge import (
     KnowledgeIngestResponsePublic,
@@ -22,7 +22,10 @@ from ntk.models.knowledge import (
 from ntk.models.output import Output
 from ntk.models.sql.knowledge import Knowledge  # noqa: TC001
 from ntk.repositories.knowledge_repo import KnowledgeRepo
-from ntk.services.document import DocumentExtractorService
+from ntk.services.resident_data import ResidentIngestionService
+
+if typing.TYPE_CHECKING:
+    from sqlmodel import Session
 
 
 class KnowledgeIngestOptions(BaseModel):
@@ -52,9 +55,9 @@ class KnowledgeIngestController(BaseController):
     help = "Ingest a diet or nutrition care manual"
     options_model = KnowledgeIngestOptions
 
-    def __init__(self, repository: KnowledgeRepo | None = None) -> None:
-        """Initialize with optional persistence for dependency injection."""
-        self.repository = repository
+    def __init__(self, session: Session | None = None) -> None:
+        """Use an injected session or create one for each controller run."""
+        self.session = session
 
     async def run_uploads(
         self,
@@ -73,7 +76,7 @@ class KnowledgeIngestController(BaseController):
                 default_filename=lambda index: f"upload-{index}.pdf",
             ),
         ) as uploads:
-            output = self.run(
+            output = await self.run(
                 KnowledgeIngestOptions(
                     path=uploads.directory,
                     document_type=document_type,
@@ -88,19 +91,17 @@ class KnowledgeIngestController(BaseController):
                 exit_code=output.exit_code,
             )
 
-    def run(self, options: KnowledgeIngestOptions) -> Output[KnowledgeIngestResponse]:
+    async def run(
+        self,
+        options: KnowledgeIngestOptions,
+    ) -> Output[KnowledgeIngestResponse]:
         """Ingest the selected knowledge document type."""
         paths = self._get_file_paths(options.path)
-        session_generator = None
-        repository = self.repository
-        if repository is None:
-            session_generator = get_session()
-            repository = KnowledgeRepo(next(session_generator))
-
-        try:
-            service = DocumentExtractorService(knowledge_repository=repository)
+        with controller_session(self.session) as session:
+            repository = KnowledgeRepo(session)
+            service = ResidentIngestionService(knowledge_repository=repository)
             documents = [
-                service.ingest_knowledge(
+                await service.ingest_knowledge(
                     path,
                     options.document_type,
                     overwrite=options.overwrite,
@@ -122,9 +123,6 @@ class KnowledgeIngestController(BaseController):
                 controller=self.name,
                 exit_code=0,
             )
-        finally:
-            if session_generator is not None:
-                session_generator.close()
 
     @staticmethod
     def _get_file_paths(path: pathlib.Path) -> list[pathlib.Path]:

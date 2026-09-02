@@ -20,30 +20,92 @@ _ROUTE_POLICIES = [
         120,
         "calculate-tubefeed",
     ),
-    ("knowledge", "/knowledge/search", "knowledge:read", 60, "knowledge-search"),
     ("knowledge", "/knowledge/ingest", "knowledge:write", 50, "knowledge-ingest"),
+    ("residents", "/residents/", "residents:read", 60, "residents-list"),
     (
-        "assessment",
-        "/assessment/generate",
-        "assessments:write",
-        10,
-        "assessment-generate",
-    ),
-    (
-        "assessment",
-        "/assessment/ingest",
-        "assessments:write",
-        20,
-        "assessment-ingest",
-    ),
-    (
-        "assessment",
-        "/assessment/search",
+        "residents",
+        "/residents/{resident_id}/assessments",
         "assessments:read",
         60,
-        "assessment-search",
+        "residents-assessments",
     ),
-    ("resident", "/resident/extract", "residents:read", 40, "resident-extract"),
+    (
+        "residents",
+        "/residents/{resident_id}/weights",
+        "residents:read",
+        60,
+        "residents-weights",
+    ),
+    (
+        "residents",
+        "/residents/{resident_id}/clinical-facts",
+        "residents:read",
+        60,
+        "residents-clinical-facts",
+    ),
+    (
+        "search",
+        "/search/knowledge",
+        "knowledge:read",
+        60,
+        "search-knowledge",
+    ),
+    (
+        "search",
+        "/search/assessments",
+        "assessments:read",
+        60,
+        "search-assessments",
+    ),
+    (
+        "documents",
+        "/document/ingest",
+        "residents:write",
+        40,
+        "document-ingest",
+    ),
+    (
+        "assessments",
+        "/assessments",
+        "assessments:read",
+        60,
+        "assessments-list",
+    ),
+    (
+        "assessments",
+        "/assessments/{assessment_id}",
+        "assessments:read",
+        60,
+        "assessments-get",
+    ),
+    (
+        "assessments",
+        "/assessments/{assessment_id}/finalize",
+        "assessments:write",
+        30,
+        "assessments-finalize",
+    ),
+    (
+        "assessments",
+        "/assessments/{assessment_id}",
+        "assessments:write",
+        30,
+        "assessments-update",
+    ),
+    (
+        "assessments",
+        "/assessments/generate",
+        "assessments:write",
+        25,
+        "assessments-generate",
+    ),
+    (
+        "assessments",
+        "/assessments/import",
+        "assessments:write",
+        20,
+        "assessments-import",
+    ),
 ]
 
 
@@ -59,10 +121,19 @@ def test_route_requires_permission_and_rate_limit(
     module = load_controller_module(
         f"ntk.presentation.api.routers.{module_name}",
     )
-    route = next(
+    matching_routes = [
         typing.cast("APIRoute", item)
         for item in module.router.routes
         if item.path == path
+    ]
+    route = next(
+        item
+        for item in matching_routes
+        if any(
+            inspect.getclosurevars(dependency.call).nonlocals.get("scope") == scope
+            for dependency in item.dependant.dependencies  # codespell:ignore dependant
+            if dependency.call is not None
+        )
     )
     closures = {
         getattr(dependency.call, "__name__", ""): inspect.getclosurevars(

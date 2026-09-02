@@ -8,6 +8,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from ntk.defaults import DEFAULT_PERMISSIONS
 from ntk.models.sql.api_key import APIKey, APIKeyPermission, Permission
 from ntk.repositories.permission_repo import PermissionRepo
+from ntk.utils.misc import require_id
 
 
 @pytest.fixture
@@ -66,6 +67,7 @@ def test_default_permissions_cover_api_routes() -> None:
         "knowledge:read",
         "knowledge:write",
         "residents:read",
+        "residents:write",
     }
 
 
@@ -75,7 +77,7 @@ def test_add_permission_to_api_key_persists_link(session: Session) -> None:
     session.add_all([api_key, permission])
     session.commit()
     repo = PermissionRepo(session)
-    repo.add_permission_to_api_key(api_key.id, permission.id)
+    repo.add_permission_to_api_key(require_id(api_key.id), require_id(permission.id))
     link = session.get(APIKeyPermission, (api_key.id, permission.id))
     assert link is not None
 
@@ -86,7 +88,10 @@ def test_remove_permission_from_api_key_deletes_link(session: Session) -> None:
     session.add_all([api_key, permission])
     session.commit()
     repo = PermissionRepo(session)
-    repo.add_permission_to_api_key(api_key.id, permission.id)
-    repo.remove_permission_from_api_key(api_key.id, permission.id)
+    repo.add_permission_to_api_key(require_id(api_key.id), require_id(permission.id))
+    repo.remove_permission_from_api_key(
+        require_id(api_key.id),
+        require_id(permission.id),
+    )
     link = session.get(APIKeyPermission, (api_key.id, permission.id))
     assert link is None

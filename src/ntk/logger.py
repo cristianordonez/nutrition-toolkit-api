@@ -7,6 +7,11 @@ from logging.handlers import TimedRotatingFileHandler
 if typing.TYPE_CHECKING:
     from pathlib import Path
 
+_MINIMUM_LIBRARY_LOG_LEVELS = {
+    # Optional module configs legitimately return 404 for some Hugging Face models.
+    "sentence_transformers.util.file_io": logging.INFO,
+}
+
 
 def setup_logging(
     log_file: Path | None = None,
@@ -30,6 +35,8 @@ def setup_logging(
         logger.addHandler(hdlr=file_handler)
     logger.addHandler(stdout_handler)
     logger.setLevel(level)
+    for logger_name, minimum_level in _MINIMUM_LIBRARY_LOG_LEVELS.items():
+        logging.getLogger(logger_name).setLevel(minimum_level)
     return logger
 
 

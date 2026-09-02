@@ -47,7 +47,7 @@ class BaseController(ABC, typing.Generic[T]):
             for name, field in self.options_model.model_fields.items():
                 annotation = field.annotation
                 origin = typing.get_origin(annotation)
-                required = not field.default is not PydanticUndefined
+                required = field.default is PydanticUndefined
                 kwargs = {"help": field.description, "required": required}
                 kwargs["default"] = field.default
                 default_args = typing.get_args(annotation)

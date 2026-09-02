@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import logging
 import typing
+from datetime import UTC, datetime
 
 from sqlmodel import Session, col, delete, select
 
-from ntk.models.sql.assessment import (
-    Assessment,
-    AssessmentEmbedding,
+from ntk.models.sql.resident import (
     AssessmentSource,
+    ResidentAssessment,
+    ResidentAssessmentEmbedding,
+    StatusType,
 )
+from ntk.utils.misc import require_id
 
 if typing.TYPE_CHECKING:
     from collections.abc import Sequence
@@ -26,12 +29,101 @@ class AssessmentRepo:
         """Initialize the repository with a database session."""
         self.session = session
 
+    def get_by_id(self, assessment_id: int) -> ResidentAssessment | None:
+        """Return one resident assessment by its database identifier."""
+        return self.session.get(ResidentAssessment, assessment_id)
+
+    def get_by_source_progress_note_id(
+        self,
+        progress_note_id: int,
+    ) -> ResidentAssessment | None:
+        """Return the assessment synchronized from one progress note."""
+        statement = select(ResidentAssessment).where(
+            ResidentAssessment.source_progress_note_id == progress_note_id,
+        )
+        return self.session.exec(statement).first()
+
+    def get_embedding(
+        self,
+        assessment_id: int,
+    ) -> ResidentAssessmentEmbedding | None:
+        """Return the stored vector record for one assessment."""
+        statement = select(ResidentAssessmentEmbedding).where(
+            ResidentAssessmentEmbedding.resident_assessment_id == assessment_id,
+        )
+        return self.session.exec(statement).first()
+
+    def create(self, assessment: ResidentAssessment) -> ResidentAssessment:
+        """Persist an assessment before its repairable embedding step."""
+        try:
+            self.session.add(assessment)
+            self.session.commit()
+            self.session.refresh(assessment)
+        except Exception:
+            self.session.rollback()
+            raise
+        return assessment
+
+    def get_all(self) -> list[ResidentAssessment]:
+        """Return all assessments newest first."""
+        return list(
+            self.session.exec(
+                select(ResidentAssessment).order_by(
+                    col(ResidentAssessment.created_at).desc(),
+                ),
+            ).all(),
+        )
+
+    def update(
+        self,
+        assessment: ResidentAssessment,
+        *,
+        embedding: list[float] | None = None,
+        model_name: str | None = None,
+    ) -> ResidentAssessment:
+        """Persist assessment edits and optionally replace its embedding."""
+        try:
+            self.session.add(assessment)
+            if embedding is not None:
+                stored_embedding = self.get_embedding(require_id(assessment.id))
+                if stored_embedding is None:
+                    stored_embedding = ResidentAssessmentEmbedding(
+                        resident_assessment_id=require_id(assessment.id),
+                        embedding_vector=embedding,
+                        model_name=model_name or "",
+                    )
+                else:
+                    stored_embedding.embedding_vector = embedding
+                    stored_embedding.model_name = (
+                        model_name or stored_embedding.model_name
+                    )
+                self.session.add(stored_embedding)
+            self.session.commit()
+            self.session.refresh(assessment)
+        except Exception:
+            self.session.rollback()
+            raise
+        return assessment
+
+    def finalize(self, assessment_id: int) -> ResidentAssessment | None:
+        """Mark one resident assessment as finalized and return it."""
+        assessment = self.get_by_id(assessment_id)
+        if assessment is None:
+            return None
+        if assessment.status is not StatusType.FINALIZED:
+            assessment.status = StatusType.FINALIZED
+            assessment.finalized_at = datetime.now(UTC)
+            self.session.add(assessment)
+            self.session.commit()
+            self.session.refresh(assessment)
+        return assessment
+
     def ingest_one(
         self,
-        assessment: Assessment,
+        assessment: ResidentAssessment,
         embeddings: list[float],
         model_name: str | None,
-    ) -> Assessment | None:
+    ) -> ResidentAssessment | None:
         """Ingest single assessment."""
         assessments = self.ingest_many(
             [assessment],
@@ -42,37 +134,41 @@ class AssessmentRepo:
 
     def ingest_many(
         self,
-        assessments: list[Assessment],
+        assessments: list[ResidentAssessment],
         embeddings: list[list[float]],
         model_name: str | None,
-    ) -> list[Assessment]:
+    ) -> list[ResidentAssessment]:
         """Store extracted SQL assessment records and their embeddings."""
         self._validate(assessments, embeddings, model_name)
         candidates = list(zip(assessments, embeddings, strict=True))
-        self.session.add_all(assessments)
-        self.session.flush()
-        self.session.add_all(
-            [
-                AssessmentEmbedding(
-                    assessment_id=assessment.id,
-                    embedding_vector=embedding,
-                    model_name=model_name or "",
-                )
-                for assessment, embedding in candidates
-            ],
-        )
-        self.session.commit()
+        try:
+            self.session.add_all(assessments)
+            self.session.flush()
+            self.session.add_all(
+                [
+                    ResidentAssessmentEmbedding(
+                        resident_assessment_id=require_id(assessment.id),
+                        embedding_vector=embedding,
+                        model_name=model_name or "",
+                    )
+                    for assessment, embedding in candidates
+                ],
+            )
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
         return assessments
 
     def ingest(
         self,
-        assessments: list[Assessment],
+        assessments: list[ResidentAssessment],
         embeddings: list[list[float]],
         model_name: str | None,
         *,
         overwrite: bool = False,
-    ) -> list[Assessment]:
-        """Store nonduplicate assessments, optionally replacing uploaded files."""
+    ) -> list[ResidentAssessment]:
+        """Store nonduplicate assessments, optionally replacing imported files."""
         self._validate(assessments, embeddings, model_name)
         if overwrite:
             filenames = {
@@ -80,9 +176,9 @@ class AssessmentRepo:
                 for assessment in assessments
                 if assessment.source_filename is not None
             }
-            self._delete_uploaded_sources(filenames)
+            self._delete_imported_sources(filenames)
 
-        unique_assessments: list[Assessment] = []
+        unique_assessments: list[ResidentAssessment] = []
         unique_embeddings: list[list[float]] = []
         seen_hashes: set[str] = set()
         for assessment, embedding in zip(assessments, embeddings, strict=True):
@@ -99,27 +195,31 @@ class AssessmentRepo:
             model_name,
         )
 
-    def _delete_uploaded_sources(self, filenames: set[str]) -> None:
+    def _delete_imported_sources(self, filenames: set[str]) -> None:
         if not filenames:
             return
         assessment_ids = self.session.exec(
-            select(Assessment.id).where(
-                Assessment.source == AssessmentSource.UPLOADED,
-                col(Assessment.source_filename).in_(filenames),
+            select(ResidentAssessment.id).where(
+                ResidentAssessment.assessment_source == AssessmentSource.IMPORTED,
+                col(ResidentAssessment.source_filename).in_(filenames),
             ),
         ).all()
         if assessment_ids:
             self.session.exec(
-                delete(AssessmentEmbedding).where(
-                    col(AssessmentEmbedding.assessment_id).in_(assessment_ids),
+                delete(ResidentAssessmentEmbedding).where(
+                    col(ResidentAssessmentEmbedding.resident_assessment_id).in_(
+                        assessment_ids,
+                    ),
                 ),
             )
             self.session.exec(
-                delete(Assessment).where(col(Assessment.id).in_(assessment_ids)),
+                delete(ResidentAssessment).where(
+                    col(ResidentAssessment.id).in_(assessment_ids),
+                ),
             )
             self.session.flush()
 
-    def is_duplicate_assessment(self, assessment: Assessment) -> bool:
+    def is_duplicate_assessment(self, assessment: ResidentAssessment) -> bool:
         """Use content hash to check if assessment exists in database.
 
         :param assessment: Assessment model instance
@@ -127,27 +227,28 @@ class AssessmentRepo:
         """
         result = set(
             self.session.exec(
-                select(Assessment.id).where(
-                    Assessment.content_hash == assessment.content_hash,
+                select(ResidentAssessment.id).where(
+                    ResidentAssessment.resident_id == assessment.resident_id,
+                    ResidentAssessment.content_hash == assessment.content_hash,
                 ),
             ).all(),
         )
         return len(result) > 0
 
     def count_assessments(self, source_filename: str) -> int:
-        """Return the number of assessments extracted from one uploaded file."""
+        """Return the number of assessments extracted from one imported file."""
         return len(
             self.session.exec(
-                select(Assessment.id).where(
-                    Assessment.source == AssessmentSource.UPLOADED,
-                    Assessment.source_filename == source_filename,
+                select(ResidentAssessment.id).where(
+                    ResidentAssessment.assessment_source == AssessmentSource.IMPORTED,
+                    ResidentAssessment.source_filename == source_filename,
                 ),
             ).all(),
         )
 
     @staticmethod
     def _validate(
-        assessments: Sequence[Assessment],
+        assessments: Sequence[ResidentAssessment],
         embeddings: Sequence[list[float]],
         model_name: str | None,
     ) -> None:

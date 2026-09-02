@@ -67,8 +67,8 @@ def test_get_api_keys_returns_matching_key_when_filtered(
 def test_grant_permission_tracks_permission_assignment(
     build_api_key_service: Callable[..., APIKeyService],
 ) -> None:
-    api_key = APIKey(name="demo", api_key_hash="hash", permissions=[])
-    permission = Permission(name="read")
+    api_key = APIKey(id=1, name="demo", api_key_hash="hash", permissions=[])
+    permission = Permission(id=2, name="read")
     service = build_api_key_service(permissions=[permission])
     service.grant_permission(api_key, "read")
     assert service.permission_repo.added_permissions == [(api_key.id, permission.id)]  # ty: ignore[unresolved-attribute]
@@ -77,8 +77,8 @@ def test_grant_permission_tracks_permission_assignment(
 def test_revoke_permission_tracks_permission_removal(
     build_api_key_service: Callable[..., APIKeyService],
 ) -> None:
-    api_key = APIKey(name="demo", api_key_hash="hash", permissions=[])
-    permission = Permission(name="read")
+    api_key = APIKey(id=1, name="demo", api_key_hash="hash", permissions=[])
+    permission = Permission(id=2, name="read")
     service = build_api_key_service(permissions=[permission])
     service.revoke_permission(api_key, "read")
     assert service.permission_repo.removed_permissions == [(api_key.id, permission.id)]  # ty: ignore[unresolved-attribute]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import typing
 
 import pytest
@@ -18,14 +19,14 @@ if typing.TYPE_CHECKING:
     import pathlib
 
 
-class DocumentExtractorService:
+class ResidentExtractionService:
     paths: typing.ClassVar[list[pathlib.Path]] = []
     document_types: typing.ClassVar[list[KnowledgeType]] = []
 
     def __init__(self, knowledge_repository: object) -> None:
         assert knowledge_repository == "repository"
 
-    def ingest_knowledge(
+    async def ingest_knowledge(
         self,
         path: pathlib.Path,
         document_type: KnowledgeType,
@@ -49,31 +50,32 @@ def test_knowledge_group_and_ingest_controller(
     (tmp_path / "manual.pdf").touch()
     (tmp_path / "notes.txt").touch()
     (tmp_path / "ignored.csv").touch()
-    DocumentExtractorService.paths = []
-    DocumentExtractorService.document_types = []
+    ResidentExtractionService.paths = []
+    ResidentExtractionService.document_types = []
     monkeypatch.setattr(
         ingest,
-        "DocumentExtractorService",
-        DocumentExtractorService,
+        "ResidentIngestionService",
+        ResidentExtractionService,
     )
+    monkeypatch.setattr(ingest, "KnowledgeRepo", lambda _session: "repository")
     group = KnowledgeControllerGroup()
     assert isinstance(group.subcommands[0], KnowledgeIngestController)
 
-    output = KnowledgeIngestController(
-        repository="repository",  # ty: ignore[invalid-argument-type]
-    ).run(
-        KnowledgeIngestOptions(
-            path=tmp_path,
-            document_type="diet-manual",
-            overwrite=True,
+    output = asyncio.run(
+        KnowledgeIngestController(session=object()).run(  # ty: ignore[invalid-argument-type]
+            KnowledgeIngestOptions(
+                path=tmp_path,
+                document_type="diet-manual",
+                overwrite=True,
+            ),
         ),
     )
     assert output.controller == "ingest"
-    assert [path.name for path in DocumentExtractorService.paths] == [
+    assert [path.name for path in ResidentExtractionService.paths] == [
         "manual.pdf",
         "notes.txt",
     ]
-    assert DocumentExtractorService.document_types == [
+    assert ResidentExtractionService.document_types == [
         KnowledgeType.DIET_MANUAL,
         KnowledgeType.DIET_MANUAL,
     ]

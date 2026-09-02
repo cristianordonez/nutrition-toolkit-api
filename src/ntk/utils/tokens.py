@@ -2,6 +2,27 @@ from __future__ import annotations
 
 import tiktoken
 
+_ESTIMATED_BYTES_PER_TOKEN = 3
+_TRUNCATION_MARKER = "\n[truncated]"
+
+
+def truncate_to_tokens(
+    text: str,
+    max_tokens: int,
+) -> str:
+    """Bound text using a conservative, network-free token estimate."""
+    if max_tokens <= 0:
+        msg = "Maximum tokens must be greater than 0"
+        raise ValueError(msg)
+    max_bytes = max_tokens * _ESTIMATED_BYTES_PER_TOKEN
+    encoded = text.encode()
+    if len(encoded) <= max_bytes:
+        return text
+    marker = _TRUNCATION_MARKER.encode()
+    content_limit = max(0, max_bytes - len(marker))
+    content = encoded[:content_limit].decode(errors="ignore")
+    return content + _TRUNCATION_MARKER
+
 
 def sliding_window(
     text: str,

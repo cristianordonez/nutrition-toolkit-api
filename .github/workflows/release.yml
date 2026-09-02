@@ -73,16 +73,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Update package.json version
-        run: |
-          INPUT="${{ needs.update-version.outputs.release-version }}"
-          VERSION=${INPUT#v}
-          uv pip install hatch
-          uv run hatch version $VERSION
       - name: Log into registry ${{ env.REGISTRY }}
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
         with:

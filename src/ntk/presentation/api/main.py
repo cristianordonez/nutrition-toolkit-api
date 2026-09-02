@@ -25,7 +25,7 @@ from ntk.database.db import initialize_database
 from ntk.logger import setup_logging
 from ntk.presentation.cli.app import create_root_parser
 
-from .routers import assessment, calculate, knowledge, resident
+from .routers import assessments, calculate, documents, knowledge, residents, search
 
 app = FastAPI()
 
@@ -58,16 +58,30 @@ app.include_router(
 
 
 app.include_router(
-    assessment.router,
+    assessments.router,
     prefix="/api/v1",
-    tags=["assessment"],
+    tags=["assessments"],
 )
 
 
 app.include_router(
-    resident.router,
+    documents.router,
     prefix="/api/v1",
-    tags=["resident"],
+    tags=["documents"],
+)
+
+
+app.include_router(
+    search.router,
+    prefix="/api/v1",
+    tags=["search"],
+)
+
+
+app.include_router(
+    residents.router,
+    prefix="/api/v1",
+    tags=["residents"],
 )
 
 
