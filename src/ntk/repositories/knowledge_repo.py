@@ -21,7 +21,7 @@ if typing.TYPE_CHECKING:
     import pathlib
     from collections.abc import Sequence
 
-    from ntk.models.knowledge import KnowledgeType
+    from ntk.models.knowledge import KnowledgeChunkCreate, KnowledgeType
 
 logger = logging.getLogger(__name__)
 _METADATA_ADAPTER = TypeAdapter(dict[str, object])
@@ -37,7 +37,7 @@ class KnowledgeRepo:
     def ingest(
         self,
         knowledge: Knowledge,
-        chunks: Sequence[str],
+        chunks: Sequence[KnowledgeChunkCreate],
         embeddings: Sequence[list[float]],
         model_name: str | None,
         *,
@@ -100,19 +100,22 @@ class KnowledgeRepo:
     def create_knowledge_chunks(
         self,
         knowledge: Knowledge,
-        chunks: Sequence[str],
+        chunks: Sequence[KnowledgeChunkCreate],
     ) -> list[KnowledgeChunk]:
         """Create knowledge chunk models.
 
         :param knowledge: Knowledge model
-        :param chunks: list of chunks
+        :param chunks: chunks with section and page provenance
         :return: KnowledgeChunk list
         """
         return [
             KnowledgeChunk(
                 knowledge_id=require_id(knowledge.id),
                 chunk_index=i,
-                content=chunk,
+                content=chunk.content,
+                section_title=chunk.section_title,
+                source_page_start=chunk.source_page_start,
+                source_page_end=chunk.source_page_end,
             )
             for i, chunk in enumerate(chunks)
         ]
@@ -172,7 +175,7 @@ class KnowledgeRepo:
 
     @staticmethod
     def _validate(
-        chunks: Sequence[str],
+        chunks: Sequence[KnowledgeChunkCreate],
         embeddings: Sequence[list[float]],
         model_name: str | None,
     ) -> None:

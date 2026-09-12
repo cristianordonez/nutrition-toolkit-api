@@ -1,4 +1,4 @@
-"""Narrative resident clinical-fact domain model."""
+"""Narrative person clinical-fact domain model."""
 
 from __future__ import annotations
 
@@ -9,28 +9,26 @@ from enum import StrEnum
 from sqlalchemy import Column, Enum
 from sqlmodel import Field, Relationship, SQLModel
 
+from .common import utc_now
+
 if typing.TYPE_CHECKING:
     from ntk.models.sql.extracted_fact import ExtractedFact
-    from ntk.models.sql.resident import Resident
+    from ntk.models.sql.person import Person
 
 
 class ClinicalFactType(StrEnum):
-    """Classify a resident clinical fact as an observation or event."""
+    """Classify a person clinical fact as an observation or event."""
 
     OBSERVATION = "observation"
     EVENT = "event"
 
 
-class ResidentClinicalFact(SQLModel, table=True):
-    """A narrative observation or event without a dedicated resident table."""
+class PersonClinicalFact(SQLModel, table=True):
+    """A narrative observation or event without a dedicated person table."""
 
-    __tablename__ = "resident_clinical_fact"
+    __tablename__ = "person_clinical_fact"
     id: int | None = Field(default=None, primary_key=True)
-    resident_id: int = Field(foreign_key="resident.id", index=True)
-    resident_facility_stay_id: int | None = Field(
-        default=None,
-        foreign_key="resident_facility_stay.id",
-    )
+    person_id: int = Field(foreign_key="person.id", index=True)
     clinical_fact_type: ClinicalFactType = Field(
         sa_column=Column(
             Enum(
@@ -46,17 +44,18 @@ class ResidentClinicalFact(SQLModel, table=True):
     status: str | None = None
     severity: str | None = None
     description: str | None = None
-    observed_at: datetime = Field(index=True)
+    observed_at: datetime | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=utc_now, index=True)
     extracted_fact_id: int | None = Field(
         default=None,
         foreign_key="extracted_fact.id",
         index=True,
         unique=True,
     )
-    resident: Resident = Relationship(back_populates="clinical_facts")
+    person: Person = Relationship(back_populates="clinical_facts")
     extracted_fact: ExtractedFact = Relationship(
         back_populates="clinical_facts",
     )
 
 
-__all__ = ["ClinicalFactType", "ResidentClinicalFact"]
+__all__ = ["ClinicalFactType", "PersonClinicalFact"]

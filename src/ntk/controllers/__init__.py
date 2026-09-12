@@ -10,8 +10,7 @@ _COMMAND_GROUP_MODULES = (
     "ntk.controllers.documents.app",
     "ntk.controllers.key.app",
     "ntk.controllers.knowledge.app",
-    "ntk.controllers.residents.app",
-    "ntk.controllers.search.app",
+    "ntk.controllers.persons.app",
     "ntk.controllers.tubefeed.app",
 )
 

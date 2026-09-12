@@ -4,7 +4,14 @@ import typing
 
 import pytest
 
-from ntk.services.calculator_service import BMICategory, CalculatorService, WeightBasis
+from ntk.services.calculators import (
+    BMICategory,
+    EnergyNeedsInput,
+    Gender,
+    NutritionCalculator,
+    RangeResult,
+    WeightBasis,
+)
 
 _TEST_WEIGHT = 220.0
 _TEST_IBW = 142.0
@@ -19,6 +26,7 @@ _TEST_AIBW = 161.5
     ],
 )
 def test_mifflin(  # noqa: PLR0913
+    *,
     height: int,
     weight: float,
     gender: typing.Literal["m", "f"],
@@ -26,8 +34,16 @@ def test_mifflin(  # noqa: PLR0913
     activity: float,
     expected: float,
 ) -> None:
-    calculator = CalculatorService(height, weight, gender, age, activity)
-    assert calculator.mifflin == expected
+    assert (
+        NutritionCalculator.calculate_mifflin(
+            weight,
+            height,
+            Gender(gender),
+            age,
+            activity,
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -38,8 +54,7 @@ def test_mifflin(  # noqa: PLR0913
     ],
 )
 def test_bmi(height: int, weight: float, expected: float) -> None:
-    calculator = CalculatorService(height, weight, "m", 30)
-    assert calculator.bmi == expected
+    assert NutritionCalculator.calculate_bmi(weight, height) == expected
 
 
 @pytest.mark.parametrize(
@@ -50,14 +65,14 @@ def test_bmi(height: int, weight: float, expected: float) -> None:
     ],
 )
 def test_ibw(height: int, gender: typing.Literal["m", "f"], expected: float) -> None:
-    calculator = CalculatorService(height, 150.0, gender, 30)
-    assert calculator.ibw == expected
+    assert NutritionCalculator.calculate_ibw(Gender(gender), height) == expected
 
 
 def test_aibw() -> None:
-    calculator = CalculatorService(66, _TEST_WEIGHT, "m", 30)
-    assert calculator.ibw == _TEST_IBW
-    assert calculator.aibw == _TEST_AIBW
+    assert NutritionCalculator.calculate_ibw(Gender.MALE, 66) == _TEST_IBW
+    assert (
+        NutritionCalculator.calculate_aibw(_TEST_WEIGHT, 66, Gender.MALE) == _TEST_AIBW
+    )
 
 
 @pytest.mark.parametrize(
@@ -73,8 +88,14 @@ def test_bmi_adjusted_for_amputation(
     amputation: float,
     expected: float,
 ) -> None:
-    calculator = CalculatorService(height, weight, "f", 40, amputation=amputation)
-    assert calculator.bmi_adjusted_for_amputation == expected
+    assert (
+        NutritionCalculator.calculate_bmi_adjusted_for_amputation(
+            weight,
+            height,
+            amputation,
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -90,8 +111,14 @@ def test_ibw_adjusted_for_amputation(
     amputation: float,
     expected: float,
 ) -> None:
-    calculator = CalculatorService(height, 150.0, gender, 35, amputation=amputation)
-    assert calculator.ibw_adjusted_for_amputation == expected
+    assert (
+        NutritionCalculator.calculate_ibw_adjusted_for_amputation(
+            Gender(gender),
+            height,
+            amputation,
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -107,28 +134,15 @@ def test_aibw_adjusted_for_amputation(
     amputation: float,
     expected: float,
 ) -> None:
-    calculator = CalculatorService(height, weight, "m", 50, amputation=amputation)
-    assert calculator.aibw_adjusted_for_amputation == expected
-
-
-@pytest.mark.parametrize(
-    ("property_name", "error_message"),
-    [
-        ("bmi_adjusted_for_amputation", "No amputation provided, unable to adjust BMI"),
-        ("ibw_adjusted_for_amputation", "No amputation provided, unable to adjust IBW"),
-        (
-            "aibw_adjusted_for_amputation",
-            "No amputation provided, unable to adjust Obese IBW",
-        ),
-    ],
-)
-def test_amputation_properties_raise_when_missing(
-    property_name: str,
-    error_message: str,
-) -> None:
-    calculator = CalculatorService(66, 180.0, "f", 40)
-    with pytest.raises(ValueError, match=error_message):
-        getattr(calculator, property_name)
+    assert (
+        NutritionCalculator.calculate_aibw_adjusted_for_amputation(
+            weight,
+            height,
+            Gender.MALE,
+            amputation,
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -147,13 +161,13 @@ def test_determine_bmi_category(
     age: int,
     expected_category: BMICategory,
 ) -> None:
-    calculator = CalculatorService(height, weight, "m", age)
-    assert calculator._determine_bmi_category() is expected_category  # noqa: SLF001
+    bmi = NutritionCalculator.calculate_bmi(weight, height)
+    assert NutritionCalculator.determine_bmi_category(bmi, age) is expected_category
 
 
 def test_determine_bmi_category_uses_geriatric_recommendation() -> None:
-    calculator = CalculatorService(66, 165.0, "m", 75)
-    assert calculator._determine_bmi_category() is BMICategory.NORMAL  # noqa: SLF001
+    bmi = NutritionCalculator.calculate_bmi(165.0, 66)
+    assert NutritionCalculator.determine_bmi_category(bmi, 75) is BMICategory.NORMAL
 
 
 @pytest.mark.parametrize(
@@ -171,17 +185,59 @@ def test_determine_weight_basis(
     weight: float,
     expected_basis: WeightBasis,
 ) -> None:
-    calculator = CalculatorService(height, weight, "m", 30)
-    bmi_category = calculator._determine_bmi_category()  # noqa: SLF001
-    assert calculator._determine_weight_basis(bmi_category) is expected_basis  # noqa: SLF001
+    bmi = NutritionCalculator.calculate_bmi(weight, height)
+    bmi_category = NutritionCalculator.determine_bmi_category(bmi, 30)
+    assert NutritionCalculator.determine_weight_basis(bmi_category) is expected_basis
 
 
 def test_get_weight_for_basis() -> None:
-    calculator = CalculatorService(66, _TEST_WEIGHT, "m", 30)
-    assert calculator.get_weight(WeightBasis.CBW) == _TEST_WEIGHT
-    assert calculator.get_weight(WeightBasis.IBW) == _TEST_IBW
-    assert calculator.get_weight(WeightBasis.AIBW) == _TEST_AIBW
+    weights = {
+        "current_weight": _TEST_WEIGHT,
+        "ideal_weight": _TEST_IBW,
+        "adjusted_weight": _TEST_AIBW,
+    }
+    assert NutritionCalculator.get_weight(WeightBasis.CBW, **weights) == _TEST_WEIGHT
+    assert NutritionCalculator.get_weight(WeightBasis.IBW, **weights) == _TEST_IBW
+    assert NutritionCalculator.get_weight(WeightBasis.AIBW, **weights) == _TEST_AIBW
 
 
 def test_get_range() -> None:
-    assert CalculatorService.get_range(100.0, (0.8, 1.2)) == (80, 120)
+    assert NutritionCalculator.calculate_range(100.0, (0.8, 1.2)) == RangeResult(
+        low=80,
+        high=120,
+    )
+
+
+def test_calculate_returns_complete_structured_result() -> None:
+    result = NutritionCalculator.calculate(
+        EnergyNeedsInput(
+            height_in=66,
+            weight_lb=_TEST_WEIGHT,
+            gender=Gender.MALE,
+            age=70,
+            dialysis=True,
+        ),
+    )
+
+    assert result.bmi_category == BMICategory.OBESE.name
+    assert result.weight_basis == WeightBasis.AIBW.value
+    assert result.calculation_weight_lb == _TEST_AIBW
+    assert result.protein_factor == RangeResult(low=1.2, high=1.5)
+    assert result.calories_kcal_day.low > 0
+    assert result.mifflin_kcal_day > 0
+
+
+def test_calculate_honors_manual_factors() -> None:
+    result = NutritionCalculator.calculate(
+        EnergyNeedsInput(
+            height_in=68,
+            weight_lb=150,
+            gender=Gender.FEMALE,
+            age=40,
+            calorie_factor=(22, 27),
+            protein_factor=(1.1, 1.3),
+        ),
+    )
+
+    assert result.calorie_factor == RangeResult(low=22, high=27)
+    assert result.protein_factor == RangeResult(low=1.1, high=1.3)

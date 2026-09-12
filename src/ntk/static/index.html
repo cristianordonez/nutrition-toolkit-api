@@ -3,509 +3,1313 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Nutrition Toolkit</title>
+        <title>Nutrition Toolkit · Clinical Nutrition Workspace</title>
         <style>
-            :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-            body { align-items: center; background: #f4f7fb; color: #172033; display: flex; justify-content: center; margin: 0; min-height: 100vh; padding: 24px; }
-            main { background: #fff; border: 1px solid #dce3ef; border-radius: 12px; box-shadow: 0 12px 30px rgb(20 35 60 / 8%); max-width: 680px; padding: 32px; width: 100%; }
-            h1, h2 { margin: 0 0 8px; }
-            h1 { font-size: 1.5rem; }
-            h2 { font-size: 1.2rem; }
-            p { color: #526074; line-height: 1.5; margin: 0 0 24px; }
-            .fields { display: grid; gap: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .full-width { grid-column: 1 / -1; }
-            label { display: block; font-size: .9rem; font-weight: 650; margin-bottom: 6px; }
-            input, select, button { font: inherit; }
-            input, select { border: 1px solid #b9c4d5; border-radius: 7px; box-sizing: border-box; padding: 10px; width: 100%; }
-            input[type="checkbox"] { margin-right: 6px; padding: 0; width: auto; }
-            input:disabled, select:disabled { background: #edf1f6; color: #77849a; }
-            .hint { color: #66758b; display: block; font-size: .8rem; margin-top: 5px; }
-            button { background: #155eef; border: 0; border-radius: 7px; color: #fff; cursor: pointer; font-weight: 650; margin-top: 24px; padding: 11px 16px; }
-            button:hover { background: #004ee8; }
-            button:disabled { cursor: wait; opacity: .7; }
-            .status { border-radius: 7px; display: none; margin-top: 20px; padding: 12px; }
-            .status.success { background: #dcfae6; color: #075c2f; display: block; }
-            .status.error { background: #fee4e2; color: #b42318; display: block; }
-            .search-section { border-top: 1px solid #dce3ef; margin-top: 32px; padding-top: 28px; }
-            .search-fields { align-items: end; display: grid; gap: 12px; grid-template-columns: 1fr 100px auto; }
-            .search-fields button { margin-top: 0; }
-            .search-results { display: grid; gap: 12px; margin-top: 18px; }
-            .search-result { border: 1px solid #dce3ef; border-radius: 8px; padding: 14px; }
-            .search-result strong { display: block; margin-bottom: 6px; }
-            .search-result p { color: #344054; margin: 0 0 8px; white-space: pre-wrap; }
-            .similarity { color: #66758b; font-size: .8rem; }
-            textarea { border: 1px solid #b9c4d5; border-radius: 7px; box-sizing: border-box; font: inherit; min-height: 240px; padding: 12px; resize: vertical; width: 100%; }
-            .drop-zone { align-items: center; border: 2px dashed #98a6ba; border-radius: 10px; color: #526074; cursor: pointer; display: flex; flex-direction: column; gap: 6px; justify-content: center; min-height: 120px; padding: 20px; text-align: center; transition: border-color .15s, background .15s; }
-            .drop-zone:hover, .drop-zone:focus, .drop-zone.drag-over { background: #eef4ff; border-color: #155eef; outline: none; }
-            .drop-zone strong { color: #172033; }
-            .visually-hidden { height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px; clip: rect(0 0 0 0); white-space: nowrap; }
-            @media (max-width: 540px) { .fields { grid-template-columns: 1fr; } }
-            @media (max-width: 540px) { .search-fields { grid-template-columns: 1fr; } }
+            :root {
+                color-scheme: light;
+                font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                --navy: #172a3a;
+                --navy-soft: #31495b;
+                --green: #19705b;
+                --green-dark: #115746;
+                --green-pale: #eaf5f1;
+                --ink: #17212b;
+                --muted: #637381;
+                --line: #dce4e7;
+                --surface: #ffffff;
+                --canvas: #f5f7f6;
+                --warning: #8b5e16;
+                --danger: #a33a32;
+                --shadow: 0 16px 44px rgb(23 42 58 / 8%);
+            }
+
+            * { box-sizing: border-box; }
+            body { background: var(--canvas); color: var(--ink); margin: 0; min-height: 100vh; }
+            button, input, select, textarea { font: inherit; }
+            button { cursor: pointer; }
+            button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+                outline: 3px solid rgb(25 112 91 / 24%);
+                outline-offset: 2px;
+            }
+            [hidden] { display: none !important; }
+
+            .app-header {
+                align-items: center;
+                background: var(--surface);
+                border-bottom: 1px solid var(--line);
+                display: flex;
+                justify-content: space-between;
+                min-height: 68px;
+                padding: 12px clamp(20px, 4vw, 64px);
+                position: sticky;
+                top: 0;
+                z-index: 10;
+            }
+            .brand { align-items: center; display: flex; gap: 12px; }
+            .brand-mark {
+                align-items: center;
+                background: var(--green);
+                border-radius: 10px;
+                color: white;
+                display: flex;
+                font-size: 1.15rem;
+                font-weight: 800;
+                height: 38px;
+                justify-content: center;
+                width: 38px;
+            }
+            .brand strong { color: var(--navy); display: block; font-size: .98rem; }
+            .brand span { color: var(--muted); display: block; font-size: .78rem; margin-top: 1px; }
+            .header-action { color: var(--green-dark); }
+            .header-tools { align-items: center; display: flex; gap: 12px; }
+            .header-key { align-items: center; display: flex; gap: 8px; }
+            .header-key label { margin: 0; white-space: nowrap; }
+            .header-key input { min-width: 210px; }
+
+            .feature-nav-wrap { background: var(--surface); border-bottom: 1px solid var(--line); overflow-x: auto; }
+            .feature-nav { display: flex; gap: 4px; margin: 0 auto; max-width: 1440px; padding: 10px clamp(20px, 4vw, 64px); }
+            .feature-tab {
+                border-bottom: 2px solid transparent;
+                color: var(--muted);
+                font-size: .82rem;
+                font-weight: 750;
+                padding: 10px 13px 8px;
+                text-decoration: none;
+                white-space: nowrap;
+            }
+            .feature-tab:hover { color: var(--green-dark); }
+            .feature-tab.active { border-bottom-color: var(--green); color: var(--green-dark); }
+            .feature-view[hidden] { display: none; }
+
+            .shell { margin: 0 auto; max-width: 1440px; padding: clamp(28px, 5vw, 64px); }
+            .eyebrow {
+                color: var(--green);
+                font-size: .72rem;
+                font-weight: 800;
+                letter-spacing: .11em;
+                margin: 0 0 10px;
+                text-transform: uppercase;
+            }
+            h1, h2, h3, p { margin-top: 0; }
+            h1 { color: var(--navy); font-size: clamp(2rem, 4vw, 3.15rem); letter-spacing: -.035em; line-height: 1.08; margin-bottom: 16px; }
+            h2 { color: var(--navy); font-size: 1.25rem; letter-spacing: -.015em; }
+            h3 { color: var(--navy); font-size: .91rem; letter-spacing: .01em; margin-bottom: 8px; }
+            .lede { color: var(--muted); font-size: 1.02rem; line-height: 1.65; max-width: 690px; }
+
+            .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+            .upload-layout { align-items: center; display: grid; gap: clamp(32px, 7vw, 100px); grid-template-columns: minmax(280px, .8fr) minmax(420px, 1.2fr); min-height: calc(100vh - 196px); }
+            .upload-card { padding: clamp(24px, 4vw, 42px); }
+            .upload-card h2 { font-size: 1.35rem; margin-bottom: 8px; }
+            .upload-card > p { color: var(--muted); line-height: 1.5; margin-bottom: 22px; }
+            .api-field { margin-bottom: 18px; }
+            label { color: var(--navy-soft); display: block; font-size: .78rem; font-weight: 750; margin-bottom: 7px; }
+            input[type="password"] {
+                border: 1px solid #bdcace;
+                border-radius: 9px;
+                padding: 11px 12px;
+                width: 100%;
+            }
+            .field-hint { color: var(--muted); display: block; font-size: .72rem; line-height: 1.4; margin-top: 6px; }
+            .drop-zone {
+                align-items: center;
+                background: #fbfcfc;
+                border: 1.5px dashed #9cb2ad;
+                border-radius: 13px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                min-height: 210px;
+                padding: 24px;
+                text-align: center;
+                transition: background .18s, border-color .18s, transform .18s;
+            }
+            .drop-zone:hover, .drop-zone.drag-over { background: var(--green-pale); border-color: var(--green); transform: translateY(-1px); }
+            .upload-icon {
+                align-items: center;
+                background: var(--green-pale);
+                border-radius: 50%;
+                color: var(--green);
+                display: flex;
+                font-size: 1.35rem;
+                height: 48px;
+                justify-content: center;
+                margin-bottom: 14px;
+                width: 48px;
+            }
+            .drop-zone strong { color: var(--navy); font-size: .96rem; }
+            .drop-zone p { color: var(--muted); font-size: .83rem; margin: 6px 0 15px; }
+            .selected-file { color: var(--green-dark); font-size: .78rem; font-weight: 700; margin-top: 13px; overflow-wrap: anywhere; }
+            .visually-hidden { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+
+            .button {
+                align-items: center;
+                border: 1px solid transparent;
+                border-radius: 9px;
+                display: inline-flex;
+                font-size: .82rem;
+                font-weight: 750;
+                gap: 7px;
+                justify-content: center;
+                min-height: 40px;
+                padding: 9px 15px;
+                text-decoration: none;
+            }
+            .button.primary { background: var(--green); color: white; }
+            .button.primary:hover { background: var(--green-dark); }
+            .button.secondary { background: white; border-color: #bdcace; color: var(--navy); }
+            .button.secondary:hover, .button.ghost:hover { background: #f0f5f3; }
+            .button.ghost { background: transparent; color: var(--green-dark); padding-left: 8px; padding-right: 8px; }
+            .button.danger { background: white; border-color: #dfc5c2; color: var(--danger); }
+            .button:disabled { cursor: not-allowed; opacity: .55; }
+            .generate-button { margin-top: 18px; width: 100%; }
+            .button-spinner {
+                animation: spin .8s linear infinite;
+                border: 2px solid rgb(255 255 255 / 42%);
+                border-radius: 50%;
+                border-top-color: white;
+                height: 15px;
+                width: 15px;
+            }
+            .drop-zone[aria-disabled="true"] { cursor: not-allowed; opacity: .68; pointer-events: none; }
+
+            .error-banner {
+                background: #fff5f4;
+                border: 1px solid #efceca;
+                border-radius: 10px;
+                color: var(--danger);
+                font-size: .82rem;
+                line-height: 1.5;
+                margin-top: 16px;
+                padding: 12px 14px;
+            }
+
+            .tool-shell { margin: 0 auto; max-width: 1180px; padding: clamp(32px, 5vw, 64px); }
+            .tool-heading { margin-bottom: 28px; }
+            .tool-heading h1 { font-size: clamp(1.8rem, 3.4vw, 2.55rem); margin-bottom: 10px; }
+            .tool-heading .lede { max-width: 760px; }
+            .tool-layout { align-items: start; display: grid; gap: 22px; grid-template-columns: minmax(320px, .82fr) minmax(360px, 1.18fr); }
+            .tool-card { padding: 26px; }
+            .tool-card h2 { margin-bottom: 6px; }
+            .tool-card > p { color: var(--muted); font-size: .83rem; line-height: 1.5; margin-bottom: 22px; }
+            .form-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .form-field { margin: 0; }
+            .form-field.full { grid-column: 1 / -1; }
+            .form-field input:not([type="checkbox"]), .form-field select, .form-field textarea,
+            .header-key input {
+                background: white;
+                border: 1px solid #bdcace;
+                border-radius: 9px;
+                color: var(--ink);
+                padding: 10px 11px;
+                width: 100%;
+            }
+            .form-field textarea { min-height: 112px; resize: vertical; }
+            .check-field { align-items: center; display: flex; gap: 9px; min-height: 40px; padding-top: 21px; }
+            .check-field label { margin: 0; }
+            .form-actions { border-top: 1px solid var(--line); grid-column: 1 / -1; margin-top: 3px; padding-top: 18px; }
+            .form-actions .button { width: 100%; }
+            .result-card { min-height: 320px; padding: 26px; }
+            .result-card.loading { opacity: .68; }
+            .result-placeholder { align-items: center; color: var(--muted); display: flex; flex-direction: column; justify-content: center; min-height: 265px; text-align: center; }
+            .result-placeholder strong { color: var(--navy); margin-bottom: 7px; }
+            .result-metrics { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .result-metric { background: #f4f8f6; border: 1px solid #e4ece9; border-radius: 10px; padding: 14px; }
+            .result-metric span { color: var(--muted); display: block; font-size: .69rem; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
+            .result-metric strong { color: var(--navy); display: block; font-size: 1rem; line-height: 1.35; }
+            .result-metric small { color: var(--muted); display: block; line-height: 1.4; margin-top: 4px; }
+            .result-summary { border-left: 3px solid var(--green); color: var(--navy-soft); line-height: 1.6; margin: 18px 0 0; padding: 3px 0 3px 14px; }
+            .conditional-fields { display: contents; }
+            .knowledge-layout { grid-template-columns: minmax(300px, .68fr) minmax(420px, 1.32fr); }
+            .search-results { display: grid; gap: 13px; }
+            .search-result { border: 1px solid var(--line); border-radius: 11px; padding: 17px; }
+            .search-result-meta { color: var(--green-dark); display: flex; flex-wrap: wrap; font-size: .72rem; font-weight: 750; gap: 6px 12px; margin-bottom: 10px; }
+            .search-result p { color: #344651; font-size: .87rem; line-height: 1.62; margin: 0; white-space: pre-wrap; }
+
+            .processing-wrap { max-width: 760px; padding-bottom: clamp(30px, 5vw, 60px); padding-top: 0; }
+            .processing-card { border-top: 3px solid var(--green); padding: clamp(28px, 5vw, 42px); }
+            .processing-header { align-items: flex-start; display: flex; gap: 16px; margin-bottom: 24px; }
+            .spinner { border: 3px solid #cfe1dc; border-radius: 50%; border-top-color: var(--green); flex: 0 0 auto; height: 34px; width: 34px; animation: spin .9s linear infinite; }
+            .processing-header h1 { font-size: 1.55rem; margin-bottom: 5px; }
+            .processing-header p { color: var(--muted); font-size: .86rem; margin-bottom: 0; }
+            .processing-current { color: var(--navy-soft); font-size: .9rem; font-weight: 700; line-height: 1.5; margin: 0 0 17px; }
+            .processing-elapsed { color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; font-weight: 650; margin-left: 7px; }
+            .pipeline { list-style: none; margin: 0; padding: 0; }
+            .pipeline li { align-items: center; color: #819099; display: flex; font-size: .88rem; gap: 12px; min-height: 39px; position: relative; }
+            .pipeline li::before { align-items: center; background: #e6ecea; border: 2px solid #cbd6d3; border-radius: 50%; content: ""; display: flex; flex: 0 0 auto; font-size: 9px; font-weight: 900; height: 15px; justify-content: center; width: 15px; }
+            .pipeline li:not(:last-child)::after { background: #dce5e2; content: ""; height: 18px; left: 7px; position: absolute; top: 29px; width: 1px; }
+            .pipeline li.complete { color: var(--navy-soft); }
+            .pipeline li.complete::before { background: var(--green); border-color: var(--green); color: white; content: "✓"; }
+            .pipeline li.active { color: var(--green-dark); font-weight: 750; }
+            .pipeline li.active::before { animation: status-pulse 1.8s ease-in-out infinite; background: white; border-color: var(--green); box-shadow: 0 0 0 4px var(--green-pale); }
+            .processing-note { border-top: 1px solid var(--line); color: var(--muted); font-size: .74rem; line-height: 1.5; margin: 25px 0 0; padding-top: 18px; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            @keyframes status-pulse { 50% { box-shadow: 0 0 0 7px rgb(234 245 241 / 45%); } }
+
+            .result-shell { padding-top: 28px; }
+            .result-header { align-items: flex-end; display: flex; gap: 22px; justify-content: space-between; margin-bottom: 22px; }
+            .identity { align-items: center; display: flex; gap: 14px; }
+            .avatar { align-items: center; background: var(--navy); border-radius: 12px; color: white; display: flex; font-weight: 800; height: 48px; justify-content: center; letter-spacing: .04em; width: 48px; }
+            .identity h1 { font-size: clamp(1.45rem, 2.3vw, 2rem); margin-bottom: 4px; }
+            .person-meta { color: var(--muted); font-size: .82rem; margin: 0; }
+            .result-status { align-items: flex-end; display: flex; flex-direction: column; gap: 10px; }
+            .badge { background: var(--green-pale); border-radius: 999px; color: var(--green-dark); font-size: .72rem; font-weight: 800; letter-spacing: .035em; padding: 6px 10px; text-transform: uppercase; }
+            .result-grid { align-items: start; display: grid; gap: 20px; grid-template-columns: minmax(290px, 36%) minmax(0, 64%); }
+            .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+            .panel-heading { align-items: center; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; padding: 18px 20px; }
+            .panel-heading h2 { font-size: 1rem; margin: 0; }
+            .snapshot-body { display: grid; gap: 0; padding: 4px 20px 14px; }
+            .snapshot-card { border-bottom: 1px solid #e8edef; padding: 16px 0; }
+            .snapshot-card:last-child { border-bottom: 0; }
+            .snapshot-label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .07em; margin-bottom: 7px; text-transform: uppercase; }
+            .snapshot-value { color: var(--navy); font-size: .92rem; font-weight: 720; line-height: 1.45; margin: 0; }
+            .snapshot-detail { color: var(--muted); font-size: .76rem; line-height: 1.45; margin: 4px 0 0; }
+            .snapshot-detail.meaningful { color: var(--warning); font-weight: 700; }
+            .mini-list { display: grid; gap: 7px; list-style: none; margin: 0; padding: 0; }
+            .mini-list li { color: var(--navy-soft); font-size: .8rem; line-height: 1.45; }
+            .lab-flag { color: var(--warning); font-weight: 800; }
+            .empty-note { color: var(--muted); font-size: .8rem; padding: 20px 0; }
+
+            .assessment-panel { box-shadow: var(--shadow); }
+            .assessment-body { padding: 7px 28px 16px; }
+            .assessment-section { border-bottom: 1px solid #e8edef; padding: 24px 0; }
+            .assessment-section:last-child { border-bottom: 0; }
+            .assessment-section h3 { font-size: .96rem; margin-bottom: 11px; }
+            .assessment-section p { color: #344651; font-family: Georgia, "Times New Roman", serif; font-size: .96rem; line-height: 1.75; margin: 0; white-space: pre-wrap; }
+            .evidence-link { background: none; border: 0; color: var(--green); font-size: .72rem; font-weight: 750; margin-top: 11px; padding: 0; }
+            .editor {
+                border: 1px solid #adbfba;
+                border-radius: 10px;
+                color: #2b3b45;
+                line-height: 1.65;
+                min-height: 520px;
+                padding: 16px;
+                resize: vertical;
+                width: 100%;
+            }
+            .panel-actions { align-items: center; background: #fbfcfc; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; padding: 14px 18px; }
+            .save-state { color: var(--muted); font-size: .75rem; margin-right: auto; }
+
+            dialog { background: white; border: 0; border-radius: 15px; box-shadow: 0 25px 80px rgb(23 42 58 / 28%); color: var(--ink); max-height: min(720px, 88vh); max-width: min(570px, calc(100vw - 32px)); padding: 0; width: 100%; }
+            dialog::backdrop { background: rgb(17 31 42 / 48%); backdrop-filter: blur(2px); }
+            .dialog-header { align-items: center; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; padding: 18px 22px; }
+            .dialog-header h2 { font-size: 1.05rem; margin: 0; }
+            .dialog-close { background: none; border: 0; color: var(--muted); font-size: 1.25rem; padding: 4px 8px; }
+            .dialog-body { max-height: calc(88vh - 68px); overflow-y: auto; padding: 22px; }
+            .evidence-list { display: grid; gap: 11px; list-style: none; margin: 0; padding: 0; }
+            .evidence-list li { border-left: 2px solid #a9c9c0; color: var(--navy-soft); font-size: .82rem; line-height: 1.5; padding-left: 12px; }
+            .metric-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); margin-top: 20px; }
+            .metric { background: #f4f8f6; border-radius: 9px; padding: 13px; }
+            .metric span { color: var(--muted); display: block; font-size: .68rem; margin-bottom: 5px; }
+            .metric strong { color: var(--navy); font-size: 1rem; }
+            .detail-pipeline { color: var(--navy-soft); font-size: .8rem; line-height: 1.75; margin: 0; white-space: pre-line; }
+
+            .toast { background: var(--navy); border-radius: 9px; bottom: 24px; color: white; font-size: .8rem; left: 50%; padding: 11px 16px; position: fixed; transform: translate(-50%, 18px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 40; }
+            .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
+            @media (max-width: 900px) {
+                .upload-layout { grid-template-columns: 1fr; min-height: auto; }
+                .upload-intro { text-align: center; }
+                .upload-intro .lede { margin-left: auto; margin-right: auto; }
+                .result-grid { grid-template-columns: 1fr; }
+                .clinical-panel { order: 1; }
+                .assessment-panel { order: 2; }
+                .tool-layout, .knowledge-layout { grid-template-columns: 1fr; }
+            }
+            @media (max-width: 620px) {
+                .app-header { padding: 11px 16px; }
+                .brand span { display: none; }
+                .shell { padding: 24px 16px; }
+                .result-header { align-items: flex-start; flex-direction: column; }
+                .result-status { align-items: flex-start; }
+                .assessment-body { padding-left: 20px; padding-right: 20px; }
+                .panel-actions { flex-wrap: wrap; }
+                .save-state { flex-basis: 100%; }
+                .metric-grid { grid-template-columns: 1fr; }
+                .app-header { align-items: flex-start; }
+                .header-tools { align-items: flex-end; flex-direction: column; gap: 4px; }
+                .header-key label { display: none; }
+                .header-key input { min-width: 145px; width: 145px; }
+                .feature-nav { padding-left: 12px; padding-right: 12px; }
+                .form-grid, .result-metrics { grid-template-columns: 1fr; }
+                .form-field.full, .form-actions { grid-column: auto; }
+                .tool-shell { padding: 28px 16px; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+            }
         </style>
     </head>
     <body>
-        <main>
-            <h1>Nutrition Toolkit</h1>
-            <p>Test knowledge retrieval and note generation workflows.</p>
-
-            <h2>API access</h2>
-            <div class="fields">
-                <div class="full-width">
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">N</div>
+                <div><strong>Nutrition Toolkit</strong><span>Clinical nutrition workspace</span></div>
+            </div>
+            <div class="header-tools">
+                <div class="header-key">
                     <label for="api-key">API key</label>
-                    <input id="api-key" type="password" autocomplete="off" required />
-                    <span class="hint">Kept only in this page while it is open. It is not stored or included in form data.</span>
+                    <input id="api-key" type="password" autocomplete="off" placeholder="API key" aria-label="API key" />
                 </div>
+                <button class="button ghost header-action" id="demo-details-button" type="button" hidden>Demo details</button>
+            </div>
+        </header>
+
+        <div class="feature-nav-wrap">
+            <nav class="feature-nav" aria-label="Primary features">
+                <a class="feature-tab active" href="#ncp" data-feature-tab="ncp" aria-current="page">Nutrition Care Process</a>
+                <a class="feature-tab" href="#energy" data-feature-tab="energy">Energy Calculator</a>
+                <a class="feature-tab" href="#tube-feed" data-feature-tab="tube-feed">Tube Feed Calculator</a>
+                <a class="feature-tab" href="#knowledge" data-feature-tab="knowledge">Knowledge Search</a>
+            </nav>
+        </div>
+
+        <main>
+            <div class="feature-view" id="ncp-view" data-feature-view="ncp">
+            <section class="shell upload-layout" id="upload-screen">
+                <div class="upload-intro">
+                    <p class="eyebrow">Nutrition Care Process</p>
+                    <h1>From clinical reports to a complete nutrition care note.</h1>
+                    <p class="lede">Combine reports for one person into a documentation-ready note covering assessment, nutrition diagnosis, intervention, and monitoring &amp; evaluation.</p>
+                </div>
+                <form class="card upload-card" id="demo-form">
+                    <h2>Upload clinical reports</h2>
+                    <p>Use one or more PDF, CSV, or text reports belonging to the same person.</p>
+                    <label class="drop-zone" id="drop-zone" for="clinical-file" tabindex="0">
+                        <span class="upload-icon" aria-hidden="true">↑</span>
+                        <strong>Drop reports here</strong>
+                        <p>or choose files from your computer</p>
+                        <span class="button secondary">Choose files</span>
+                        <span class="selected-file" id="selected-file">PDF, CSV, or text · all files for one person</span>
+                    </label>
+                    <input class="visually-hidden" id="clinical-file" name="files" type="file" accept="application/pdf,text/csv,text/plain,.pdf,.csv,.txt" multiple required />
+                    <button class="button primary generate-button" id="generate-button" type="submit">
+                        <span class="button-spinner" data-generating-indicator aria-hidden="true" hidden></span>
+                        <span data-generate-label>Generate Nutrition Care Process note</span>
+                        <span data-generate-arrow aria-hidden="true">→</span>
+                    </button>
+                    <span class="field-hint">Your API key is used only for the current request and is never stored in browser storage.</span>
+                    <div class="error-banner" id="upload-error" role="alert" hidden></div>
+                </form>
+            </section>
+
+            <section class="shell processing-wrap" id="processing-screen" aria-live="polite" hidden>
+                <div class="card processing-card">
+                    <div class="processing-header">
+                        <div class="spinner" aria-hidden="true"></div>
+                        <div>
+                            <p class="eyebrow">Nutrition Care Process</p>
+                            <h1 id="processing-title">Generating Nutrition Care Process</h1>
+                            <p id="processing-file"></p>
+                        </div>
+                    </div>
+                    <p class="processing-current"><span id="processing-message">Preparing clinical information</span><span class="processing-elapsed" id="processing-elapsed">Generating for 0s</span></p>
+                    <ol class="pipeline" id="processing-stages">
+                        <li>Preparing clinical information</li>
+                        <li>Reviewing nutrition history and relevant data</li>
+                        <li>Analyzing assessment and nutrition diagnosis</li>
+                        <li>Developing interventions and monitoring plan</li>
+                        <li>Finalizing Nutrition Care Process</li>
+                    </ol>
+                    <p class="processing-note">These messages provide a paced view while generation is underway; they do not represent live backend completion. Your selected clinical reports remain unchanged.</p>
+                </div>
+            </section>
+
+            <section class="shell result-shell" id="result-screen" hidden>
+                <header class="result-header">
+                    <div class="identity">
+                        <div class="avatar" id="person-initials" aria-hidden="true"></div>
+                        <div><p class="eyebrow">Nutrition Care Process</p><h1 id="person-name"></h1><p class="person-meta" id="person-meta"></p></div>
+                    </div>
+                    <div class="result-status"><span class="badge" id="assessment-status">NCP note complete</span><button class="button secondary" id="regenerate-button" type="button">Regenerate</button></div>
+                </header>
+
+                <div class="result-grid">
+                    <aside class="panel clinical-panel" aria-labelledby="snapshot-heading">
+                        <div class="panel-heading"><h2 id="snapshot-heading">Clinical snapshot</h2><button class="button ghost" id="all-evidence-button" type="button">View supporting data</button></div>
+                        <div class="snapshot-body" id="clinical-snapshot"></div>
+                    </aside>
+                    <article class="panel assessment-panel" aria-labelledby="assessment-heading">
+                        <div class="panel-heading"><h2 id="assessment-heading">Nutrition Care Process note</h2><span class="badge">AI-assisted</span></div>
+                        <div class="assessment-body" id="assessment-content"></div>
+                        <textarea class="editor" id="assessment-editor" aria-label="Edit nutrition assessment" hidden></textarea>
+                        <footer class="panel-actions">
+                            <span class="save-state" id="save-state" aria-live="polite"></span>
+                            <button class="button secondary" id="copy-button" type="button">Copy</button>
+                            <button class="button secondary" id="edit-button" type="button">Edit</button>
+                            <button class="button secondary" id="cancel-edit-button" type="button" hidden>Cancel</button>
+                            <button class="button primary" id="save-button" type="button" hidden>Save changes</button>
+                            <button class="button primary" id="finalize-button" type="button">Finalize</button>
+                        </footer>
+                    </article>
+                </div>
+                <button class="button ghost" id="start-over-button" type="button">← Upload another report</button>
+            </section>
             </div>
 
-            <section class="search-section">
-                <h2>Ingest knowledge</h2>
-                <form id="ingest-form">
-                    <div class="fields">
-                        <div class="full-width">
-                            <label for="files">PDF or text files</label>
-                            <input id="files" name="files" type="file" accept="application/pdf,text/plain,.pdf,.txt" multiple required />
-                            <span class="hint">You can select multiple documents.</span>
-                        </div>
-                        <div class="full-width">
-                            <label for="document-type">Document type</label>
-                            <select id="document-type" name="document_type" required>
-                                <option value="nutrition-care-manual" selected>Nutrition Care Manual</option>
-                                <option value="diet-manual">Diet Manual</option>
-                            </select>
-                            <span class="hint">Matching documents are skipped by default.</span>
-                        </div>
-                        <div class="full-width">
-                            <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing document</label>
-                            <span class="hint">Creates new local embeddings and replaces stored chunks.</span>
-                        </div>
-                    </div>
-                    <button id="submit" type="submit">Ingest PDFs</button>
-                </form>
-                <div id="status" class="status" role="status"></div>
-            </section>
-
-            <section class="search-section">
-                <h2>Search knowledge</h2>
-                <p>Find clinical knowledge chunks most similar to your question.</p>
-                <form id="search-form">
-                    <div class="search-fields">
-                        <div>
-                            <label for="search-text">Search text</label>
-                            <input id="search-text" name="text" type="text" placeholder="e.g. protein needs for wound healing" required />
-                        </div>
-                        <div>
-                            <label for="top-k">Results</label>
-                            <input id="top-k" name="top_k" type="number" min="1" max="20" value="5" required />
-                        </div>
-                        <button id="search-submit" type="submit">Search</button>
-                    </div>
-                </form>
-                <div id="search-status" class="status" role="status"></div>
-                <div id="search-results" class="search-results" aria-live="polite"></div>
-            </section>
-
-            <section class="search-section">
-                <h2>Ingest resident documents</h2>
-                <p>Drop one or more resident PDF, CSV, or text files to extract and persist their facts.</p>
-                <form id="document-ingest-form">
-                    <div class="fields">
-                        <div class="full-width">
-                            <label id="document-drop-zone" class="drop-zone" for="document-ingest-files" tabindex="0">
-                                <strong>Drop resident documents here</strong>
-                                <span>or click to browse</span>
-                                <span id="document-file-summary" class="hint">PDF, CSV, and text files are supported.</span>
-                            </label>
-                            <input id="document-ingest-files" class="visually-hidden" name="files" type="file" accept="application/pdf,text/csv,text/plain,.pdf,.csv,.txt" multiple required />
-                        </div>
-                    </div>
-                    <button id="document-ingest-submit" type="submit">Ingest documents</button>
-                </form>
-                <div id="document-ingest-status" class="status" role="status"></div>
-                <div id="document-ingest-result" hidden>
-                    <label for="document-ingest-output">Ingestion result</label>
-                    <textarea id="document-ingest-output" readonly></textarea>
+            <section class="feature-view tool-shell" id="energy-view" data-feature-view="energy" hidden>
+                <header class="tool-heading">
+                    <p class="eyebrow">Deterministic calculation</p>
+                    <h1>Energy Calculator</h1>
+                    <p class="lede">Calculate BMI, weight basis, Mifflin estimate, and daily calorie, protein, and fluid ranges from documented measurements.</p>
+                </header>
+                <div class="tool-layout">
+                    <form class="card tool-card form-grid" id="energy-form">
+                        <div class="form-field"><label for="energy-weight">Weight (lb)</label><input id="energy-weight" name="weight" type="number" min="1" step="0.1" required /></div>
+                        <div class="form-field"><label for="energy-height">Height (in)</label><input id="energy-height" name="height" type="number" min="1" step="0.1" required /></div>
+                        <div class="form-field"><label for="energy-age">Age</label><input id="energy-age" name="age" type="number" min="1" max="120" required /></div>
+                        <div class="form-field"><label for="energy-gender">Equation sex</label><select id="energy-gender" name="gender"><option value="f">Female</option><option value="m">Male</option></select></div>
+                        <div class="form-field"><label for="energy-goal">Weight goal</label><select id="energy-goal" name="goal"><option value="maintain">Maintain</option><option value="lose">Lose</option><option value="gain">Gain</option></select></div>
+                        <div class="form-field"><label for="activity-level">Activity factor</label><input id="activity-level" name="activity_level" type="number" min="1.2" max="1.9" step="0.1" value="1.2" required /><span class="field-hint">Supported backend range: 1.2–1.9.</span></div>
+                        <div class="form-field"><label for="amputation">Amputation percentage</label><input id="amputation" name="amputation" type="number" min="0" max="99.9" step="0.1" placeholder="Optional" /></div>
+                        <div class="form-field check-field"><input id="dialysis" name="dialysis" type="checkbox" /><label for="dialysis">Receiving hemodialysis</label></div>
+                        <div class="form-actions"><button class="button primary" id="energy-submit" type="submit">Calculate nutrition needs</button></div>
+                        <div class="error-banner form-field full" id="energy-error" role="alert" hidden></div>
+                    </form>
+                    <section class="card result-card" id="energy-result" aria-live="polite">
+                        <div class="result-placeholder"><strong>Nutrition needs will appear here</strong><span>Enter documented measurements and calculate.</span></div>
+                    </section>
                 </div>
             </section>
 
-            <section class="search-section">
-                <h2>Generate</h2>
-                <p>Upload one or more resident PDF or CSV files. Their contents will be combined with retrieved clinical knowledge and prior note examples.</p>
-                <form id="assessment-form">
-                    <div class="fields">
-                        <div class="full-width">
-                            <label for="assessment-files">Resident PDF or CSV files</label>
-                            <input id="assessment-files" name="files" type="file" accept="application/pdf,text/csv,.pdf,.csv" multiple required />
-                            <span id="assessment-file-summary" class="hint">Select all reports for the current resident.</span>
+            <section class="feature-view tool-shell" id="tube-feed-view" data-feature-view="tube-feed" hidden>
+                <header class="tool-heading">
+                    <p class="eyebrow">Deterministic calculation</p>
+                    <h1>Tube Feed Calculator</h1>
+                    <p class="lede">Calculate a continuous or bolus enteral-feeding schedule using formulas configured in the application database.</p>
+                </header>
+                <div class="tool-layout">
+                    <form class="card tool-card form-grid" id="tube-feed-form">
+                        <div class="form-field"><label for="tf-energy-low">Energy target low (kcal)</label><input id="tf-energy-low" type="number" min="1" step="1" required /></div>
+                        <div class="form-field"><label for="tf-energy-high">Energy target high (kcal)</label><input id="tf-energy-high" type="number" min="1" step="1" required /></div>
+                        <div class="form-field full"><label for="tf-formula">Formula</label><input id="tf-formula" type="text" placeholder="e.g. Jevity 1.5" required /></div>
+                        <div class="form-field"><label for="tf-package-volume">Package volume (mL)</label><input id="tf-package-volume" type="number" min="1" step="1" placeholder="Optional match qualifier" /></div>
+                        <div class="form-field"><label for="tf-method">Delivery method</label><select id="tf-method"><option value="continuous">Continuous</option><option value="bolus">Bolus</option></select></div>
+                        <div class="form-field"><label for="tf-route">Feeding route</label><input id="tf-route" type="text" value="PEG" required /></div>
+                        <div class="conditional-fields" id="continuous-fields">
+                            <div class="form-field"><label for="tf-hours">Run time (hours/day)</label><input id="tf-hours" type="number" min="1" max="24" step="1" value="18" required /></div>
+                            <div class="form-field"><label for="tf-start-time">Start time</label><input id="tf-start-time" type="text" value="4pm" required /></div>
+                            <div class="form-field"><label for="tf-starting-rate">Starting rate (mL/hr)</label><input id="tf-starting-rate" type="number" min="1" step="1" placeholder="Optional titration" /></div>
+                            <div class="form-field"><label for="tf-rate-increase">Hourly increase (mL/hr)</label><input id="tf-rate-increase" type="number" min="1" step="1" placeholder="Optional titration" /></div>
                         </div>
-                        <div class="full-width">
-                            <label for="assessment-query">Optional focus or retrieval query</label>
-                            <input id="assessment-query" name="query" type="text" placeholder="e.g. wound healing and unintended weight loss" />
-                        </div>
-                    </div>
-                    <button id="assessment-submit" type="submit">Generate</button>
-                </form>
-                <div id="assessment-status" class="status" role="status"></div>
-                <div id="assessment-result" hidden>
-                    <label for="assessment-output">Completed note</label>
-                    <textarea id="assessment-output" readonly></textarea>
+                        <div class="form-field full" id="bolus-fields" hidden><label for="tf-bolus-feeds">Bolus feeds per day</label><input id="tf-bolus-feeds" type="number" min="1" step="1" /></div>
+                        <div class="form-field"><label for="tf-supplement-kcal">Protein supplement kcal/day</label><input id="tf-supplement-kcal" type="number" min="0" step="0.1" value="0" /></div>
+                        <div class="form-field"><label for="tf-supplement-protein">Protein supplement g/day</label><input id="tf-supplement-protein" type="number" min="0" step="0.1" value="0" /></div>
+                        <div class="form-field full"><label for="tf-supplement-fluid">Protein supplement fluid (mL/day)</label><input id="tf-supplement-fluid" type="number" min="0" step="0.1" value="0" /></div>
+                        <div class="form-actions"><button class="button primary" id="tube-feed-submit" type="submit">Calculate tube feeding</button></div>
+                        <div class="error-banner form-field full" id="tube-feed-error" role="alert" hidden></div>
+                    </form>
+                    <section class="card result-card" id="tube-feed-result" aria-live="polite">
+                        <div class="result-placeholder"><strong>Tube-feed results will appear here</strong><span>Enter the energy target, formula, and delivery schedule.</span></div>
+                    </section>
                 </div>
             </section>
 
-            <section class="search-section">
-                <h2>Ingest a completed assessment</h2>
-                <p>Chunk, embed, and store a completed assessment PDF for similarity search.</p>
-                <form id="assessment-ingest-form">
-                    <div class="fields">
-                        <div class="full-width">
-                            <label for="assessment-ingest-files">Completed assessment file</label>
-                            <input id="assessment-ingest-files" name="file" type="file" accept="application/pdf,.pdf" required />
-                        </div>
-                        <div class="full-width">
-                            <label><input name="overwrite" type="checkbox" value="true" /> Re-ingest existing note</label>
-                        </div>
-                        <div class="full-width">
-                            <label for="assessment-created-by">Created by</label>
-                            <input id="assessment-created-by" name="created_by" type="text" value="self" required />
-                        </div>
-                    </div>
-                    <button id="assessment-ingest-submit" type="submit">Ingest assessment</button>
-                </form>
-                <div id="assessment-ingest-status" class="status" role="status"></div>
-            </section>
-
-            <section class="search-section">
-                <h2>Search notes</h2>
-                <p>Find previously ingested notes similar to a resident or clinical scenario.</p>
-                <form id="assessment-search-form">
-                    <div class="search-fields">
-                        <div>
-                            <label for="assessment-search-text">Search text</label>
-                            <input id="assessment-search-text" name="text" type="text" placeholder="e.g. dialysis resident with weight loss" required />
-                        </div>
-                        <div>
-                            <label for="assessment-search-top-k">Results</label>
-                            <input id="assessment-search-top-k" name="top_k" type="number" min="1" max="20" value="5" required />
-                        </div>
-                        <button id="assessment-search-submit" type="submit">Search</button>
-                    </div>
-                </form>
-                <div id="assessment-search-status" class="status" role="status"></div>
-                <div id="assessment-search-results" class="search-results" aria-live="polite"></div>
+            <section class="feature-view tool-shell" id="knowledge-view" data-feature-view="knowledge" hidden>
+                <header class="tool-heading">
+                    <p class="eyebrow">Clinical reference retrieval</p>
+                    <h1>Knowledge Search</h1>
+                    <p class="lede">Search the indexed Diet Manual and Nutrition Care Manual with source, section, and page provenance.</p>
+                </header>
+                <div class="tool-layout knowledge-layout">
+                    <form class="card tool-card form-grid" id="knowledge-form">
+                        <div class="form-field full"><label for="knowledge-text">Nutrition question</label><textarea id="knowledge-text" placeholder="e.g. fluid restriction for hyponatremia" required></textarea></div>
+                        <div class="form-field"><label for="knowledge-source">Source</label><select id="knowledge-source"><option value="">All Sources</option><option value="diet-manual">Diet Manual</option><option value="nutrition-care-manual">Nutrition Care Manual</option></select></div>
+                        <div class="form-field"><label for="knowledge-count">Results</label><select id="knowledge-count"><option>3</option><option selected>5</option><option>10</option><option>20</option></select></div>
+                        <div class="form-actions"><button class="button primary" id="knowledge-submit" type="submit">Search references</button></div>
+                        <div class="error-banner form-field full" id="knowledge-error" role="alert" hidden></div>
+                    </form>
+                    <section class="card result-card" id="knowledge-result" aria-live="polite">
+                        <div class="result-placeholder"><strong>Reference matches will appear here</strong><span>Ask a clinical nutrition question to search both manuals.</span></div>
+                    </section>
+                </div>
             </section>
         </main>
 
+        <dialog id="evidence-dialog" aria-labelledby="evidence-heading">
+            <div class="dialog-header"><h2 id="evidence-heading">Supporting evidence</h2><button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="dialog-body"><ul class="evidence-list" id="evidence-list"></ul></div>
+        </dialog>
+
+        <dialog id="details-dialog" aria-labelledby="details-heading">
+            <div class="dialog-header"><h2 id="details-heading">Demo engineering details</h2><button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="dialog-body">
+                <p class="detail-pipeline">Document ingestion
+↓ Clinical fact extraction in memory
+↓ PersonDetail clinical profile assembled
+↓ Deterministic calculations completed
+↓ AssessmentContext building
+↓ ContextBudgeter optimization
+↓ Assessment generation</p>
+                <div class="metric-grid" id="metric-grid"></div>
+            </div>
+        </dialog>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
         <script>
-            const apiKeyInput = document.getElementById("api-key");
-            const form = document.getElementById("ingest-form");
-            const submit = document.getElementById("submit");
-            const status = document.getElementById("status");
-            const searchForm = document.getElementById("search-form");
-            const searchSubmit = document.getElementById("search-submit");
-            const searchStatus = document.getElementById("search-status");
-            const searchResults = document.getElementById("search-results");
-            const documentIngestForm = document.getElementById("document-ingest-form");
-            const documentIngestFiles = document.getElementById("document-ingest-files");
-            const documentDropZone = document.getElementById("document-drop-zone");
-            const documentFileSummary = document.getElementById("document-file-summary");
-            const documentIngestSubmit = document.getElementById("document-ingest-submit");
-            const documentIngestStatus = document.getElementById("document-ingest-status");
-            const documentIngestResult = document.getElementById("document-ingest-result");
-            const documentIngestOutput = document.getElementById("document-ingest-output");
-            const assessmentForm = document.getElementById("assessment-form");
-            const assessmentFiles = document.getElementById("assessment-files");
-            const assessmentFileSummary = document.getElementById("assessment-file-summary");
-            const assessmentSubmit = document.getElementById("assessment-submit");
-            const assessmentStatus = document.getElementById("assessment-status");
-            const assessmentResult = document.getElementById("assessment-result");
-            const assessmentOutput = document.getElementById("assessment-output");
-            const assessmentIngestForm = document.getElementById("assessment-ingest-form");
-            const assessmentIngestFiles = document.getElementById("assessment-ingest-files");
-            const assessmentIngestSubmit = document.getElementById("assessment-ingest-submit");
-            const assessmentIngestStatus = document.getElementById("assessment-ingest-status");
-            const assessmentSearchForm = document.getElementById("assessment-search-form");
-            const assessmentSearchSubmit = document.getElementById("assessment-search-submit");
-            const assessmentSearchStatus = document.getElementById("assessment-search-status");
-            const assessmentSearchResults = document.getElementById("assessment-search-results");
+            "use strict";
 
-            function updateDocumentFileSummary() {
-                const files = Array.from(documentIngestFiles.files);
-                documentFileSummary.textContent = files.length
-                    ? `${files.length} file${files.length === 1 ? "" : "s"}: ${files.map((file) => file.name).join(", ")}`
-                    : "PDF, CSV, and text files are supported.";
-            }
+            const state = {
+                files: [],
+                response: null,
+                stageTimers: [],
+                elapsedTimer: null,
+                generationStartedAt: null,
+                generating: false,
+                editing: false,
+            };
+            const $ = (selector) => document.querySelector(selector);
+            const uploadScreen = $("#upload-screen");
+            const processingScreen = $("#processing-screen");
+            const resultScreen = $("#result-screen");
+            const fileInput = $("#clinical-file");
+            const dropZone = $("#drop-zone");
+            const uploadError = $("#upload-error");
+            const assessmentContent = $("#assessment-content");
+            const assessmentEditor = $("#assessment-editor");
+            const saveState = $("#save-state");
+            const generateButton = $("#generate-button");
 
-            function addDroppedDocumentFiles(files) {
-                const transfer = new DataTransfer();
-                const seen = new Set();
-                for (const file of [...documentIngestFiles.files, ...files]) {
-                    const identity = `${file.name}:${file.size}:${file.lastModified}`;
-                    if (!seen.has(identity)) {
-                        transfer.items.add(file);
-                        seen.add(identity);
-                    }
-                }
-                documentIngestFiles.files = transfer.files;
-                updateDocumentFileSummary();
-            }
+            const present = (value) => value !== null && value !== undefined && value !== "";
+            const valueOf = (value) => value && typeof value === "object" && "value" in value ? value.value : value;
+            const humanize = (value) => present(value) ? String(valueOf(value)).replaceAll(/[_-]/g, " ") : "";
+            const compact = (values) => values.filter(present);
+            const number = (value, digits = 1) => Number.isFinite(Number(value)) ? Number(value).toLocaleString(undefined, { maximumFractionDigits: digits }) : "";
+            const dateText = (value) => {
+                if (!present(value)) return "";
+                const parsed = new Date(value);
+                return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+            };
+            const titleCase = (value) => humanize(value).replace(/\b\w/g, (letter) => letter.toUpperCase());
+            const joinText = (...values) => compact(values).join(" · ");
+            const latest = (items) => Array.isArray(items) && items.length ? items[0] : null;
 
-            documentIngestFiles.addEventListener("change", updateDocumentFileSummary);
-            for (const eventName of ["dragenter", "dragover"]) {
-                documentDropZone.addEventListener(eventName, (event) => {
-                    event.preventDefault();
-                    documentDropZone.classList.add("drag-over");
-                });
-            }
-            for (const eventName of ["dragleave", "drop"]) {
-                documentDropZone.addEventListener(eventName, (event) => {
-                    event.preventDefault();
-                    documentDropZone.classList.remove("drag-over");
-                });
-            }
-            documentDropZone.addEventListener("drop", (event) => {
-                addDroppedDocumentFiles(event.dataTransfer.files);
-            });
-            documentDropZone.addEventListener("keydown", (event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    documentIngestFiles.click();
-                }
-            });
-
-            assessmentFiles.addEventListener("change", () => {
-                const count = assessmentFiles.files.length;
-                assessmentFileSummary.textContent = count
-                    ? `${count} PDF${count === 1 ? "" : "s"} selected. All files will be analyzed together.`
-                    : "Select all reports for the current resident.";
-            });
-
-            function showStatus(message, kind) {
-                status.textContent = message;
-                status.className = `status ${kind}`;
-            }
-
-            function authorizedFetch(resource, options = {}) {
-                const apiKey = apiKeyInput.value.trim();
-                if (!apiKey) {
-                    throw new Error("API key is required");
-                }
-                const headers = new Headers(options.headers);
+            async function authorizedFetch(url, options = {}) {
+                const apiKey = $("#api-key").value.trim();
+                if (!apiKey) throw new Error("Enter an API key to continue.");
+                const headers = new Headers(options.headers || {});
                 headers.set("Authorization", `Bearer ${apiKey}`);
-                return fetch(resource, { ...options, headers });
+                return fetch(url, { ...options, headers });
             }
 
-            function getIngestResult(body) {
-                return body?.result && typeof body.result === "object" ? body.result : body;
+            function apiError(body, response) {
+                const detail = body && (body.detail || body.error);
+                if (Array.isArray(detail)) return detail.map((item) => item.msg || item.detail || "Invalid request").join("; ");
+                return typeof detail === "string" ? detail : `Request failed (${response.status})`;
             }
 
-            function renderSearchResults(container, matches) {
+            async function requestJson(url, options = {}) {
+                const response = await authorizedFetch(url, options);
+                const body = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(apiError(body, response));
+                return body;
+            }
+
+            const api = {
+                generateNutritionCareProcess(data) {
+                    return requestJson("/api/v1/demo/assessment", { method: "POST", body: data });
+                },
+                calculateEnergyNeeds(payload) {
+                    return requestJson("/api/v1/calculate/", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                },
+                calculateTubeFeed(payload) {
+                    return requestJson("/api/v1/calculate/tubefeed", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                },
+                searchKnowledge(payload) {
+                    return requestJson("/api/v1/knowledge/search", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                },
+            };
+
+            const validFeatures = new Set(["ncp", "energy", "tube-feed", "knowledge"]);
+            function selectFeature(feature) {
+                const selected = validFeatures.has(feature) ? feature : "ncp";
+                document.querySelectorAll("[data-feature-view]").forEach((view) => {
+                    view.hidden = view.dataset.featureView !== selected;
+                });
+                document.querySelectorAll("[data-feature-tab]").forEach((tab) => {
+                    const active = tab.dataset.featureTab === selected;
+                    tab.classList.toggle("active", active);
+                    if (active) tab.setAttribute("aria-current", "page");
+                    else tab.removeAttribute("aria-current");
+                });
+                $("#demo-details-button").hidden = selected !== "ncp" || !state.response;
+                document.title = `Nutrition Toolkit · ${document.querySelector(`[data-feature-tab="${selected}"]`).textContent}`;
+            }
+            function selectFeatureFromHash() {
+                selectFeature(window.location.hash.replace(/^#/, "") || "ncp");
+            }
+            window.addEventListener("hashchange", selectFeatureFromHash);
+            selectFeatureFromHash();
+
+            const optionalNumber = (selector) => {
+                const value = $(selector).value.trim();
+                return value === "" ? null : Number(value);
+            };
+
+            function resultMetric(container, label, value, detail = "") {
+                if (!present(value)) return;
+                const item = document.createElement("div");
+                item.className = "result-metric";
+                const caption = document.createElement("span");
+                caption.textContent = label;
+                const result = document.createElement("strong");
+                result.textContent = value;
+                item.append(caption, result);
+                if (present(detail)) {
+                    const secondary = document.createElement("small");
+                    secondary.textContent = detail;
+                    item.append(secondary);
+                }
+                container.append(item);
+            }
+
+            function setFormBusy(form, busy) {
+                form.querySelectorAll("button, input, select, textarea").forEach((control) => {
+                    control.disabled = busy;
+                });
+            }
+
+            function setFiles(files) {
+                state.files = Array.from(files || []);
+                const totalSize = state.files.reduce((total, file) => total + file.size, 0);
+                $("#selected-file").textContent = state.files.length
+                    ? `${state.files.length} file${state.files.length === 1 ? "" : "s"} · ${number(totalSize / 1024, 0)} KB · ${state.files.map((file) => file.name).join(", ")}`
+                    : "PDF, CSV, or text · all files for one person";
+                uploadError.hidden = true;
+            }
+
+            fileInput.addEventListener("change", () => setFiles(fileInput.files));
+            dropZone.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") { event.preventDefault(); fileInput.click(); }
+            });
+            ["dragenter", "dragover"].forEach((name) => dropZone.addEventListener(name, (event) => {
+                event.preventDefault();
+                dropZone.classList.add("drag-over");
+            }));
+            ["dragleave", "drop"].forEach((name) => dropZone.addEventListener(name, (event) => {
+                event.preventDefault();
+                dropZone.classList.remove("drag-over");
+            }));
+            dropZone.addEventListener("drop", (event) => {
+                const files = Array.from(event.dataTransfer.files || []);
+                if (!files.length) return;
+                const transfer = new DataTransfer();
+                files.forEach((file) => transfer.items.add(file));
+                fileInput.files = transfer.files;
+                setFiles(files);
+            });
+
+            const generationStages = [
+                { delay: 0, message: "Preparing clinical information" },
+                { delay: 3000, message: "Reviewing nutrition history and relevant data" },
+                { delay: 8000, message: "Analyzing assessment and nutrition diagnosis" },
+                { delay: 16000, message: "Developing interventions and monitoring plan" },
+                { delay: 24000, message: "Finalizing Nutrition Care Process" },
+            ];
+
+            function clearGenerationTimers() {
+                state.stageTimers.forEach((timer) => clearTimeout(timer));
+                state.stageTimers = [];
+                clearInterval(state.elapsedTimer);
+                state.elapsedTimer = null;
+            }
+
+            function setGenerationBusy(busy) {
+                state.generating = busy;
+                generateButton.disabled = busy;
+                fileInput.disabled = busy;
+                dropZone.setAttribute("aria-disabled", String(busy));
+                $("#demo-form").setAttribute("aria-busy", String(busy));
+                $("[data-generating-indicator]").hidden = !busy;
+                $("[data-generate-label]").textContent = busy ? "Generating…" : "Generate Nutrition Care Process note";
+                $("[data-generate-arrow]").hidden = busy;
+            }
+
+            function showGenerationStage(index) {
+                const stages = [...$("#processing-stages").children];
+                stages.forEach((stage, stageIndex) => {
+                    stage.className = stageIndex < index ? "complete" : stageIndex === index ? "active" : "";
+                });
+                $("#processing-message").textContent = generationStages[index].message;
+            }
+
+            function startProcessing() {
+                clearGenerationTimers();
+                setGenerationBusy(true);
+                processingScreen.hidden = false;
+                $("#processing-file").textContent = `${state.files.length} selected report${state.files.length === 1 ? "" : "s"}: ${state.files.map((file) => file.name).join(", ")}`;
+                state.generationStartedAt = Date.now();
+                showGenerationStage(0);
+                $("#processing-elapsed").textContent = "Generating for 0s";
+                state.stageTimers = generationStages.slice(1).map((stage, offset) =>
+                    setTimeout(() => showGenerationStage(offset + 1), stage.delay),
+                );
+                state.elapsedTimer = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - state.generationStartedAt) / 1000);
+                    $("#processing-elapsed").textContent = `Generating for ${elapsed}s`;
+                }, 1000);
+                requestAnimationFrame(() => processingScreen.scrollIntoView({ behavior: "smooth", block: "center" }));
+            }
+
+            function finishProcessing() {
+                clearGenerationTimers();
+                setGenerationBusy(false);
+                processingScreen.hidden = true;
+            }
+
+            function generationErrorMessage(error) {
+                const message = typeof error?.message === "string" ? error.message.trim() : "";
+                const containsTechnicalDetails = /traceback|sqlalchemy|psycopg|\[sql:|validation errors? for|stack trace/i.test(message);
+                return message && !containsTechnicalDetails
+                    ? message
+                    : "Unable to generate the Nutrition Care Process. Please try again.";
+            }
+
+            function snapshotCard(label, value, detail = "", options = {}) {
+                if (!present(value) && !present(detail)) return;
+                const card = document.createElement("section");
+                card.className = "snapshot-card";
+                const heading = document.createElement("div");
+                heading.className = "snapshot-label";
+                heading.textContent = label;
+                card.append(heading);
+                if (Array.isArray(value)) {
+                    const list = document.createElement("ul");
+                    list.className = "mini-list";
+                    value.forEach((item) => {
+                        const li = document.createElement("li");
+                        li.textContent = item;
+                        list.append(li);
+                    });
+                    card.append(list);
+                } else {
+                    const main = document.createElement("p");
+                    main.className = "snapshot-value";
+                    main.textContent = value;
+                    card.append(main);
+                }
+                if (present(detail)) {
+                    const secondary = document.createElement("p");
+                    secondary.className = `snapshot-detail${options.meaningful ? " meaningful" : ""}`;
+                    secondary.textContent = detail;
+                    card.append(secondary);
+                }
+                $("#clinical-snapshot").append(card);
+            }
+
+            function renderSnapshot(detail) {
+                const container = $("#clinical-snapshot");
                 container.replaceChildren();
-                for (const match of matches) {
-                    const result = document.createElement("article");
-                    result.className = "search-result";
+                const calculations = detail.derived_calculations || {};
+                const anthropometrics = calculations.anthropometrics || {};
+                const weight = detail.current_weight || latest(detail.weights) || {};
+                const currentWeight = weight.weight_lb ?? anthropometrics.current_weight_lb;
+                const weightChanges = calculations.weight_history || [];
+                const significant = weightChanges.find((change) => change.clinically_significant) || weightChanges[0];
+                const weightDetail = significant
+                    ? `${significant.direction === "loss" ? "↓" : significant.direction === "gain" ? "↑" : "→"} ${number(Math.abs(significant.percent_change))}% over ${significant.elapsed_days} days${significant.clinically_significant ? " · clinically significant" : ""}`
+                    : dateText(weight.measured_at || anthropometrics.current_weight_date);
+                snapshotCard("Weight", present(currentWeight) ? `${number(currentWeight)} lb` : "", weightDetail, { meaningful: Boolean(significant?.clinically_significant) });
 
-                    const filename = document.createElement("strong");
-                    filename.textContent = match.filename;
-                    const content = document.createElement("p");
-                    content.textContent = match.chunk_text;
-                    const similarity = document.createElement("span");
-                    similarity.className = "similarity";
-                    similarity.textContent = `Similarity: ${Number(match.similarity).toFixed(4)}`;
+                const bmiBits = compact([
+                    present(anthropometrics.bmi) ? `BMI ${number(anthropometrics.bmi)}` : null,
+                    titleCase(anthropometrics.bmi_category),
+                    present(detail.height_in) ? `${number(detail.height_in)} in` : null,
+                ]);
+                snapshotCard("Anthropometrics", bmiBits.join(" · "));
 
-                    result.append(filename, content, similarity);
-                    container.append(result);
+                const diet = detail.current_diet || {};
+                const dietMain = compact([diet.diet_type, diet.texture, titleCase(diet.liquid_consistency)]).join(" · ");
+                const dietDetail = compact([...(diet.restrictions || []), diet.instructions]).join("; ");
+                snapshotCard("Diet & texture", dietMain, dietDetail);
+
+                const intake = latest(detail.meal_intakes) || {};
+                const intakeRange = present(intake.min_percent) || present(intake.max_percent)
+                    ? `${present(intake.min_percent) ? number(intake.min_percent, 0) : "0"}–${present(intake.max_percent) ? number(intake.max_percent, 0) : number(intake.min_percent, 0)}%`
+                    : "";
+                const appetite = latest(detail.appetite_observations);
+                snapshotCard("Meal intake", intakeRange, appetite ? `Appetite: ${titleCase(appetite.appetite)}` : "");
+
+                const supplements = (detail.active_supplements || []).map((item) =>
+                    joinText(item.product_name, compact([present(item.amount) ? number(item.amount) : null, item.unit]).join(" "), item.frequency),
+                );
+                snapshotCard("Oral supplements", supplements);
+
+                const enteral = detail.current_enteral_feeding;
+                if (enteral) snapshotCard("Enteral nutrition", joinText(enteral.formula, titleCase(enteral.feeding_method)), joinText(present(enteral.rate_ml_hr) ? `${number(enteral.rate_ml_hr)} mL/hr` : null, enteral.route, enteral.feeding_schedule));
+                const parenteral = detail.current_parenteral_nutrition;
+                if (parenteral) snapshotCard("Parenteral nutrition", joinText(titleCase(parenteral.formula_type), titleCase(parenteral.access_route)), joinText(present(parenteral.total_volume_ml) ? `${number(parenteral.total_volume_ml, 0)} mL/day` : null, present(parenteral.rate_ml_hr) ? `${number(parenteral.rate_ml_hr)} mL/hr` : null));
+
+                const fluid = detail.current_fluid_plan;
+                if (fluid) snapshotCard("Fluid plan", joinText(present(fluid.target_ml_day) ? `Target ${number(fluid.target_ml_day, 0)} mL/day` : null, present(fluid.restriction_ml_day) ? `Restriction ${number(fluid.restriction_ml_day, 0)} mL/day` : null), fluid.instructions || "");
+
+                const labs = (detail.labs || []).slice(0, 6).map((lab) => joinText(lab.name, compact([lab.result, lab.unit]).join(" "), lab.flag ? `[${lab.flag}]` : ""));
+                snapshotCard("Recent labs", labs);
+                const wounds = (detail.wounds || []).slice(0, 5).map((wound) => joinText(titleCase(wound.type), wound.stage ? `Stage ${wound.stage}` : null, wound.location, wound.progress));
+                snapshotCard("Wounds", wounds);
+                const edema = (detail.edema || []).slice(0, 4).map((item) => joinText(item.severity, item.location));
+                snapshotCard("Edema", edema);
+                const diagnoses = (detail.active_diagnoses || []).slice(0, 6).map((item) => item.diagnosis);
+                snapshotCard("Relevant diagnoses", diagnoses);
+                const medications = (detail.active_medications || []).slice(0, 6).map((item) => joinText(item.medication_name || item.name, item.dose, item.frequency));
+                snapshotCard("Nutrition-related medications", medications);
+
+                if (!container.children.length) {
+                    const empty = document.createElement("p");
+                    empty.className = "empty-note";
+                    empty.textContent = "No structured nutrition details were returned.";
+                    container.append(empty);
                 }
             }
 
+            function splitAssessment(content) {
+                const intervention = /\n\s*Interventions?:\s*/i.exec(content);
+                const monitoring = /\n\s*Monitoring(?:\s*&\s*Evaluation)?:\s*/i.exec(content);
+                if (!intervention && !monitoring) return [{ title: "Assessment & nutrition diagnosis", text: content }];
+                const assessmentEnd = intervention?.index ?? monitoring?.index ?? content.length;
+                const sections = [{ title: "Assessment & nutrition diagnosis", text: content.slice(0, assessmentEnd).trim() }];
+                if (intervention) {
+                    const start = intervention.index + intervention[0].length;
+                    sections.push({ title: "Intervention", text: content.slice(start, monitoring?.index ?? content.length).trim() });
+                }
+                if (monitoring) sections.push({ title: "Monitoring & evaluation", text: content.slice(monitoring.index + monitoring[0].length).trim() });
+                return sections.filter((section) => section.text);
+            }
 
-            form.addEventListener("submit", async (event) => {
-                event.preventDefault();
-                submit.disabled = true;
-                showStatus("Ingesting PDFs…", "success");
+            function renderAssessment(content) {
+                assessmentContent.replaceChildren();
+                splitAssessment(content).forEach((section) => {
+                    const wrapper = document.createElement("section");
+                    wrapper.className = "assessment-section";
+                    const heading = document.createElement("h3");
+                    heading.textContent = section.title;
+                    const paragraph = document.createElement("p");
+                    paragraph.textContent = section.text;
+                    const evidence = document.createElement("button");
+                    evidence.className = "evidence-link";
+                    evidence.type = "button";
+                    evidence.textContent = "View supporting data";
+                    evidence.addEventListener("click", openEvidence);
+                    wrapper.append(heading, paragraph, evidence);
+                    assessmentContent.append(wrapper);
+                });
+            }
 
+            function evidenceItems(detail) {
+                const items = [];
+                const add = (text) => { if (present(text)) items.push(text); };
+                (detail.weights || []).slice(0, 6).forEach((item) => add(`${dateText(item.measured_at)} — ${number(item.weight_lb)} lb`));
+                (detail.derived_calculations?.weight_history || []).slice(0, 3).forEach((item) => add(`${number(Math.abs(item.percent_change))}% weight ${item.direction} over ${item.elapsed_days} days${item.clinically_significant ? " (clinically significant)" : ""}`));
+                (detail.meal_intakes || []).slice(0, 4).forEach((item) => add(`Meal intake: ${number(item.min_percent, 0)}–${number(item.max_percent, 0)}% on ${dateText(item.observed_at)}`));
+                (detail.active_supplements || []).forEach((item) => add(`Supplement: ${joinText(item.product_name, item.frequency)}`));
+                (detail.labs || []).slice(0, 8).forEach((item) => add(`Lab: ${joinText(item.name, compact([item.result, item.unit]).join(" "), item.flag)}`));
+                (detail.wounds || []).slice(0, 5).forEach((item) => add(`Wound: ${joinText(item.type, item.stage ? `stage ${item.stage}` : null, item.location, item.progress)}`));
+                (detail.edema || []).slice(0, 4).forEach((item) => add(`Edema: ${joinText(item.severity, item.location)}`));
+                (detail.active_diagnoses || []).slice(0, 6).forEach((item) => add(`Diagnosis: ${item.diagnosis}`));
+                (detail.conflicts || []).forEach((item) => add(`Data conflict: ${item.message}`));
+                return items;
+            }
+
+            function openEvidence() {
+                const list = $("#evidence-list");
+                list.replaceChildren();
+                const items = evidenceItems(state.response.detail);
+                (items.length ? items : ["No supporting clinical records were returned for this assessment."]).forEach((text) => {
+                    const item = document.createElement("li");
+                    item.textContent = text;
+                    list.append(item);
+                });
+                $("#evidence-dialog").showModal();
+            }
+
+            function addMetric(label, value) {
+                if (!present(value)) return;
+                const item = document.createElement("div");
+                item.className = "metric";
+                const caption = document.createElement("span");
+                caption.textContent = label;
+                const result = document.createElement("strong");
+                result.textContent = value;
+                item.append(caption, result);
+                $("#metric-grid").append(item);
+            }
+
+            function renderMetrics(response) {
+                const grid = $("#metric-grid");
+                grid.replaceChildren();
+                const documents = response.ingestion.documents || [];
+                const documentTypes = [...new Set(documents.map((item) => item.document_type).filter(present))];
+                addMetric("Documents", documents.length || 1);
+                addMetric("Facts extracted", number(response.ingestion.facts_extracted, 0));
+                addMetric("Facts persisted", number(response.ingestion.facts_persisted, 0));
+                addMetric("Original context", `${number(response.context.raw_token_count, 0)} tokens`);
+                addMetric("Optimized context", `${number(response.context.final_token_count, 0)} tokens`);
+                addMetric("Tokens removed", number(response.context.tokens_removed, 0));
+                addMetric("Context reduction", `${number(response.context.token_reduction_percent)}%`);
+                addMetric("Document types", documentTypes.map(titleCase).join(", ") || titleCase(response.ingestion.document_type));
+                addMetric("Assessment model", response.assessment.model_name);
+            }
+
+            function renderResult(response) {
+                state.response = response;
+                const detail = response.detail;
+                const person = response.person;
+                $("#person-name").textContent = person.name || detail.name;
+                $("#person-initials").textContent = compact([detail.first_name?.[0], detail.last_name?.[0]]).join("").toUpperCase() || "P";
+                const weight = detail.current_weight?.weight_lb ?? detail.derived_calculations?.anthropometrics?.current_weight_lb;
+                const bmi = detail.derived_calculations?.anthropometrics?.bmi;
+                $("#person-meta").textContent = joinText(
+                    present(detail.age) ? `${detail.age} years` : null,
+                    present(weight) ? `${number(weight)} lb` : null,
+                    present(bmi) ? `BMI ${number(bmi)}` : null,
+                    person.facility_name,
+                );
+                $("#assessment-status").textContent = titleCase(response.assessment.status || "complete");
+                renderSnapshot(detail);
+                renderAssessment(response.assessment.content);
+                renderMetrics(response);
+                assessmentEditor.value = response.assessment.content;
+                const finalized = String(valueOf(response.assessment.status)).toLowerCase() === "finalized";
+                $("#edit-button").disabled = finalized || !response.assessment.id;
+                $("#finalize-button").disabled = finalized || !response.assessment.id;
+                $("#finalize-button").textContent = finalized ? "Finalized" : "Finalize";
+                $("#demo-details-button").hidden = false;
+                uploadScreen.hidden = true;
+                processingScreen.hidden = true;
+                resultScreen.hidden = false;
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+
+            async function generateAssessment() {
+                if (!state.files.length) throw new Error("Choose at least one clinical report first.");
+                if (state.generating) return;
+                startProcessing();
                 try {
-                    const response = await authorizedFetch("/api/v1/knowledge/ingest", {
-                        method: "POST",
-                        body: new FormData(form),
+                    const data = new FormData();
+                    state.files.forEach((file) => data.append("files", file));
+                    const body = await api.generateNutritionCareProcess(data);
+                    finishProcessing();
+                    renderResult(body);
+                } catch (error) {
+                    finishProcessing();
+                    throw error;
+                }
+            }
+
+            $("#demo-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (state.generating) return;
+                uploadError.hidden = true;
+                try {
+                    await generateAssessment();
+                } catch (error) {
+                    uploadError.textContent = generationErrorMessage(error);
+                    uploadError.hidden = false;
+                }
+            });
+
+            $("#regenerate-button").addEventListener("click", async () => {
+                $("#regenerate-button").disabled = true;
+                try { await generateAssessment(); }
+                catch (error) { showToast(`Regeneration failed: ${generationErrorMessage(error)}`); }
+                finally { $("#regenerate-button").disabled = false; }
+            });
+
+            function setEditing(editing) {
+                state.editing = editing;
+                assessmentContent.hidden = editing;
+                assessmentEditor.hidden = !editing;
+                $("#edit-button").hidden = editing;
+                $("#copy-button").hidden = editing;
+                $("#finalize-button").hidden = editing;
+                $("#cancel-edit-button").hidden = !editing;
+                $("#save-button").hidden = !editing;
+                if (editing) { assessmentEditor.value = state.response.assessment.content; assessmentEditor.focus(); }
+            }
+            $("#edit-button").addEventListener("click", () => setEditing(true));
+            $("#cancel-edit-button").addEventListener("click", () => setEditing(false));
+            $("#save-button").addEventListener("click", async () => {
+                const assessmentId = state.response.assessment.id;
+                const content = assessmentEditor.value.trim();
+                if (!assessmentId || !content) return;
+                $("#save-button").disabled = true;
+                saveState.textContent = "Saving…";
+                try {
+                    const response = await authorizedFetch(`/api/v1/assessments/${assessmentId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ content }),
                     });
-                    const body = await response.json();
-                    if (!response.ok) {
-                        const detail = body.detail || body.error || `Request failed (${response.status})`;
-                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-                    }
-                    const result = getIngestResult(body);
-                    const documents = Array.isArray(result?.documents) ? result.documents : [];
-                    const nestedChunkCount = documents.reduce(
-                        (total, knowledge) => total + (Array.isArray(knowledge.chunks) ? knowledge.chunks.length : 0),
-                        0,
-                    );
-                    const chunkCount = Number.isInteger(result?.chunk_count) ? result.chunk_count : nestedChunkCount;
-                    const message = `Created ${chunkCount} chunk${chunkCount === 1 ? "" : "s"} from ${documents.length} PDF${documents.length === 1 ? "" : "s"}.`;
-                    showStatus(message, "success");
-                    alert(message);
-                } catch (error) {
-                    showStatus(`Ingestion failed: ${error.message}`, "error");
-                } finally {
-                    submit.disabled = false;
-                }
+                    const body = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(apiError(body, response));
+                    state.response.assessment = { ...state.response.assessment, ...body };
+                    renderAssessment(body.content);
+                    setEditing(false);
+                    saveState.textContent = "Changes saved";
+                } catch (error) { saveState.textContent = `Save failed: ${error.message}`; }
+                finally { $("#save-button").disabled = false; }
             });
 
-            searchForm.addEventListener("submit", async (event) => {
-                event.preventDefault();
-                searchSubmit.disabled = true;
-                searchResults.replaceChildren();
-                searchStatus.textContent = "Searching…";
-                searchStatus.className = "status success";
-
+            $("#finalize-button").addEventListener("click", async () => {
+                const assessmentId = state.response.assessment.id;
+                if (!assessmentId) return;
+                $("#finalize-button").disabled = true;
+                saveState.textContent = "Finalizing…";
                 try {
-                    const query = new URLSearchParams(new FormData(searchForm));
-                    const response = await authorizedFetch(`/api/v1/knowledge/search?${query}`);
-                    const body = await response.json();
-                    if (!response.ok) {
-                        const detail = body.detail || body.error || `Request failed (${response.status})`;
-                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-                    }
-                    renderSearchResults(searchResults, body);
-                    searchStatus.textContent = body.length
-                        ? `Found ${body.length} matching chunk${body.length === 1 ? "" : "s"}.`
-                        : "No embedded document chunks are available yet.";
-                    searchStatus.className = "status success";
+                    const response = await authorizedFetch(`/api/v1/assessments/${assessmentId}/finalize`, { method: "POST" });
+                    const body = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(apiError(body, response));
+                    state.response.assessment = { ...state.response.assessment, ...body };
+                    $("#assessment-status").textContent = titleCase(body.status || "finalized");
+                    $("#finalize-button").textContent = "Finalized";
+                    $("#edit-button").disabled = true;
+                    saveState.textContent = "Assessment finalized";
                 } catch (error) {
-                    searchStatus.textContent = `Search failed: ${error.message}`;
-                    searchStatus.className = "status error";
-                } finally {
-                    searchSubmit.disabled = false;
+                    $("#finalize-button").disabled = false;
+                    saveState.textContent = `Finalize failed: ${error.message}`;
                 }
             });
 
-            documentIngestForm.addEventListener("submit", async (event) => {
+            async function copyAssessment() {
+                const content = state.response.assessment.content;
+                if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(content);
+                else {
+                    assessmentEditor.hidden = false;
+                    assessmentEditor.value = content;
+                    assessmentEditor.select();
+                    document.execCommand("copy");
+                    assessmentEditor.hidden = true;
+                }
+                showToast("Assessment copied");
+            }
+            $("#copy-button").addEventListener("click", () => copyAssessment().catch(() => showToast("Unable to copy assessment")));
+
+            function resetDemo() {
+                clearGenerationTimers();
+                setGenerationBusy(false);
+                state.files = [];
+                state.response = null;
+                fileInput.value = "";
+                setFiles([]);
+                setEditing(false);
+                saveState.textContent = "";
+                resultScreen.hidden = true;
+                processingScreen.hidden = true;
+                uploadScreen.hidden = false;
+                $("#demo-details-button").hidden = true;
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+            $("#start-over-button").addEventListener("click", resetDemo);
+            $("#all-evidence-button").addEventListener("click", openEvidence);
+            $("#demo-details-button").addEventListener("click", () => $("#details-dialog").showModal());
+            window.addEventListener("pagehide", clearGenerationTimers);
+
+            $("#energy-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
-                if (!documentIngestFiles.files.length) {
-                    documentIngestStatus.textContent = "Select at least one document.";
-                    documentIngestStatus.className = "status error";
-                    return;
-                }
-                documentIngestSubmit.disabled = true;
-                documentIngestResult.hidden = true;
-                documentIngestStatus.textContent = "Ingesting resident documents…";
-                documentIngestStatus.className = "status success";
-
+                const form = event.currentTarget;
+                const error = $("#energy-error");
+                const result = $("#energy-result");
+                error.hidden = true;
+                setFormBusy(form, true);
+                result.classList.add("loading");
+                result.innerHTML = '<div class="result-placeholder"><strong>Calculating nutrition needs…</strong></div>';
                 try {
-                    const uploadedCount = documentIngestFiles.files.length;
-                    const response = await authorizedFetch("/api/v1/document/ingest", {
-                        method: "POST",
-                        body: new FormData(documentIngestForm),
-                    });
-                    const body = await response.json();
-                    if (!response.ok) {
-                        const detail = body.detail || body.error || `Request failed (${response.status})`;
-                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-                    }
-                    const ingestedCount = Array.isArray(body.documents) ? body.documents.length : 0;
-                    const skippedCount = uploadedCount - ingestedCount;
-                    documentIngestOutput.value = JSON.stringify(body, null, 2);
-                    documentIngestResult.hidden = false;
-                    documentIngestStatus.textContent = `Ingested ${ingestedCount} new document${ingestedCount === 1 ? "" : "s"}${skippedCount ? `; skipped ${skippedCount} existing document${skippedCount === 1 ? "" : "s"}` : ""}.`;
-                    documentIngestStatus.className = "status success";
-                } catch (error) {
-                    documentIngestStatus.textContent = `Document ingestion failed: ${error.message}`;
-                    documentIngestStatus.className = "status error";
+                    const payload = {
+                        weight: Number($("#energy-weight").value),
+                        height: Number($("#energy-height").value),
+                        age: Number($("#energy-age").value),
+                        gender: $("#energy-gender").value,
+                        goal: $("#energy-goal").value,
+                        activity_level: Number($("#activity-level").value),
+                        dialysis: $("#dialysis").checked,
+                    };
+                    const amputation = optionalNumber("#amputation");
+                    if (amputation !== null) payload.amputation = amputation;
+                    const body = await api.calculateEnergyNeeds(payload);
+                    result.replaceChildren();
+                    const heading = document.createElement("h2");
+                    heading.textContent = "Calculated nutrition needs";
+                    const metrics = document.createElement("div");
+                    metrics.className = "result-metrics";
+                    resultMetric(metrics, "BMI", number(body.bmi), titleCase(body.bmi_category));
+                    resultMetric(metrics, "Current weight", `${number(body.cbw)} lb`);
+                    resultMetric(metrics, "Ideal body weight", `${number(body.ibw)} lb`);
+                    resultMetric(metrics, "Adjusted body weight", `${number(body.adjusted_ideal_body_weight)} lb`);
+                    resultMetric(metrics, "Calculation weight", `${number(body.calculation_weight)} lb`, `${number(body.weight_used_for_calculations_in_kg)} kg · ${body.calculations_done_using || ""}`);
+                    resultMetric(metrics, "Mifflin estimate", `${number(body.mifflin, 0)} kcal/day`);
+                    resultMetric(metrics, "Calories", `${number(body.calories?.[0], 0)}–${number(body.calories?.[1], 0)} kcal/day`, `${body.calorie_factor?.join("–")} kcal/kg`);
+                    resultMetric(metrics, "Protein", `${number(body.protein?.[0])}–${number(body.protein?.[1])} g/day`, `${body.protein_factor?.join("–")} g/kg`);
+                    resultMetric(metrics, "Fluids", `${number(body.fluids?.[0], 0)}–${number(body.fluids?.[1], 0)} mL/day`, `${body.fluid_factor?.join("–")} mL/kg`);
+                    result.append(heading, metrics);
+                } catch (caught) {
+                    error.textContent = caught.message;
+                    error.hidden = false;
+                    result.innerHTML = '<div class="result-placeholder"><strong>Unable to calculate</strong><span>Review the inputs and try again.</span></div>';
                 } finally {
-                    documentIngestSubmit.disabled = false;
+                    setFormBusy(form, false);
+                    result.classList.remove("loading");
                 }
             });
 
-            assessmentForm.addEventListener("submit", async (event) => {
+            function updateTubeFeedMethod() {
+                const bolus = $("#tf-method").value === "bolus";
+                $("#continuous-fields").hidden = bolus;
+                $("#bolus-fields").hidden = !bolus;
+                $("#tf-hours").required = !bolus;
+                $("#tf-start-time").required = !bolus;
+                $("#tf-bolus-feeds").required = bolus;
+            }
+            $("#tf-method").addEventListener("change", updateTubeFeedMethod);
+            updateTubeFeedMethod();
+
+            $("#tube-feed-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
-                assessmentSubmit.disabled = true;
-                assessmentResult.hidden = true;
-                assessmentStatus.textContent = "Extracting resident data and generating note…";
-                assessmentStatus.className = "status success";
-
+                const form = event.currentTarget;
+                const error = $("#tube-feed-error");
+                const result = $("#tube-feed-result");
+                const bolus = $("#tf-method").value === "bolus";
+                error.hidden = true;
+                setFormBusy(form, true);
+                result.classList.add("loading");
+                result.innerHTML = '<div class="result-placeholder"><strong>Calculating tube feeding…</strong></div>';
                 try {
-                    const data = new FormData(assessmentForm);
-                    const fileCount = assessmentFiles.files.length;
-                    const query = String(data.get("query") || "").trim();
-                    data.delete("query");
-                    const suffix = query ? `?context=${encodeURIComponent(query)}` : "";
-                    const response = await authorizedFetch(`/api/v1/assessment/generate${suffix}`, {
-                        method: "POST",
-                        body: data,
-                    });
-                    const body = await response.json();
-                    if (!response.ok) {
-                        const detail = body.detail || body.error || `Request failed (${response.status})`;
-                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    const payload = {
+                        energy_needs: [Number($("#tf-energy-low").value), Number($("#tf-energy-high").value)],
+                        formula: $("#tf-formula").value.trim(),
+                        bolus,
+                        feeding_route: $("#tf-route").value.trim(),
+                        protein_supplement_kcal: Number($("#tf-supplement-kcal").value || 0),
+                        protein_supplement_protein_g: Number($("#tf-supplement-protein").value || 0),
+                        protein_supplement_fluids_ml: Number($("#tf-supplement-fluid").value || 0),
+                    };
+                    if (payload.energy_needs[1] < payload.energy_needs[0]) {
+                        throw new Error("Energy target high must be greater than or equal to the low target.");
                     }
-                    assessmentOutput.value = body.content;
-                    assessmentResult.hidden = false;
-                    assessmentStatus.textContent = `Generated note from ${fileCount} resident file${fileCount === 1 ? "" : "s"}.`;
-                    assessmentStatus.className = "status success";
-                } catch (error) {
-                    assessmentStatus.textContent = `Generate failed: ${error.message}`;
-                    assessmentStatus.className = "status error";
+                    const packageVolume = optionalNumber("#tf-package-volume");
+                    if (packageVolume !== null) payload.package_volume_ml = packageVolume;
+                    if (bolus) payload.n_bolus_feeds = Number($("#tf-bolus-feeds").value);
+                    else {
+                        payload.n_hours = Number($("#tf-hours").value);
+                        payload.start_time = $("#tf-start-time").value.trim();
+                        const startingRate = optionalNumber("#tf-starting-rate");
+                        const rateIncrease = optionalNumber("#tf-rate-increase");
+                        if ((startingRate === null) !== (rateIncrease === null)) {
+                            throw new Error("Provide both titration fields, or leave both blank.");
+                        }
+                        if (startingRate !== null) payload.starting_rate_ml_per_hr = startingRate;
+                        if (rateIncrease !== null) payload.rate_increase_ml_per_hr = rateIncrease;
+                    }
+                    const body = await api.calculateTubeFeed(payload);
+                    const feed = body.tubefeed_results;
+                    if (!feed) throw new Error("No matching formula or schedule could be calculated. Add the package volume if the formula name is ambiguous.");
+                    result.replaceChildren();
+                    const heading = document.createElement("h2");
+                    heading.textContent = feed.formula_display_name || "Tube-feed results";
+                    const metrics = document.createElement("div");
+                    metrics.className = "result-metrics";
+                    resultMetric(metrics, "Formula volume", `${number(feed.total_volume_ml, 0)} mL/day`);
+                    resultMetric(metrics, bolus ? "Bolus schedule" : "Continuous rate", bolus ? `${number(feed.volume_per_bolus_ml, 0)} mL × ${feed.n_bolus_feeds}/day` : `${number(feed.rate_ml_per_hr, 0)} mL/hr`, bolus ? feed.feeding_route : `${feed.duration_hours} hours/day · ${feed.feeding_route}`);
+                    resultMetric(metrics, "Formula calories", `${number(feed.kcal_per_day, 0)} kcal/day`);
+                    resultMetric(metrics, "Formula protein", `${number(feed.protein_per_day_g)} g/day`);
+                    resultMetric(metrics, "Formula free water", `${number(feed.fluids_per_day_ml)} mL/day`);
+                    resultMetric(metrics, "Water flush", feed.free_water_flush ? `${number(feed.free_water_flush.total_volume_ml, 0)} mL/day` : "None calculated");
+                    resultMetric(metrics, "Total calories", `${number(feed.total_kcal_per_day, 0)} kcal/day`);
+                    resultMetric(metrics, "Total protein", `${number(feed.total_protein_per_day_g)} g/day`);
+                    resultMetric(metrics, "Total fluids", `${number(feed.total_fluids_per_day_ml)} mL/day`);
+                    result.append(heading, metrics);
+                } catch (caught) {
+                    error.textContent = caught.message;
+                    error.hidden = false;
+                    result.innerHTML = '<div class="result-placeholder"><strong>Unable to calculate</strong><span>Review the formula and schedule inputs.</span></div>';
                 } finally {
-                    assessmentSubmit.disabled = false;
+                    setFormBusy(form, false);
+                    updateTubeFeedMethod();
+                    result.classList.remove("loading");
                 }
             });
 
-            assessmentIngestForm.addEventListener("submit", async (event) => {
+            $("#knowledge-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
-                assessmentIngestSubmit.disabled = true;
-                assessmentIngestStatus.textContent = "Ingesting notes…";
-                assessmentIngestStatus.className = "status success";
-
+                const form = event.currentTarget;
+                const error = $("#knowledge-error");
+                const result = $("#knowledge-result");
+                const text = $("#knowledge-text").value.trim();
+                if (!text) return;
+                error.hidden = true;
+                setFormBusy(form, true);
+                result.classList.add("loading");
+                result.innerHTML = '<div class="result-placeholder"><strong>Searching clinical references…</strong></div>';
                 try {
-                    const response = await authorizedFetch("/api/v1/assessments/ingestion", {
-                        method: "POST",
-                        body: new FormData(assessmentIngestForm),
-                    });
-                    const body = await response.json();
-                    if (!response.ok) {
-                        const detail = body.detail || body.error || `Request failed (${response.status})`;
-                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+                    const payload = { text, top_k: Number($("#knowledge-count").value) };
+                    const source = $("#knowledge-source").value;
+                    if (source) payload.document_type = source;
+                    const matches = await api.searchKnowledge(payload);
+                    result.replaceChildren();
+                    const heading = document.createElement("h2");
+                    heading.textContent = `${matches.length} reference match${matches.length === 1 ? "" : "es"}`;
+                    result.append(heading);
+                    if (!matches.length) {
+                        const empty = document.createElement("div");
+                        empty.className = "result-placeholder";
+                        empty.innerHTML = "<strong>No matching guidance found</strong><span>Try broader clinical terms or search all sources.</span>";
+                        result.append(empty);
+                    } else {
+                        const list = document.createElement("div");
+                        list.className = "search-results";
+                        matches.forEach((match) => {
+                            const item = document.createElement("article");
+                            item.className = "search-result";
+                            const meta = document.createElement("div");
+                            meta.className = "search-result-meta";
+                            const page = present(match.source_page_start)
+                                ? `Page ${match.source_page_start}${match.source_page_end && match.source_page_end !== match.source_page_start ? `–${match.source_page_end}` : ""}`
+                                : null;
+                            compact([titleCase(match.knowledge_type), match.filename, match.section_title, page, present(match.similarity) ? `${number(Number(match.similarity) * 100, 0)}% relevance` : null]).forEach((value) => {
+                                const part = document.createElement("span");
+                                part.textContent = value;
+                                meta.append(part);
+                            });
+                            const content = document.createElement("p");
+                            content.textContent = match.chunk_text;
+                            item.append(meta, content);
+                            list.append(item);
+                        });
+                        result.append(list);
                     }
-                    const result = getIngestResult(body);
-                    const assessments = Array.isArray(result?.documents) ? result.documents : [];
-                    const assessmentCount = Number.isInteger(result?.chunk_count) ? result.chunk_count : assessments.length;
-                    const message = `${assessmentCount} assessment chunk${assessmentCount === 1 ? "" : "s"} ingested.`;
-                    assessmentIngestStatus.textContent = message;
-                    assessmentIngestStatus.className = "status success";
-                    alert(message);
-                } catch (error) {
-                    assessmentIngestStatus.textContent = `Note ingestion failed: ${error.message}`;
-                    assessmentIngestStatus.className = "status error";
+                } catch (caught) {
+                    error.textContent = caught.message;
+                    error.hidden = false;
+                    result.innerHTML = '<div class="result-placeholder"><strong>Search unavailable</strong><span>Review the question and try again.</span></div>';
                 } finally {
-                    assessmentIngestSubmit.disabled = false;
+                    setFormBusy(form, false);
+                    result.classList.remove("loading");
                 }
             });
 
-            assessmentSearchForm.addEventListener("submit", async (event) => {
-                event.preventDefault();
-                assessmentSearchSubmit.disabled = true;
-                assessmentSearchResults.replaceChildren();
-                assessmentSearchStatus.textContent = "Searching notes…";
-                assessmentSearchStatus.className = "status success";
+            document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
+            document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("click", (event) => {
+                if (event.target === dialog) dialog.close();
+            }));
 
-                try {
-                    const query = new URLSearchParams(new FormData(assessmentSearchForm));
-                    const response = await authorizedFetch(`/api/v1/search/assessment?${query}`);
-                    const body = await response.json();
-                    if (!response.ok) {
-                        const detail = body.detail || body.error || `Request failed (${response.status})`;
-                        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-                    }
-                    renderSearchResults(assessmentSearchResults, body);
-                    assessmentSearchStatus.textContent = body.length
-                        ? `Found ${body.length} matching note chunk${body.length === 1 ? "" : "s"}.`
-                        : "No matching note chunks were found.";
-                    assessmentSearchStatus.className = "status success";
-                } catch (error) {
-                    assessmentSearchStatus.textContent = `Note search failed: ${error.message}`;
-                    assessmentSearchStatus.className = "status error";
-                } finally {
-                    assessmentSearchSubmit.disabled = false;
-                }
-            });
+            let toastTimer;
+            function showToast(message) {
+                const toast = $("#toast");
+                toast.textContent = message;
+                toast.classList.add("visible");
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => toast.classList.remove("visible"), 2200);
+            }
         </script>
     </body>
 </html>

@@ -4,20 +4,20 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, SQLModel, create_engine
 
-from ntk.models.sql.resident import (
+from ntk.models.sql.clinical import ClinicalStatus, PersonDiet
+from ntk.models.sql.person import (
     ClinicalFactType,
     ExtractionStatus,
-    Resident,
-    ResidentClinicalFact,
-    ResidentEdema,
-    ResidentLab,
-    ResidentMealIntake,
-    ResidentOrder,
-    ResidentProgressNote,
-    ResidentWeight,
-    ResidentWound,
+    Person,
+    PersonClinicalFact,
+    PersonEdema,
+    PersonLab,
+    PersonMealIntake,
+    PersonProgressNote,
+    PersonWeight,
+    PersonWound,
 )
-from ntk.repositories.resident_repo import ResidentRepo
+from ntk.repositories.person_repo import PersonRepo
 from ntk.utils.misc import require_id
 
 
@@ -28,68 +28,66 @@ def test_assessment_records_are_recent_and_orders_are_current() -> None:
     newer = datetime(2026, 8, 1, tzinfo=UTC)
 
     with Session(engine) as session:
-        resident = Resident(name="Resident")
-        session.add(resident)
+        person = Person(name="Person")
+        session.add(person)
         session.commit()
-        session.refresh(resident)
-        resident_id = require_id(resident.id)
+        session.refresh(person)
+        person_id = require_id(person.id)
         session.add_all(
             [
-                ResidentWeight(
-                    resident_id=resident_id,
+                PersonWeight(
+                    person_id=person_id,
                     measured_at=older,
                     weight_lb=150,
                 ),
-                ResidentWeight(
-                    resident_id=resident_id,
+                PersonWeight(
+                    person_id=person_id,
                     measured_at=newer,
                     weight_lb=145,
                 ),
-                ResidentLab(
-                    resident_id=resident_id,
+                PersonLab(
+                    person_id=person_id,
                     name="Albumin",
                     result="3.2",
                     observed_at=newer,
                 ),
-                ResidentOrder(
-                    resident_id=resident_id,
-                    summary="Renal diet",
-                    status="Active",
+                PersonDiet(
+                    person_id=person_id,
+                    diet_type="Renal",
+                    status=ClinicalStatus.ACTIVE,
+                    observed_at=newer,
+                    state_key="current-diet",
+                    extracted_fact_id=1,
                 ),
-                ResidentOrder(
-                    resident_id=resident_id,
-                    summary="Old supplement",
-                    status="Inactive",
-                ),
-                ResidentProgressNote(
-                    resident_id=resident_id,
+                PersonProgressNote(
+                    person_id=person_id,
                     note_date=newer,
                     note_text="Nutrition follow-up",
                     raw_text="Nutrition follow-up",
                     note_key="note-key",
                     extraction_status=ExtractionStatus.EXTRACTED,
                 ),
-                ResidentWound(
-                    resident_id=resident_id,
+                PersonWound(
+                    person_id=person_id,
                     wound_number="1",
                     type="Pressure injury",
                     location="Sacrum",
                     observed_at=newer,
                 ),
-                ResidentEdema(
-                    resident_id=resident_id,
+                PersonEdema(
+                    person_id=person_id,
                     location="Lower extremities",
                     severity="2+",
                     observed_at=newer,
                 ),
-                ResidentMealIntake(
-                    resident_id=resident_id,
+                PersonMealIntake(
+                    person_id=person_id,
                     min_percent=50,
                     max_percent=75,
                     observed_at=newer,
                 ),
-                ResidentClinicalFact(
-                    resident_id=resident_id,
+                PersonClinicalFact(
+                    person_id=person_id,
                     clinical_fact_type=ClinicalFactType.OBSERVATION,
                     observation_type="appetite",
                     description="Poor appetite",
@@ -99,11 +97,11 @@ def test_assessment_records_are_recent_and_orders_are_current() -> None:
         )
         session.commit()
 
-        records = ResidentRepo(session).get_assessment_records(resident_id)
+        records = PersonRepo(session).get_assessment_records(person_id)
 
         assert [weight.weight_lb for weight in records.weights] == [145, 150]
         assert [lab.name for lab in records.labs] == ["Albumin"]
-        assert [order.summary for order in records.orders] == ["Renal diet"]
+        assert [diet.diet_type for diet in records.diets] == ["Renal"]
         assert [note.note_key for note in records.progress_notes] == ["note-key"]
         assert [wound.wound_number for wound in records.wounds] == ["1"]
         assert [item.location for item in records.edema] == ["Lower extremities"]

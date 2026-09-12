@@ -87,7 +87,7 @@ class DataExtractionAgent:
         self,
         extraction_input: ExtractionInput,
     ) -> list[AIUnknownDocumentFact]:
-        """Extract facts and resident identity clues from an unknown document."""
+        """Extract facts and person identity clues from an unknown document."""
         if not extraction_input.text.strip():
             return []
         result = await self.unknown_document_agent.run(

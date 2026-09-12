@@ -4,22 +4,21 @@ import asyncio
 import typing
 from types import SimpleNamespace
 
-from ntk.controllers.search.assessment import (
+from ntk.controllers.assessment.search import (
     AssessmentSearchOptions,
-    AssessmentSearchResponse,
 )
-from ntk.controllers.search.knowledge import (
+from ntk.controllers.knowledge.search import (
     KnowledgeSearchOptions,
     KnowledgeSearchResponse,
 )
 from ntk.models.rag import RagSearchMatch
-from ntk.presentation.api.routers import search
+from ntk.presentation.api.routers import assessments, knowledge
 
 if typing.TYPE_CHECKING:
     import pytest
 
 
-def test_search_routes_use_matching_controllers(
+def test_search_routes_use_matching_application_layers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     match = RagSearchMatch(
@@ -29,39 +28,52 @@ def test_search_routes_use_matching_controllers(
         similarity=0.9,
     )
 
-    class AssessmentController:
+    class AssessmentRepository:
         def __init__(self, session: object) -> None:
             assert session == "session"
 
+    class AssessmentService:
+        def __init__(self, repository: AssessmentRepository) -> None:
+            assert isinstance(repository, AssessmentRepository)
+
         @staticmethod
-        def run(options: AssessmentSearchOptions) -> object:
-            assert options.text == "weight loss"
-            return SimpleNamespace(result=AssessmentSearchResponse(matches=[match]))
+        async def search_assessments_async(
+            text: str,
+            top_k: int,
+        ) -> list[RagSearchMatch]:
+            assert text == "weight loss"
+            assert top_k == 5  # noqa: PLR2004
+            return [match]
 
     class KnowledgeController:
         def __init__(self, session: object) -> None:
             assert session == "session"
 
         @staticmethod
-        def run(options: KnowledgeSearchOptions) -> object:
+        async def run(options: KnowledgeSearchOptions) -> object:
             assert options.text == "protein needs"
             return SimpleNamespace(result=KnowledgeSearchResponse(matches=[match]))
 
-    monkeypatch.setattr(search, "AssessmentSearchController", AssessmentController)
     monkeypatch.setattr(
-        search,
+        assessments,
+        "EmbeddingRepo",
+        AssessmentRepository,
+    )
+    monkeypatch.setattr(assessments, "EmbeddingService", AssessmentService)
+    monkeypatch.setattr(
+        knowledge,
         "KnowledgeVectorSearchController",
         KnowledgeController,
     )
 
     assert asyncio.run(
-        search.search_assessments(
+        assessments.search_assessments(
             AssessmentSearchOptions(text="weight loss"),
             "session",  # ty: ignore[invalid-argument-type]
         ),
     ) == [match]
     assert asyncio.run(
-        search.search_knowledge(
+        knowledge.search_knowledge(
             KnowledgeSearchOptions(text="protein needs"),
             "session",  # ty: ignore[invalid-argument-type]
         ),

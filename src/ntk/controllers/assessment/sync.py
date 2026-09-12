@@ -9,9 +9,9 @@ from pydantic import BaseModel
 from ntk.controllers.base import BaseController
 from ntk.controllers.session import controller_session
 from ntk.models.output import Output
+from ntk.pipelines.assessment import AssessmentPipeline, AssessmentSyncResult
 from ntk.repositories.assessment_repo import AssessmentRepo
 from ntk.repositories.progress_note_repo import ProgressNoteRepo
-from ntk.services.assessment import AssessmentSyncResult, AssessmentSyncService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -39,9 +39,9 @@ class AssessmentSyncController(BaseController):
         """Synchronize assessments and embeddings using one database session."""
         del options
         with controller_session(self.session) as session:
-            result = await AssessmentSyncService(
-                ProgressNoteRepo(session),
+            result = await AssessmentPipeline(
                 AssessmentRepo(session),
+                progress_note_repository=ProgressNoteRepo(session),
             ).sync_assessments()
         return Output(result=result, controller=self.name, exit_code=0)
 

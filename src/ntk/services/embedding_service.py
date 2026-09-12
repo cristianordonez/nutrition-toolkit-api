@@ -9,6 +9,7 @@ import typing
 from pydantic_ai import Embedder
 
 if typing.TYPE_CHECKING:
+    from ntk.models.knowledge import KnowledgeType
     from ntk.models.rag import RagSearchMatch
     from ntk.repositories.embedding_repo import EmbeddingRepo
 
@@ -17,6 +18,7 @@ EMBEDDING_DIMENSIONS = 384
 
 _MAX_RESULTS = 20
 _INFERENCE_LOCK = threading.Lock()
+_SHARED_EMBEDDER = Embedder(DEFAULT_EMBEDDING_MODEL)
 
 
 class EmbeddingService:
@@ -28,7 +30,7 @@ class EmbeddingService:
     ) -> None:
         """Initialize local embeddings with optional vector persistence."""
         self.embedding_model = DEFAULT_EMBEDDING_MODEL
-        self.embedder = Embedder(DEFAULT_EMBEDDING_MODEL)
+        self.embedder = _SHARED_EMBEDDER
         self.repository = repository
 
     def get_embedding(self, content: str) -> list[float]:
@@ -54,23 +56,6 @@ class EmbeddingService:
         """Embed documents off-loop through the serialized local model."""
         return await asyncio.to_thread(self.get_embeddings, contents)
 
-    def search_context(
-        self,
-        text: str,
-        *,
-        knowledge_top_k: int = 3,
-        assessment_top_k: int = 5,
-    ) -> tuple[list[RagSearchMatch], list[RagSearchMatch]]:
-        """Search both indexes from one transient summary embedding."""
-        self._validate_top_k(knowledge_top_k)
-        self._validate_top_k(assessment_top_k)
-        vector = self._embed_query(text)
-        repository = self._repository()
-        return (
-            repository.search_knowledge(vector, knowledge_top_k),
-            repository.search_assessments(vector, assessment_top_k),
-        )
-
     def search_assessments(
         self,
         text: str,
@@ -81,15 +66,37 @@ class EmbeddingService:
         vector = self._embed_query(text)
         return self._repository().search_assessments(vector, top_k)
 
-    def search_knowledge(
+    async def search_assessments_async(
         self,
         text: str,
         top_k: int = 5,
     ) -> list[RagSearchMatch]:
-        """Return diet and nutrition manual content similar to the text."""
+        """Return similar assessments without blocking or nesting an event loop."""
         self._validate_top_k(top_k)
-        vector = self._embed_query(text)
-        return self._repository().search_knowledge(vector, top_k)
+        vector = await asyncio.to_thread(self._embed_query, text)
+        return self._repository().search_assessments(vector, top_k)
+
+    async def search_knowledge(
+        self,
+        text: str,
+        top_k: int = 5,
+        *,
+        document_type: KnowledgeType | None = None,
+    ) -> list[RagSearchMatch]:
+        """Return content from either or both supported knowledge manuals."""
+        self._validate_top_k(top_k)
+        # ``Embedder.embed_query_sync`` manages its own async runner. Calling it
+        # directly from a FastAPI request therefore attempts to nest event loops.
+        # Keep the synchronous local-model call off the request event loop.
+        vector = await asyncio.to_thread(self._embed_query, text)
+        repository = self._repository()
+        if document_type is None:
+            return repository.search_knowledge(vector, top_k)
+        return repository.search_knowledge(
+            vector,
+            top_k,
+            document_type=document_type,
+        )
 
     def _embed_query(self, text: str) -> str:
         query = text.strip()

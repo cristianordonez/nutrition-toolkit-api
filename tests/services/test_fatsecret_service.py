@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import typing
 
-from ntk.services import fatsecret_service
-from ntk.services.fatsecret_service import FatSecretClient
+from ntk.services.nutrition_data import fatsecret_service
+from ntk.services.nutrition_data.fatsecret_service import FatSecretClient
 
 if typing.TYPE_CHECKING:
     import pytest

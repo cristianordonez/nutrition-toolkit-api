@@ -2,32 +2,25 @@
 
 from __future__ import annotations
 
-import pathlib  # noqa: TC003 - Pydantic resolves Path at runtime
+import pathlib
 import typing
 
 from pydantic import BaseModel, Field
 
 from ntk.controllers.base import BaseController
 from ntk.controllers.session import controller_session
-from ntk.controllers.uploads import (
-    ReadableUpload,
-    UploadRequirements,
-    materialize_uploads,
-)
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.models.sql.resident import ResidentAssessment  # noqa: TC001 - Pydantic runtime
-from ntk.repositories.assessment_repo import AssessmentRepo
-from ntk.repositories.facility_repo import FacilityRepo
-from ntk.repositories.progress_note_repo import ProgressNoteRepo
-from ntk.repositories.resident_facility_stay_repo import ResidentFacilityStayRepo
-from ntk.repositories.resident_repo import ResidentRepo
-from ntk.services.assessment import AssessmentSyncService
-from ntk.services.resident_data import ResidentIngestionService
-from ntk.services.resident_data.resident_resolver import ResidentResolver
+from ntk.models.sql.person import PersonAssessment  # noqa: TC001 - Pydantic runtime
+from ntk.pipelines.assessment.ingest.import_pipeline import (
+    AssessmentImportPipeline,
+    InvalidProgressNoteReportError,
+)
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
+
+    from ntk.controllers.uploads import ReadableUpload
 
 
 class AssessmentImportOptions(BaseModel):
@@ -38,18 +31,30 @@ class AssessmentImportOptions(BaseModel):
     created_by: str | None = None
 
 
-class AssessmentImportResult(ConsoleRenderableModel):
-    """Nutrition assessments imported from one progress-note report."""
+class AssessmentImportFailure(BaseModel):
+    """One uploaded file rejected without stopping the remaining imports."""
 
-    assessments: list[ResidentAssessment]
+    filename: str
+    detail: str
+
+
+class AssessmentImportResult(ConsoleRenderableModel):
+    """Nutrition assessments imported from one or more progress-note reports."""
+
+    assessments: list[PersonAssessment]
+    failures: list[AssessmentImportFailure] = Field(default_factory=list)
 
     def to_console(self) -> str:
-        """Render the IDs of imported assessments."""
-        return "\n".join(str(assessment.id) for assessment in self.assessments)
+        """Render imported assessment IDs and rejected input files."""
+        lines = [str(assessment.id) for assessment in self.assessments]
+        lines.extend(
+            f"FAILED {failure.filename}: {failure.detail}" for failure in self.failures
+        )
+        return "\n".join(lines)
 
 
 class AssessmentImportController(BaseController):
-    """Import nutrition notes as finalized resident assessments."""
+    """Import nutrition notes as finalized person assessments."""
 
     name = "import"
     help = "Import nutrition assessments from a PCC progress-note report"
@@ -66,62 +71,85 @@ class AssessmentImportController(BaseController):
         overwrite: bool = False,
         created_by: str | None = None,
     ) -> Output[AssessmentImportResult]:
-        """Materialize and import one uploaded progress-note report."""
-        async with materialize_uploads(
-            [file],
-            UploadRequirements(
-                allowed_suffixes=frozenset({".pdf"}),
-                file_description="PCC progress-note report PDF",
-                directory_prefix="ntk-assessment-import-",
-                default_filename=lambda _index: "progress-notes.pdf",
-            ),
-        ) as uploads:
-            return await self.run(
-                AssessmentImportOptions(
-                    path=uploads.paths[0],
-                    overwrite=overwrite,
-                    created_by=created_by,
-                ),
+        """Delegate one uploaded progress-note report to the import workflow."""
+        with controller_session(self.session) as session:
+            assessments = await AssessmentImportPipeline.from_session(
+                session,
+            ).run_upload(
+                file,
+                overwrite=overwrite,
+                created_by=created_by,
             )
+        return self._output(assessments)
+
+    async def run_uploads(
+        self,
+        files: typing.Sequence[ReadableUpload],
+        *,
+        overwrite: bool = False,
+        created_by: str | None = None,
+    ) -> Output[AssessmentImportResult]:
+        """Import every valid report and retain failures for invalid reports."""
+        if not files:
+            message = "At least one PCC progress-note report PDF is required"
+            raise ValueError(message)
+        assessments: list[PersonAssessment] = []
+        failures: list[AssessmentImportFailure] = []
+        with controller_session(self.session) as session:
+            pipeline = AssessmentImportPipeline.from_session(session)
+            for index, file in enumerate(files):
+                filename = pathlib.Path(
+                    file.filename or f"progress-notes-{index + 1}.pdf",
+                ).name
+                try:
+                    assessments.extend(
+                        await pipeline.run_upload(
+                            file,
+                            overwrite=overwrite,
+                            created_by=created_by,
+                        ),
+                    )
+                except InvalidProgressNoteReportError as error:
+                    failures.append(
+                        AssessmentImportFailure(
+                            filename=filename,
+                            detail=str(error),
+                        ),
+                    )
+        return self._output(assessments, failures=failures)
 
     async def run(
         self,
         options: AssessmentImportOptions,
     ) -> Output[AssessmentImportResult]:
-        """Ingest progress notes, then synchronize historical assessments."""
-        if not options.path.is_file():
-            message = f"Progress-note report does not exist: {options.path}"
-            raise ValueError(message)
-        if options.path.suffix.casefold() != ".pdf":
-            message = f"Progress-note report is not a PDF: {options.path}"
-            raise ValueError(message)
+        """Delegate one local progress-note report to the import workflow."""
         with controller_session(self.session) as session:
-            resident_resolver = ResidentResolver(
-                resident_repository=ResidentRepo(session),
-                facility_repository=FacilityRepo(session),
-                stay_repository=ResidentFacilityStayRepo(session),
+            assessments = await AssessmentImportPipeline.from_session(session).run(
+                options.path,
             )
-            progress_note_repository = ProgressNoteRepo(session)
-            ingestion_service = ResidentIngestionService(
-                progress_note_repository=progress_note_repository,
-                resident_resolver=resident_resolver,
-            )
-            await ingestion_service.ingest([options.path])
-            sync_result = await AssessmentSyncService(
-                progress_note_repository,
-                AssessmentRepo(session),
-            ).sync_assessments()
+        return self._output(assessments)
+
+    @classmethod
+    def _output(
+        cls,
+        assessments: list[PersonAssessment],
+        *,
+        failures: list[AssessmentImportFailure] | None = None,
+    ) -> Output[AssessmentImportResult]:
+        """Build the shared CLI controller result."""
         return Output(
             result=AssessmentImportResult(
-                assessments=sync_result.created_assessments,
+                assessments=assessments,
+                failures=failures or [],
             ),
-            controller=self.name,
+            controller=cls.name,
             exit_code=0,
         )
 
 
 __all__ = [
     "AssessmentImportController",
+    "AssessmentImportFailure",
     "AssessmentImportOptions",
     "AssessmentImportResult",
 ]

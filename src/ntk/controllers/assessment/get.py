@@ -1,4 +1,4 @@
-"""CLI command for retrieving one resident assessment."""
+"""CLI command for retrieving one person assessment."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ from ntk.controllers.base import BaseController
 from ntk.controllers.session import controller_session
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.models.sql.resident import ResidentAssessment  # noqa: TC001
+from ntk.models.sql.person import PersonAssessment  # noqa: TC001
 from ntk.repositories.assessment_repo import AssessmentRepo
+from ntk.services.assessment_service import AssessmentService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -20,13 +21,13 @@ if typing.TYPE_CHECKING:
 class AssessmentGetOptions(BaseModel):
     """Identifier of the assessment to retrieve."""
 
-    assessment_id: int = Field(description="Resident assessment ID")
+    assessment_id: int = Field(description="Person assessment ID")
 
 
 class AssessmentGetCommandResult(ConsoleRenderableModel):
     """Assessment retrieved for display by the CLI."""
 
-    assessment: ResidentAssessment
+    assessment: PersonAssessment
 
     def to_console(self) -> str:
         """Render the assessment as formatted JSON."""
@@ -50,7 +51,9 @@ class AssessmentGetCommandController(BaseController):
     ) -> Output[AssessmentGetCommandResult]:
         """Return the requested assessment or raise when it does not exist."""
         with controller_session(self.session) as session:
-            assessment = AssessmentRepo(session).get_by_id(options.assessment_id)
+            assessment = AssessmentService(AssessmentRepo(session)).get(
+                options.assessment_id,
+            )
             if assessment is None:
                 message = f"Assessment {options.assessment_id} was not found"
                 raise LookupError(message)

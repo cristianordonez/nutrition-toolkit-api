@@ -5,7 +5,7 @@ import typing
 
 from ntk.controllers.assessment import sync
 from ntk.controllers.assessment.sync import AssessmentSyncController
-from ntk.services.assessment import AssessmentSyncResult
+from ntk.pipelines.assessment import AssessmentSyncResult
 
 
 def test_sync_controller_uses_persisted_notes_without_extraction(
@@ -18,8 +18,13 @@ def test_sync_controller_uses_persisted_notes_without_extraction(
             assert session == "session"
 
     class Service:
-        def __init__(self, progress_notes: Repository, assessments: Repository) -> None:
-            assert isinstance(progress_notes, Repository)
+        def __init__(
+            self,
+            assessments: Repository,
+            *,
+            progress_note_repository: Repository,
+        ) -> None:
+            assert isinstance(progress_note_repository, Repository)
             assert isinstance(assessments, Repository)
 
         @staticmethod
@@ -28,7 +33,7 @@ def test_sync_controller_uses_persisted_notes_without_extraction(
 
     monkeypatch.setattr(sync, "ProgressNoteRepo", Repository)
     monkeypatch.setattr(sync, "AssessmentRepo", Repository)
-    monkeypatch.setattr(sync, "AssessmentSyncService", Service)
+    monkeypatch.setattr(sync, "AssessmentPipeline", Service)
 
     output = asyncio.run(
         AssessmentSyncController(

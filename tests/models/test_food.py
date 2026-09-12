@@ -2,14 +2,29 @@ from __future__ import annotations
 
 from datetime import UTC
 
-from ntk.models.sql.food import Food, FoodCategory, FoodNutrient, Nutrient
+from ntk.models.sql.food import (
+    Food,
+    FoodCategory,
+    FoodNutrient,
+    FoodSourceType,
+    FoodType,
+    ImportMethod,
+    Nutrient,
+)
 
 DEFAULT_AMOUNT = 20.0
 
 
 def test_food_models_create_relationship_ready_entities() -> None:
     category = FoodCategory(id=1, name="Supplements")
-    food = Food(id=2, description="Nutrition shake", category_id=1)
+    food = Food(
+        id=2,
+        name="Nutrition shake",
+        food_type=FoodType.ORAL_SUPPLEMENT,
+        source_type=FoodSourceType.INTERNAL,
+        import_method=ImportMethod.MANUAL,
+        category_id=1,
+    )
     nutrient = Nutrient(id=3, name="Protein", number=203, unit_name="g", rank=1)
     amount = FoodNutrient(
         food_id=2,

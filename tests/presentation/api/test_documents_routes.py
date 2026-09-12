@@ -4,8 +4,8 @@ import asyncio
 import typing
 from types import SimpleNamespace
 
+from ntk.pipelines.person.ingestion.transformer import PersonTransformationResult
 from ntk.presentation.api.routers import documents
-from ntk.services.resident_data.transform import ResidentTransformationResult
 
 if typing.TYPE_CHECKING:
     import pytest
@@ -25,7 +25,7 @@ class Upload:
 def test_ingestion_route_calls_document_controller(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    expected = ResidentTransformationResult(documents=[])
+    expected = PersonTransformationResult(documents=[])
 
     class Controller:
         async def run(self, options: DocumentIngestOptions) -> object:

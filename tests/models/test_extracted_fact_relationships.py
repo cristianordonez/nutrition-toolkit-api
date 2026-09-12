@@ -11,15 +11,15 @@ from sqlmodel import Session, SQLModel, create_engine
 from ntk.models.sql.document import Document, DocumentSource, DocumentSourceType
 from ntk.models.sql.extracted_fact import ExtractedFact, build_fact_key
 from ntk.models.sql.facility import Facility
-from ntk.models.sql.resident import (
+from ntk.models.sql.person import (
     ClinicalFactType,
-    Resident,
-    ResidentClinicalFact,
-    ResidentEdema,
-    ResidentLab,
-    ResidentMealIntake,
-    ResidentWeight,
-    ResidentWound,
+    Person,
+    PersonClinicalFact,
+    PersonEdema,
+    PersonLab,
+    PersonMealIntake,
+    PersonWeight,
+    PersonWound,
 )
 
 
@@ -30,6 +30,7 @@ def test_build_fact_key_is_stable_and_generated_on_fact() -> None:
         {
             "fact_type": "lab",
             "payload": payload,
+            "observed_at": None,
             "effective_at": effective_at,
         },
         default=str,
@@ -66,7 +67,7 @@ def test_source_and_fact_key_prevent_duplicate_facts() -> None:
         file_type="application/pdf",
         checksum="sha256:duplicate",
         storage_uri="file:///report.pdf",
-        document_type="resident-report",
+        document_type="person-report",
     )
     source = DocumentSource(
         document_id=1,
@@ -99,7 +100,7 @@ def test_document_page_and_evidence_hash_prevent_duplicate_sources() -> None:
         file_type="application/pdf",
         checksum="sha256:source-duplicate",
         storage_uri="file:///report.pdf",
-        document_type="resident-report",
+        document_type="person-report",
     )
     sources = [
         DocumentSource(
@@ -118,17 +119,17 @@ def test_document_page_and_evidence_hash_prevent_duplicate_sources() -> None:
             session.commit()
 
 
-def test_document_source_fact_and_resident_record_relationships() -> None:
+def test_document_source_fact_and_person_record_relationships() -> None:
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
-    facility = Facility(facility_id="FAC-1", name="Facility")
-    resident = Resident(name="Resident")
+    facility = Facility(facility_identifier="FAC-1", name="Facility")
+    person = Person(name="Person")
     document = Document(
         filename="report.pdf",
         file_type="application/pdf",
         checksum="sha256:abc",
         storage_uri="file:///report.pdf",
-        document_type="resident-report",
+        document_type="person-report",
     )
     source = DocumentSource(
         document_id=1,
@@ -139,64 +140,65 @@ def test_document_source_fact_and_resident_record_relationships() -> None:
     )
     fact = ExtractedFact(
         source=source,
-        resident=resident,
+        person=person,
         fact_type="clinical-records",
-        payload={"report": "resident"},
+        payload={"report": "person"},
+        effective_at=datetime(2026, 8, 27, tzinfo=UTC),
         confidence=1.0,
     )
     records = [
-        ResidentWound(
-            resident_id=1,
-            resident=resident,
+        PersonWound(
+            person_id=1,
+            person=person,
             extracted_fact=fact,
             type="Pressure injury",
             location="Sacrum",
             observed_at=datetime(2026, 8, 27, tzinfo=UTC),
         ),
-        ResidentLab(
-            resident_id=1,
-            resident=resident,
+        PersonLab(
+            person_id=1,
+            person=person,
             extracted_fact=fact,
             name="Albumin",
             result="3.0",
             observed_at=datetime(2026, 8, 27, tzinfo=UTC),
         ),
-        ResidentEdema(
-            resident_id=1,
-            resident=resident,
+        PersonEdema(
+            person_id=1,
+            person=person,
             extracted_fact=fact,
             location="Lower extremities",
             severity="2+",
             observed_at=datetime(2026, 8, 27, tzinfo=UTC),
         ),
-        ResidentMealIntake(
-            resident_id=1,
-            resident=resident,
+        PersonMealIntake(
+            person_id=1,
+            person=person,
             extracted_fact=fact,
             min_percent=50,
             max_percent=75,
-            appetite="Fair",
             observed_at=datetime(2026, 8, 27, tzinfo=UTC),
         ),
-        ResidentClinicalFact(
-            resident_id=1,
-            resident=resident,
+        PersonClinicalFact(
+            person_id=1,
+            person=person,
             extracted_fact=fact,
             clinical_fact_type=ClinicalFactType.OBSERVATION,
             observation_type="swallowing",
             status="Impaired",
             observed_at=datetime(2026, 8, 27, tzinfo=UTC),
         ),
-        ResidentWeight(
-            resident_id=1,
-            resident=resident,
+        PersonWeight(
+            person_id=1,
+            person=person,
             extracted_fact=fact,
+            measured_at=datetime(2026, 8, 27, tzinfo=UTC),
             weight_lb=130,
         ),
     ]
 
     with Session(engine) as session:
-        session.add_all([facility, resident, document, source, fact, *records])
+        session.add_all([facility, person, document, source, fact, *records])
         session.commit()
         session.refresh(document)
         session.refresh(source)
@@ -204,7 +206,7 @@ def test_document_source_fact_and_resident_record_relationships() -> None:
 
         assert document.sources == [source]
         assert source.extracted_facts == [fact]
-        assert fact.resident == resident
+        assert fact.person == person
         assert fact.wounds == [records[0]]
         assert fact.labs == [records[1]]
         assert fact.edema == [records[2]]

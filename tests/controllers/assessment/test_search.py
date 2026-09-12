@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
-from ntk.controllers.search import assessment as search
-from ntk.controllers.search.assessment import (
+from ntk.controllers.assessment import search
+from ntk.controllers.assessment.search import (
     AssessmentSearchController,
     AssessmentSearchOptions,
     AssessmentSearchResponse,
@@ -67,6 +69,37 @@ def test_assessment_search_labels_generated_assessment_without_filename(
     output = controller.run(AssessmentSearchOptions(text="generated"))
 
     assert output.result.matches[0].filename == "generated-assessment"
+
+
+def test_assessment_search_async_entry_point_uses_async_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    match = RagSearchMatch(
+        document_id=44,
+        filename="assessment.pdf",
+        chunk_text="ADIME",
+        similarity=0.75,
+    )
+
+    class Service:
+        def __init__(self, repository: object) -> None:
+            self.repository = repository
+
+        @staticmethod
+        async def search_assessments_async(
+            text: str,
+            top_k: int,
+        ) -> list[RagSearchMatch]:
+            assert text == "weight loss"
+            assert top_k == 2  # noqa: PLR2004
+            return [match]
+
+    monkeypatch.setattr(search, "EmbeddingService", Service)
+    controller = AssessmentSearchController(session=object())  # ty: ignore[invalid-argument-type]
+
+    output = asyncio.run(controller.search("weight loss", top_k=2))
+
+    assert output.result.matches == [match]
 
 
 def test_assessment_search_rejects_blank_text(

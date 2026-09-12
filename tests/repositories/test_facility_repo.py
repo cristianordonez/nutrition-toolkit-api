@@ -21,39 +21,46 @@ def test_create_persists_and_normalizes_facility(session: Session) -> None:
     repository = FacilityRepo(session)
 
     facility = repository.create(
-        Facility(facility_id=" FAC-1 ", name="  Sunrise   Care  "),
+        Facility(facility_identifier=" FAC-1 ", name="  Sunrise   Care  "),
     )
 
     assert facility.id is not None
-    assert facility.facility_id == "FAC-1"
+    assert facility.facility_identifier == "FAC-1"
+    assert facility.normalized_name == "sunrise care"
     assert facility.name == "Sunrise Care"
     assert repository.get_by_id(facility.id) is facility
 
 
 def test_create_returns_existing_external_id_match(session: Session) -> None:
     repository = FacilityRepo(session)
-    existing = repository.create(Facility(facility_id="FAC-1", name="Sunrise"))
+    existing = repository.create(
+        Facility(facility_identifier="FAC-1", name="Sunrise"),
+    )
 
     duplicate = repository.create(
-        Facility(facility_id=" FAC-1 ", name="Different Name"),
+        Facility(facility_identifier=" FAC-1 ", name="Different Name"),
     )
 
     assert duplicate is existing
     assert repository.get_all() == [existing]
 
 
-def test_get_by_facility_id_returns_matching_facility(session: Session) -> None:
+def test_get_by_facility_identifier_returns_matching_facility(
+    session: Session,
+) -> None:
     repository = FacilityRepo(session)
-    facility = repository.create(Facility(facility_id="FAC-1", name="Sunrise"))
+    facility = repository.create(
+        Facility(facility_identifier="FAC-1", name="Sunrise"),
+    )
 
-    assert repository.get_by_facility_id(" FAC-1 ") is facility
-    assert repository.get_by_facility_id("missing") is None
+    assert repository.get_by_facility_identifier(" FAC-1 ") is facility
+    assert repository.get_by_facility_identifier("missing") is None
 
 
 def test_get_by_name_is_normalized_and_case_insensitive(session: Session) -> None:
     repository = FacilityRepo(session)
     facility = repository.create(
-        Facility(facility_id="FAC-1", name="Sunrise Care"),
+        Facility(facility_identifier="FAC-1", name="Sunrise Care"),
     )
 
     assert repository.get_by_name("  SUNRISE   care ") is facility
@@ -63,22 +70,22 @@ def test_get_by_name_is_normalized_and_case_insensitive(session: Session) -> Non
 
 def test_get_all_orders_facilities_by_name(session: Session) -> None:
     repository = FacilityRepo(session)
-    zeta = repository.create(Facility(facility_id="FAC-2", name="Zeta"))
-    alpha = repository.create(Facility(facility_id="FAC-1", name="alpha"))
+    zeta = repository.create(Facility(facility_identifier="FAC-2", name="Zeta"))
+    alpha = repository.create(Facility(facility_identifier="FAC-1", name="alpha"))
 
     assert repository.get_all() == [alpha, zeta]
 
 
-@pytest.mark.parametrize(
-    ("facility_id", "name"),
-    [("", "Sunrise"), ("FAC-1", "   ")],
-)
-def test_create_rejects_empty_identity(
+def test_create_allows_facility_without_external_identifier(session: Session) -> None:
+    facility = FacilityRepo(session).create(Facility(name="Sunrise"))
+
+    assert facility.facility_identifier is None
+
+
+def test_create_rejects_empty_name(
     session: Session,
-    facility_id: str,
-    name: str,
 ) -> None:
     repository = FacilityRepo(session)
 
-    with pytest.raises(ValueError, match="identifier and name"):
-        repository.create(Facility(facility_id=facility_id, name=name))
+    with pytest.raises(ValueError, match="name cannot be empty"):
+        repository.create(Facility(facility_identifier="FAC-1", name="   "))

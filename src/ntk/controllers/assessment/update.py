@@ -1,4 +1,4 @@
-"""Update one persisted resident assessment."""
+"""Update one persisted person assessment."""
 
 from __future__ import annotations
 
@@ -10,16 +10,16 @@ from pydantic import BaseModel
 from ntk.controllers.base import BaseController
 from ntk.controllers.session import controller_session
 from ntk.models.output import Output
-from ntk.models.sql.resident import ResidentAssessment, StatusType  # noqa: TC001
+from ntk.models.sql.person import PersonAssessment, StatusType  # noqa: TC001
+from ntk.pipelines.assessment import AssessmentPipeline
 from ntk.repositories.assessment_repo import AssessmentRepo
-from ntk.services.assessment.update_service import AssessmentUpdateService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
 
 
 class AssessmentUpdateRequest(BaseModel):
-    """Editable resident assessment fields."""
+    """Editable person assessment fields."""
 
     content: str | None = None
     assessment_date: date | None = None
@@ -34,7 +34,7 @@ class AssessmentUpdateOptions(AssessmentUpdateRequest):
 
 
 class AssessmentUpdateController(BaseController):
-    """Update one resident assessment."""
+    """Update one person assessment."""
 
     name = "update"
     help = "Update an assessment"
@@ -47,10 +47,10 @@ class AssessmentUpdateController(BaseController):
     async def run(
         self,
         options: AssessmentUpdateOptions,
-    ) -> Output[ResidentAssessment]:
+    ) -> Output[PersonAssessment]:
         """Update the requested assessment or raise when it does not exist."""
         with controller_session(self.session) as session:
-            assessment = await AssessmentUpdateService(
+            assessment = await AssessmentPipeline(
                 AssessmentRepo(session),
             ).update(
                 options.assessment_id,

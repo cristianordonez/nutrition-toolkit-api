@@ -16,13 +16,19 @@ from fastapi import (
 from sqlmodel import Session  # noqa: TC002
 
 from ntk.controllers.knowledge.ingest import KnowledgeIngestController
+from ntk.controllers.knowledge.search import (
+    KnowledgeSearchOptions,
+    KnowledgeVectorSearchController,
+)
 from ntk.controllers.uploads import UploadValidationError
 from ntk.database.db import get_session
 from ntk.defaults import (
     ADMIN_PERMISSION,
+    KNOWLEDGE_READ_PERMISSION,
     KNOWLEDGE_WRITE_PERMISSION,
 )
 from ntk.models.knowledge import KnowledgeIngestResponsePublic, KnowledgeType
+from ntk.models.rag import RagSearchMatch
 from ntk.presentation.api.middleware import rate_limit, require_any_permission
 
 router = APIRouter()
@@ -69,3 +75,28 @@ async def ingest_pdfs(
             detail=str(err),
         ) from err
     return output.result
+
+
+@router.post(
+    "/knowledge/search",
+    response_model=list[RagSearchMatch],
+    dependencies=[
+        Depends(
+            require_any_permission([ADMIN_PERMISSION, KNOWLEDGE_READ_PERMISSION]),
+        ),
+        Depends(rate_limit(60, window=3600, scope="search-knowledge")),
+    ],
+)
+async def search_knowledge(
+    options: KnowledgeSearchOptions,
+    session: typing.Annotated[Session, Depends(get_session)],
+) -> list[RagSearchMatch]:
+    """Return knowledge chunks closest to the supplied query."""
+    try:
+        output = await KnowledgeVectorSearchController(session).run(options)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+    return output.result.matches

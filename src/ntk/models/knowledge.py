@@ -6,7 +6,7 @@ import typing
 from datetime import datetime  # noqa: TC003
 from enum import StrEnum
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from ntk.utils.misc import require_id
 
@@ -23,6 +23,39 @@ class KnowledgeType(StrEnum):
     NUTRITION_CARE_MANUAL = "nutrition-care-manual"
 
 
+class KnowledgeSectionType(StrEnum):
+    """Classify extracted manual sections before semantic indexing."""
+
+    CONTENT = "content"
+    REFERENCES = "references"
+    TABLE_OF_CONTENTS = "table_of_contents"
+    METADATA = "metadata"
+
+
+class ExtractedKnowledgePage(BaseModel):
+    """Readable text retained with its one-based source page."""
+
+    page_number: int = Field(ge=1)
+    text: str
+
+
+class KnowledgeChunkCreate(BaseModel):
+    """One substantive knowledge chunk with deterministic provenance."""
+
+    content: str = Field(min_length=1)
+    section_title: str | None = None
+    source_page_start: int = Field(ge=1)
+    source_page_end: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_page_range(self) -> KnowledgeChunkCreate:
+        """Require a page range ordered from first source page to last."""
+        if self.source_page_end < self.source_page_start:
+            msg = "source_page_end must be on or after source_page_start"
+            raise ValueError(msg)
+        return self
+
+
 class KnowledgeChunkPublic(BaseModel):
     """Knowledge chunk returned by the API."""
 
@@ -30,6 +63,9 @@ class KnowledgeChunkPublic(BaseModel):
     knowledge_id: int
     chunk_index: int
     content: str
+    section_title: str | None
+    source_page_start: int | None
+    source_page_end: int | None
     created_at: datetime
 
 
@@ -75,6 +111,9 @@ class KnowledgeIngestResponsePublic(BaseModel):
                             knowledge_id=chunk.knowledge_id,
                             chunk_index=chunk.chunk_index,
                             content=chunk.content,
+                            section_title=chunk.section_title,
+                            source_page_start=chunk.source_page_start,
+                            source_page_end=chunk.source_page_end,
                             created_at=chunk.created_at,
                         )
                         for chunk in knowledge.chunks

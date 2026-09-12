@@ -9,16 +9,11 @@ from .finalize import (
     AssessmentFinalizeOptions,
 )
 from .generate import (
-    AssessmentGenerateCommandController,
-    AssessmentGenerateCommandOptions,
-    AssessmentGenerateCommandResult,
-)
-from .generation import (
     AssessmentGenerationController,
     AssessmentGenerationOptions,
     AssessmentGenerationResult,
-    GeneratedResidentAssessment,
-    ResidentAssessmentGenerationOptions,
+    GeneratedPersonAssessment,
+    PersonAssessmentGenerationOptions,
 )
 from .get import (
     AssessmentGetCommandController,
@@ -27,10 +22,16 @@ from .get import (
 )
 from .import_assessments import (
     AssessmentImportController,
+    AssessmentImportFailure,
     AssessmentImportOptions,
     AssessmentImportResult,
 )
 from .list import AssessmentListController, AssessmentListOptions, AssessmentListResult
+from .search import (
+    AssessmentSearchController,
+    AssessmentSearchOptions,
+    AssessmentSearchResponse,
+)
 from .sync import AssessmentSyncController, AssessmentSyncOptions
 from .update import (
     AssessmentUpdateController,
@@ -43,9 +44,6 @@ __all__ = [
     "AssessmentFinalizeCommandResult",
     "AssessmentFinalizeController",
     "AssessmentFinalizeOptions",
-    "AssessmentGenerateCommandController",
-    "AssessmentGenerateCommandOptions",
-    "AssessmentGenerateCommandResult",
     "AssessmentGenerationController",
     "AssessmentGenerationOptions",
     "AssessmentGenerationResult",
@@ -53,16 +51,20 @@ __all__ = [
     "AssessmentGetCommandResult",
     "AssessmentGetOptions",
     "AssessmentImportController",
+    "AssessmentImportFailure",
     "AssessmentImportOptions",
     "AssessmentImportResult",
     "AssessmentListController",
     "AssessmentListOptions",
     "AssessmentListResult",
+    "AssessmentSearchController",
+    "AssessmentSearchOptions",
+    "AssessmentSearchResponse",
     "AssessmentSyncController",
     "AssessmentSyncOptions",
     "AssessmentUpdateController",
     "AssessmentUpdateOptions",
     "AssessmentUpdateRequest",
-    "GeneratedResidentAssessment",
-    "ResidentAssessmentGenerationOptions",
+    "GeneratedPersonAssessment",
+    "PersonAssessmentGenerationOptions",
 ]

@@ -19,7 +19,7 @@ if typing.TYPE_CHECKING:
     import pathlib
 
 
-class ResidentExtractionService:
+class KnowledgePipeline:
     paths: typing.ClassVar[list[pathlib.Path]] = []
     document_types: typing.ClassVar[list[KnowledgeType]] = []
 
@@ -50,12 +50,12 @@ def test_knowledge_group_and_ingest_controller(
     (tmp_path / "manual.pdf").touch()
     (tmp_path / "notes.txt").touch()
     (tmp_path / "ignored.csv").touch()
-    ResidentExtractionService.paths = []
-    ResidentExtractionService.document_types = []
+    KnowledgePipeline.paths = []
+    KnowledgePipeline.document_types = []
     monkeypatch.setattr(
         ingest,
-        "ResidentIngestionService",
-        ResidentExtractionService,
+        "KnowledgeIngestionPipeline",
+        KnowledgePipeline,
     )
     monkeypatch.setattr(ingest, "KnowledgeRepo", lambda _session: "repository")
     group = KnowledgeControllerGroup()
@@ -71,11 +71,11 @@ def test_knowledge_group_and_ingest_controller(
         ),
     )
     assert output.controller == "ingest"
-    assert [path.name for path in ResidentExtractionService.paths] == [
+    assert [path.name for path in KnowledgePipeline.paths] == [
         "manual.pdf",
         "notes.txt",
     ]
-    assert ResidentExtractionService.document_types == [
+    assert KnowledgePipeline.document_types == [
         KnowledgeType.DIET_MANUAL,
         KnowledgeType.DIET_MANUAL,
     ]

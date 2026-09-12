@@ -1,4 +1,4 @@
-"""List persisted resident assessments."""
+"""List persisted person assessments."""
 
 from __future__ import annotations
 
@@ -9,8 +9,9 @@ from pydantic import BaseModel
 from ntk.controllers.base import BaseController
 from ntk.controllers.session import controller_session
 from ntk.models.output import Output
-from ntk.models.sql.resident import ResidentAssessment  # noqa: TC001
+from ntk.models.sql.person import PersonAssessment  # noqa: TC001
 from ntk.repositories.assessment_repo import AssessmentRepo
+from ntk.services.assessment_service import AssessmentService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -21,13 +22,13 @@ class AssessmentListOptions(BaseModel):
 
 
 class AssessmentListResult(BaseModel):
-    """Persisted resident assessments."""
+    """Persisted person assessments."""
 
-    assessments: list[ResidentAssessment]
+    assessments: list[PersonAssessment]
 
 
 class AssessmentListController(BaseController):
-    """Return all persisted resident assessments."""
+    """Return all persisted person assessments."""
 
     name = "list"
     help = "List assessments"
@@ -44,7 +45,7 @@ class AssessmentListController(BaseController):
         """Return all assessments newest first."""
         del options
         with controller_session(self.session) as session:
-            assessments = AssessmentRepo(session).get_all()
+            assessments = AssessmentService(AssessmentRepo(session)).list_assessments()
         return Output(
             result=AssessmentListResult(assessments=assessments),
             controller=self.name,

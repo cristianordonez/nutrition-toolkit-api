@@ -11,20 +11,20 @@ from ntk.controllers.documents.ingest import (
     DocumentIngestOptions,
 )
 from ntk.controllers.uploads import UploadValidationError
-from ntk.defaults import ADMIN_PERMISSION, RESIDENTS_WRITE_PERMISSION
+from ntk.defaults import ADMIN_PERMISSION, PERSONS_WRITE_PERMISSION
+from ntk.pipelines.person.ingestion.transformer import PersonTransformationResult
 from ntk.presentation.api.middleware import rate_limit, require_any_permission
-from ntk.services.resident_data.transform import ResidentTransformationResult
 
 router = APIRouter()
 
 
 @router.post(
     "/document/ingest",
-    response_model=ResidentTransformationResult,
+    response_model=PersonTransformationResult,
     dependencies=[
         Depends(
             require_any_permission(
-                [ADMIN_PERMISSION, RESIDENTS_WRITE_PERMISSION],
+                [ADMIN_PERMISSION, PERSONS_WRITE_PERMISSION],
             ),
         ),
         Depends(rate_limit(40, window=3600, scope="document-ingest")),
@@ -35,7 +35,7 @@ async def ingest_documents(
         list[UploadFile],
         File(description="One or more PDF, CSV, or text documents"),
     ],
-) -> ResidentTransformationResult:
+) -> PersonTransformationResult:
     """Ingest all uploaded documents into the database."""
     try:
         output = await DocumentIngestController().run(

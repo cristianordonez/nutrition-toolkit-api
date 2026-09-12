@@ -10,7 +10,13 @@ from pydantic import BaseModel, Field
 from ntk.controllers.base import BaseController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.services.calculator_service import CalculatorService
+from ntk.services.calculators import (
+    EnergyNeedsInput,
+    Gender,
+    Goal,
+    NutritionCalculator,
+    RangeResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +36,7 @@ class EnergyOptions(BaseModel):
         description="Activity level of person in scale from 1.2-1.9",
         default=1.2,
     )
-    dialysis: bool = Field(description="If resident is on hemodialysis", default=False)
+    dialysis: bool = Field(description="If person is on hemodialysis", default=False)
     amputation: float | None = Field(
         description="Percentage of amputation. Hand=0.7 | Total leg=16.1 | Total Arm=4.9 | Foot=1.5 | Forearm and hand=2.3 | Calf and foot=5.8",  # noqa: E501
         default=None,
@@ -97,66 +103,50 @@ class EnergyController(BaseController):
         :param options: pydantic basemodel instance holding options
         :return: Output model
         """
-        calc = self._create_calculator(options)
-        results = self._build_base_results(calc, options)
-        self._add_amputation_results(results, calc, options)
-        self._add_estimated_needs(results, calc, options)
+        data = EnergyNeedsInput(
+            height_in=options.height,
+            weight_lb=options.weight,
+            gender=Gender(options.gender),
+            age=options.age,
+            activity_level=options.activity_level,
+            amputation_percent=options.amputation,
+            goal=Goal(options.goal),
+            dialysis=options.dialysis,
+            protein_factor=options.protein_needs,
+            calorie_factor=options.energy_needs,
+        )
+        calculated = NutritionCalculator.calculate(data)
+        results = EnergyResponse(
+            bmi=NutritionCalculator.calculate_bmi(options.weight, options.height),
+            cbw=options.weight,
+            mifflin=calculated.mifflin_kcal_day,
+            ibw=calculated.ideal_weight_lb,
+            adjusted_ideal_body_weight=calculated.adjusted_weight_lb,
+            bmi_adjusted_for_amputation=(
+                calculated.bmi if options.amputation is not None else None
+            ),
+            ibw_adjusted_for_amputation=(
+                NutritionCalculator.calculate_ibw_adjusted_for_amputation(
+                    data.gender,
+                    data.height_in,
+                    options.amputation,
+                )
+                if options.amputation is not None
+                else None
+            ),
+            bmi_category=calculated.bmi_category,
+            calculations_done_using=calculated.weight_basis,
+            calculation_weight=calculated.calculation_weight_lb,
+            weight_used_for_calculations_in_kg=calculated.calculation_weight_kg,
+            calorie_factor=self._range_tuple(calculated.calorie_factor),
+            protein_factor=self._range_tuple(calculated.protein_factor),
+            fluid_factor=self._range_tuple(calculated.fluid_factor),
+            calories=self._range_tuple(calculated.calories_kcal_day),
+            protein=self._range_tuple(calculated.protein_g_day),
+            fluids=self._range_tuple(calculated.fluids_ml_day),
+        )
         return Output(result=results, controller=self.name, exit_code=0)
 
     @staticmethod
-    def _create_calculator(options: EnergyOptions) -> CalculatorService:
-        return CalculatorService(
-            height=options.height,
-            weight=options.weight,
-            gender=options.gender,
-            age=options.age,
-            activity_level=options.activity_level,
-            amputation=options.amputation,
-            goal=options.goal,
-            dialysis=options.dialysis,
-        )
-
-    @staticmethod
-    def _build_base_results(
-        calc: CalculatorService,
-        options: EnergyOptions,
-    ) -> EnergyResponse:
-        return EnergyResponse(
-            bmi=calc.bmi,
-            cbw=options.weight,
-            mifflin=calc.mifflin,
-            ibw=calc.ibw,
-            adjusted_ideal_body_weight=calc.aibw,
-            calculation_weight=0.0,
-            weight_used_for_calculations_in_kg=0,
-            bmi_adjusted_for_amputation=None,
-            ibw_adjusted_for_amputation=None,
-            bmi_category=None,
-            calculations_done_using=None,
-            calorie_factor=(0, 0),
-            protein_factor=(0, 0),
-            fluid_factor=(0, 0),
-            calories=(0, 0),
-            protein=(0, 0),
-            fluids=(0, 0),
-        )
-
-    @staticmethod
-    def _add_amputation_results(
-        results: EnergyResponse,
-        calc: CalculatorService,
-        options: EnergyOptions,
-    ) -> None:
-        if options.amputation:
-            results.bmi_adjusted_for_amputation = calc.bmi_adjusted_for_amputation
-            results.ibw_adjusted_for_amputation = calc.ibw_adjusted_for_amputation
-
-    def _add_estimated_needs(
-        self,
-        results: EnergyResponse,
-        calc: CalculatorService,
-        options: EnergyOptions,
-    ) -> None:
-        goals = calc.get_goals(options.protein_needs, options.energy_needs)
-        for key, value in goals.items():
-            setattr(results, key, value)
+    def _range_tuple(result: RangeResult) -> tuple[float, float]:
+        return result.low, result.high
