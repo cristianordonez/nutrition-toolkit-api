@@ -16,18 +16,16 @@ from ntk.controllers.uploads import (
 )
 from ntk.models.output import Output
 from ntk.models.settings import SETTINGS
-from ntk.repositories.facility_repo import FacilityRepo
-from ntk.repositories.progress_note_repo import ProgressNoteRepo
-from ntk.repositories.resident_facility_stay_repo import ResidentFacilityStayRepo
-from ntk.repositories.resident_repo import ResidentRepo
-from ntk.services.resident_data.resident_ingestion_service import (
-    ResidentIngestionService,
-)
-from ntk.services.resident_data.resident_resolver import ResidentResolver
-from ntk.services.resident_data.transform import (
+from ntk.pipelines.person.ingestion.pipeline import PersonIngestionPipeline
+from ntk.pipelines.person.ingestion.transformer import (
     ExtractedFactTransformer,
-    ResidentTransformationResult,
+    PersonTransformationResult,
 )
+from ntk.repositories.facility_repo import FacilityRepo
+from ntk.repositories.person_repo import PersonRepo
+from ntk.repositories.progress_note_repo import ProgressNoteRepo
+from ntk.services.facility_resolver import FacilityResolver
+from ntk.services.person.person_service import PersonService
 from ntk.utils.parallel import ParallelPoolHandler
 
 if typing.TYPE_CHECKING:
@@ -37,17 +35,18 @@ if typing.TYPE_CHECKING:
     from sqlmodel import Session
 
 
-def _ingest_document(path: pathlib.Path) -> ResidentTransformationResult:
+def _ingest_document(path: pathlib.Path) -> PersonTransformationResult:
     """Ingest one path with worker-local database and service resources."""
     with controller_session(None) as session:
-        resident_resolver = ResidentResolver(
-            resident_repository=ResidentRepo(session),
-            facility_repository=FacilityRepo(session),
-            stay_repository=ResidentFacilityStayRepo(session),
+        facility_resolver = FacilityResolver(FacilityRepo(session))
+        person_service = PersonService(
+            PersonRepo(session),
+            facility_resolver,
         )
-        service = ResidentIngestionService(
+        service = PersonIngestionPipeline(
             progress_note_repository=ProgressNoteRepo(session),
-            resident_resolver=resident_resolver,
+            person_service=person_service,
+            facility_resolver=facility_resolver,
         )
         return asyncio.run(service.ingest(files=[path]))
 
@@ -72,7 +71,7 @@ class DocumentIngestController(BaseController):
     async def run(
         self,
         options: DocumentIngestOptions,
-    ) -> Output[ResidentTransformationResult]:
+    ) -> Output[PersonTransformationResult]:
         """Materialize uploads and run the document ETL pipeline."""
         async with materialize_uploads(
             typing.cast("Sequence[ReadableUpload]", options.files),
@@ -92,14 +91,15 @@ class DocumentIngestController(BaseController):
             )
             if self.session is not None or len(paths) == 1:
                 with controller_session(self.session) as session:
-                    resident_resolver = ResidentResolver(
-                        resident_repository=ResidentRepo(session),
-                        facility_repository=FacilityRepo(session),
-                        stay_repository=ResidentFacilityStayRepo(session),
+                    facility_resolver = FacilityResolver(FacilityRepo(session))
+                    person_service = PersonService(
+                        PersonRepo(session),
+                        facility_resolver,
                     )
-                    service = ResidentIngestionService(
+                    service = PersonIngestionPipeline(
                         progress_note_repository=ProgressNoteRepo(session),
-                        resident_resolver=resident_resolver,
+                        person_service=person_service,
+                        facility_resolver=facility_resolver,
                     )
                     result = await service.ingest(files=paths)
             else:
@@ -108,14 +108,14 @@ class DocumentIngestController(BaseController):
                     workers=SETTINGS.document_ingestion_workers,
                 )
                 results = typing.cast(
-                    "list[ResidentTransformationResult]",
+                    "list[PersonTransformationResult]",
                     await asyncio.to_thread(
                         handler.map,
                         _ingest_document,
                         paths,
                     ),
                 )
-                result = ResidentTransformationResult(
+                result = PersonTransformationResult(
                     documents=[
                         document
                         for worker_result in results

@@ -3,15 +3,34 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ntk.models.extracted_fact_create import (
+    AllergyPayload,
+    AppetitePayload,
     ClinicalFactPayload,
+    DiagnosisPayload,
+    DialysisPayload,
     EdemaPayload,
     FactPayload,
+    FoodPreferencePayload,
+    GIObservationPayload,
     MealIntakePayload,
+    NutritionGoalPayload,
+    OralFeedingStatusPayload,
     WoundPayload,
 )
 
 AIClinicalFactPayload = (
-    EdemaPayload | MealIntakePayload | WoundPayload | ClinicalFactPayload
+    AllergyPayload
+    | AppetitePayload
+    | ClinicalFactPayload
+    | DiagnosisPayload
+    | DialysisPayload
+    | EdemaPayload
+    | FoodPreferencePayload
+    | GIObservationPayload
+    | MealIntakePayload
+    | OralFeedingStatusPayload
+    | NutritionGoalPayload
+    | WoundPayload
 )
 
 
@@ -40,9 +59,10 @@ class AIExtractedClinicalFact(BaseModel):
 class AIExtractedIdentity(BaseModel):
     """Identity clues explicitly present in source text."""
 
-    resident_name: str | None = None
-    facility_resident_identifier: str | None = None
+    source_person_name: str | None = None
+    source_person_identifier: str | None = None
     facility_name: str | None = None
+    facility_identifier: str | None = None
 
 
 class AIUnknownDocumentFact(BaseModel):

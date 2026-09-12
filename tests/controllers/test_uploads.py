@@ -39,6 +39,33 @@ def test_materialize_uploads_writes_valid_files() -> None:
     asyncio.run(materialize())
 
 
+def test_materialize_uploads_keeps_duplicate_filenames_distinct() -> None:
+    async def materialize() -> None:
+        async with materialize_uploads(
+            [
+                Upload("labs.pdf", b"first person"),
+                Upload("labs.pdf", b"second person"),
+            ],
+            UploadRequirements(
+                allowed_suffixes=frozenset({".pdf"}),
+                file_description="PDF file",
+                directory_prefix="ntk-test-",
+                default_filename=lambda index: f"upload-{index}.pdf",
+                reject_empty=True,
+            ),
+        ) as uploads:
+            assert [path.name for path in uploads.paths] == [
+                "labs.pdf",
+                "labs-2.pdf",
+            ]
+            assert [path.read_bytes() for path in uploads.paths] == [
+                b"first person",
+                b"second person",
+            ]
+
+    asyncio.run(materialize())
+
+
 @pytest.mark.parametrize(
     ("files", "message"),
     [

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import pathlib
 import typing
 
@@ -12,36 +11,23 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from ntk.agents.tools import (
+    CALCULATOR_TOOLSET,
+    KNOWLEDGE_SEARCH_TOOLSET,
+    AssessmentToolDependencies,
+)
 from ntk.models.settings import SETTINGS
-from ntk.services.embedding_service import EmbeddingService
-from ntk.utils.tokens import truncate_to_tokens
 
 if typing.TYPE_CHECKING:
-    from ntk.models.rag import RagSearchMatch
-
-
-class ResidentContext(typing.Protocol):
-    """Data contract required by the assessment agent."""
-
-    def summary(self, context: str | None = None) -> str:
-        """Return resident data suitable for semantic retrieval."""
-        ...
-
-    def llm_payload(self) -> dict[str, object]:
-        """Return structured resident data for the assessment prompt."""
-        ...
+    from ntk.models import BudgetedAssessmentContext
+    from ntk.repositories.food_repo import FoodRepo
+    from ntk.services.embedding_service import EmbeddingService
 
 
 logfire.instrument_pydantic_ai()
 
-ASSESSMENT_MODEL = "gpt-5.6-sol"
+ASSESSMENT_MODEL = "gpt-5.6-terra"
 
-_CONTEXT_TOKENS = 1_000
-_QUERY_TOKENS = 2_000
-_KNOWLEDGE_MATCH_LIMIT = 3
-_ASSESSMENT_MATCH_LIMIT = 5
-_KNOWLEDGE_CHUNK_TOKENS = 800
-_ASSESSMENT_CHUNK_TOKENS = 1_200
 _ASSESSMENT_GENERATION_TIMEOUT_SECONDS = 180
 _PROMPT_PATH = pathlib.Path(__file__).parent / "prompts" / "assessment_prompt.md"
 _provider = OpenAIProvider(api_key=SETTINGS.open_ai_api_key)
@@ -49,7 +35,9 @@ _model = OpenAIResponsesModel(ASSESSMENT_MODEL, provider=_provider)
 assessment_agent = Agent(
     _model,
     output_type=str,
+    deps_type=AssessmentToolDependencies,
     instructions=_PROMPT_PATH.read_text(encoding="utf-8"),
+    toolsets=[CALCULATOR_TOOLSET, KNOWLEDGE_SEARCH_TOOLSET],
 )
 
 
@@ -58,53 +46,39 @@ class AssessmentGenerationTimeoutError(TimeoutError):
 
 
 class AssessmentAgent:
-    """Create a nutrition assessment from resident and retrieved context."""
+    """Create a nutrition assessment from fully prepared context and tools."""
 
     def __init__(
         self,
-        agent: Agent[None, str] | None = None,
+        agent: Agent[AssessmentToolDependencies, str] | None = None,
+        food_repo: FoodRepo | None = None,
         embedding_service: EmbeddingService | None = None,
     ) -> None:
         """Initialize the assessment agent or use an injected test double."""
         self.agent = agent or assessment_agent
-        self.embedding_service = embedding_service or EmbeddingService()
+        self.food_repo = food_repo
+        self.embedding_service = embedding_service
 
     async def run(
         self,
-        resident_context: ResidentContext,
-        context: str | None = None,
+        budgeted_assessment_context: BudgetedAssessmentContext,
     ) -> str:
-        """Generate a note from the three explicitly defined input sources."""
+        """Generate a note from a fully prepared assessment context."""
         try:
             async with asyncio.timeout(_ASSESSMENT_GENERATION_TIMEOUT_SECONDS):
-                bounded_context = (
-                    truncate_to_tokens(context.strip(), _CONTEXT_TOKENS)
-                    if context and context.strip()
-                    else None
+                if self.food_repo is None:
+                    message = "A food repository is required for assessment tools"
+                    raise RuntimeError(message)
+                if self.embedding_service is None:
+                    message = "An embedding service is required for assessment tools"
+                    raise RuntimeError(message)
+                result = await self.agent.run(
+                    budgeted_assessment_context.model_dump_json(exclude_none=True),
+                    deps=AssessmentToolDependencies(
+                        food_repo=self.food_repo,
+                        embedding_service=self.embedding_service,
+                    ),
                 )
-                query = truncate_to_tokens(
-                    resident_context.summary(context=bounded_context),
-                    _QUERY_TOKENS,
-                )
-                knowledge_output, assessment_output = await asyncio.to_thread(
-                    self.embedding_service.search_context,
-                    query,
-                    knowledge_top_k=_KNOWLEDGE_MATCH_LIMIT,
-                    assessment_top_k=_ASSESSMENT_MATCH_LIMIT,
-                )
-                payload = {
-                    "resident_context": resident_context.llm_payload(),
-                    "retrieved_knowledge": [
-                        self._match_payload(match, _KNOWLEDGE_CHUNK_TOKENS)
-                        for match in knowledge_output
-                    ],
-                    "previous_assessments": [
-                        self._match_payload(match, _ASSESSMENT_CHUNK_TOKENS)
-                        for match in assessment_output
-                    ],
-                    "optional_context": bounded_context,
-                }
-                result = await self.agent.run(json.dumps(payload, default=str))
         except TimeoutError as error:
             message = (
                 "Assessment generation timed out after "
@@ -116,12 +90,3 @@ class AssessmentAgent:
             msg = "Assessment agent returned an empty note"
             raise RuntimeError(msg)
         return note
-
-    @staticmethod
-    def _match_payload(match: RagSearchMatch, max_tokens: int) -> dict[str, object]:
-        """Return only the bounded RAG fields needed by the assessment model."""
-        return {
-            "filename": match.filename,
-            "chunk_text": truncate_to_tokens(match.chunk_text, max_tokens),
-            "similarity": match.similarity,
-        }

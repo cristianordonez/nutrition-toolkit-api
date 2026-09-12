@@ -8,7 +8,7 @@ from ntk.controllers.documents.ingest import (
     DocumentIngestController,
     DocumentIngestOptions,
 )
-from ntk.services.resident_data.transform import ResidentTransformationResult
+from ntk.pipelines.person.ingestion.transformer import PersonTransformationResult
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -18,7 +18,7 @@ if typing.TYPE_CHECKING:
 
 class Upload:
     filename = "document.txt"
-    content = b"resident report"
+    content = b"person report"
 
     async def read(self) -> bytes:
         return self.content
@@ -33,26 +33,30 @@ def test_document_ingest_accepts_multiple_uploads(
         async def ingest(
             self,
             files: list[pathlib.Path],
-        ) -> ResidentTransformationResult:
+        ) -> PersonTransformationResult:
             observed_paths.extend(files)
             assert all(path.is_file() for path in files)
-            return ResidentTransformationResult(documents=[])
+            return PersonTransformationResult(documents=[])
 
     monkeypatch.setattr(ingest, "ProgressNoteRepo", lambda session: session)
-    monkeypatch.setattr(ingest, "ResidentRepo", lambda session: session)
-    monkeypatch.setattr(ingest, "ResidentIngestionService", lambda **_: Service())
+    monkeypatch.setattr(ingest, "PersonRepo", lambda session: session)
+    monkeypatch.setattr(ingest, "PersonIngestionPipeline", lambda **_: Service())
     controller = DocumentIngestController(session=object())  # ty: ignore[invalid-argument-type]
     first_upload = Upload()
-    first_upload.filename = "first.txt"
+    first_upload.filename = "document.txt"
     second_upload = Upload()
-    second_upload.filename = "second.txt"
-    second_upload.content = b"second resident report"
+    second_upload.filename = "document.txt"
+    second_upload.content = b"second person report"
 
     output = asyncio.run(
         controller.run(DocumentIngestOptions(files=[first_upload, second_upload])),
     )
 
     assert len(observed_paths) == 2  # noqa: PLR2004
+    assert [path.name for path in observed_paths] == [
+        "document.txt",
+        "document-2.txt",
+    ]
     assert output.controller == "ingest"
     assert output.result.documents == []
     assert all(not path.exists() for path in observed_paths)
@@ -69,14 +73,14 @@ def test_document_ingest_uses_configured_parallel_pool(
 
         @staticmethod
         def map(
-            function: typing.Callable[[pathlib.Path], ResidentTransformationResult],
+            function: typing.Callable[[pathlib.Path], PersonTransformationResult],
             paths: list[pathlib.Path],
-        ) -> list[ResidentTransformationResult]:
+        ) -> list[PersonTransformationResult]:
             return [function(path) for path in paths]
 
-    def ingest_one(path: pathlib.Path) -> ResidentTransformationResult:
+    def ingest_one(path: pathlib.Path) -> PersonTransformationResult:
         assert path.is_file()
-        return ResidentTransformationResult(documents=[])
+        return PersonTransformationResult(documents=[])
 
     monkeypatch.setattr(ingest, "ParallelPoolHandler", Handler)
     monkeypatch.setattr(ingest, "_ingest_document", ingest_one)
@@ -84,7 +88,7 @@ def test_document_ingest_uses_configured_parallel_pool(
     first_upload.filename = "first.txt"
     second_upload = Upload()
     second_upload.filename = "second.txt"
-    second_upload.content = b"second resident report"
+    second_upload.content = b"second person report"
 
     output = asyncio.run(
         DocumentIngestController().run(

@@ -24,6 +24,7 @@ class Settings(CustomBaseSettings):
     open_ai_api_key: str = Field(description="API key to access the OpenAI API")
     fatsecret_client_id: str = Field(description="Client ID for fatsecret API")
     fatsecret_client_secret: str = Field(description="Client secret for fatsecret API")
+    usda_api_key: str = Field(description="API key for USDA API")
     document_ingestion_pool_mode: PoolMode = Field(default=PoolMode.THREAD)
     document_ingestion_workers: int = Field(default=3, ge=1)
     progress_note_extraction_concurrency: int = Field(default=8, ge=1)

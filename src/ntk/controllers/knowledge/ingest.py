@@ -21,8 +21,8 @@ from ntk.models.knowledge import (
 )
 from ntk.models.output import Output
 from ntk.models.sql.knowledge import Knowledge  # noqa: TC001
+from ntk.pipelines.knowledge.ingestion.pipeline import KnowledgeIngestionPipeline
 from ntk.repositories.knowledge_repo import KnowledgeRepo
-from ntk.services.resident_data import ResidentIngestionService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -99,7 +99,7 @@ class KnowledgeIngestController(BaseController):
         paths = self._get_file_paths(options.path)
         with controller_session(self.session) as session:
             repository = KnowledgeRepo(session)
-            service = ResidentIngestionService(knowledge_repository=repository)
+            service = KnowledgeIngestionPipeline(knowledge_repository=repository)
             documents = [
                 await service.ingest_knowledge(
                     path,

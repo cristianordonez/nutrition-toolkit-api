@@ -4,14 +4,14 @@ import asyncio
 import typing
 from datetime import date
 
-from ntk.models.sql.resident import ResidentAssessment
-from ntk.services.assessment import AssessmentFinalizationService
+from ntk.models.sql.person import PersonAssessment, StatusType
+from ntk.pipelines.assessment import AssessmentPipeline
 
 
 def test_finalization_service_delegates_to_repository() -> None:
-    assessment = ResidentAssessment(
+    assessment = PersonAssessment(
         id=1,
-        resident_id=1,
+        person_id=1,
         content="Nutrition assessment",
         content_hash="hash",
         assessment_date=date(2026, 8, 30),
@@ -19,24 +19,44 @@ def test_finalization_service_delegates_to_repository() -> None:
     )
 
     class Repository:
+        updated: typing.ClassVar[list[PersonAssessment]] = []
+
         @staticmethod
-        def finalize(assessment_id: object) -> ResidentAssessment | None:
+        def finalize(assessment_id: object) -> PersonAssessment | None:
+            assessment.status = StatusType.FINALIZED
             return assessment if assessment_id == assessment.id else None
 
-    class EmbeddingService:
-        embedded: typing.ClassVar[list[ResidentAssessment]] = []
+        @staticmethod
+        def get_embedding(_assessment_id: int) -> None:
+            return None
 
         @classmethod
-        async def embed_assessment(cls, value: ResidentAssessment) -> bool:
-            cls.embedded.append(value)
-            return True
+        def update(
+            cls,
+            value: PersonAssessment,
+            *,
+            embedding: list[float],
+            model_name: str,
+        ) -> PersonAssessment:
+            assert embedding == [0.1]
+            assert model_name == "embedding-model"
+            cls.updated.append(value)
+            return value
+
+    class EmbeddingService:
+        embedding_model = "embedding-model"
+
+        @staticmethod
+        async def get_embedding_async(content: str) -> list[float]:
+            assert content == assessment.content
+            return [0.1]
 
     result = asyncio.run(
-        AssessmentFinalizationService(
+        AssessmentPipeline(
             Repository(),  # ty: ignore[invalid-argument-type]
-            EmbeddingService(),  # ty: ignore[invalid-argument-type]
+            embedding_service=EmbeddingService(),  # ty: ignore[invalid-argument-type]
         ).finalize(1),
     )
 
     assert result is assessment
-    assert EmbeddingService.embedded == [assessment]
+    assert Repository.updated == [assessment]

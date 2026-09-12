@@ -8,17 +8,17 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 import ntk.models.sql  # noqa: F401
-from ntk.models.sql.resident import (
+from ntk.models.sql.person import (
     ExtractionStatus,
-    Resident,
-    ResidentAssessment,
-    ResidentAssessmentEmbedding,
-    ResidentProgressNote,
+    Person,
+    PersonAssessment,
+    PersonAssessmentEmbedding,
+    PersonProgressNote,
     StatusType,
 )
+from ntk.pipelines.assessment import AssessmentPipeline
 from ntk.repositories.assessment_repo import AssessmentRepo
 from ntk.repositories.progress_note_repo import ProgressNoteRepo
-from ntk.services.assessment import AssessmentEmbeddingService, AssessmentSyncService
 
 if typing.TYPE_CHECKING:
     from ntk.services.embedding_service import EmbeddingService
@@ -47,14 +47,14 @@ def _create_note(
     note_type: str,
     note_text: str = "  Original nutrition assessment.\nKeep exact spacing.  ",
     note_date: datetime = datetime(2026, 8, 28, 14, 30, tzinfo=UTC),
-) -> ResidentProgressNote:
-    resident = Resident(name="Test Resident")
-    session.add(resident)
+) -> PersonProgressNote:
+    person = Person(name="Test Person")
+    session.add(person)
     session.commit()
-    session.refresh(resident)
+    session.refresh(person)
     note = ProgressNoteRepo(session).create(
-        ResidentProgressNote(
-            resident_id=typing.cast("int", resident.id),
+        PersonProgressNote(
+            person_id=typing.cast("int", person.id),
             note_date=note_date,
             note_type=note_type,
             author="Test Dietitian",
@@ -72,16 +72,12 @@ def _create_note(
 def _build_service(
     session: Session,
     embedding_service: FakeEmbeddingService,
-) -> AssessmentSyncService:
+) -> AssessmentPipeline:
     assessment_repository = AssessmentRepo(session)
-    assessment_embedding_service = AssessmentEmbeddingService(
+    return AssessmentPipeline(
         assessment_repository,
-        typing.cast("EmbeddingService", embedding_service),
-    )
-    return AssessmentSyncService(
-        ProgressNoteRepo(session),
-        assessment_repository,
-        assessment_embedding_service,
+        progress_note_repository=ProgressNoteRepo(session),
+        embedding_service=typing.cast("EmbeddingService", embedding_service),
     )
 
 
@@ -108,15 +104,15 @@ async def test_sync_assessments_async(note_type: str) -> None:
             embedding_service,
         ).sync_assessments()
 
-        assessment = session.exec(select(ResidentAssessment)).one()
-        embedding = session.exec(select(ResidentAssessmentEmbedding)).one()
+        assessment = session.exec(select(PersonAssessment)).one()
+        embedding = session.exec(select(PersonAssessmentEmbedding)).one()
         assert result.scanned == 1
         assert result.assessments_created == 1
         assert result.embeddings_created == 1
         assert result.failed == 0
         assert result.created_assessments == [assessment]
         assert assessment.source_progress_note_id == note.id
-        assert embedding.resident_assessment_id == assessment.id
+        assert embedding.person_assessment_id == assessment.id
         assert embedding.embedding_vector == [0.1, 0.2]
         assert embedding.model_name == embedding_service.embedding_model
         assert embedding_service.calls == [assessment.content]
@@ -136,8 +132,8 @@ def test_non_dietitian_note_is_skipped() -> None:
         assert result.scanned == 1
         assert result.skipped_not_nutrition == 1
         assert result.assessments_created == 0
-        assert session.exec(select(ResidentAssessment)).all() == []
-        assert session.exec(select(ResidentAssessmentEmbedding)).all() == []
+        assert session.exec(select(PersonAssessment)).all() == []
+        assert session.exec(select(PersonAssessmentEmbedding)).all() == []
 
 
 def test_running_sync_twice_does_not_duplicate_records() -> None:
@@ -156,8 +152,8 @@ def test_running_sync_twice_does_not_duplicate_records() -> None:
         assert first.embeddings_created == 1
         assert second.assessments_existing == 1
         assert second.embeddings_existing == 1
-        assert len(session.exec(select(ResidentAssessment)).all()) == 1
-        assert len(session.exec(select(ResidentAssessmentEmbedding)).all()) == 1
+        assert len(session.exec(select(PersonAssessment)).all()) == 1
+        assert len(session.exec(select(PersonAssessmentEmbedding)).all()) == 1
         assert len(embedding_service.calls) == 1
 
 
@@ -169,9 +165,9 @@ def test_existing_assessment_with_missing_embedding_is_repaired() -> None:
         note = _create_note(session, note_type="Dietary Assessment")
         assessment_repository = AssessmentRepo(session)
         assessment_repository.create(
-            AssessmentSyncService._build_assessment(note),  # noqa: SLF001
+            AssessmentPipeline._build_assessment(note),  # noqa: SLF001
         )
-        assert session.exec(select(ResidentAssessmentEmbedding)).all() == []
+        assert session.exec(select(PersonAssessmentEmbedding)).all() == []
 
         result = asyncio.run(
             _build_service(session, FakeEmbeddingService()).sync_assessments(),
@@ -179,8 +175,8 @@ def test_existing_assessment_with_missing_embedding_is_repaired() -> None:
 
         assert result.assessments_existing == 1
         assert result.embeddings_created == 1
-        assert len(session.exec(select(ResidentAssessment)).all()) == 1
-        assert len(session.exec(select(ResidentAssessmentEmbedding)).all()) == 1
+        assert len(session.exec(select(PersonAssessment)).all()) == 1
+        assert len(session.exec(select(PersonAssessmentEmbedding)).all()) == 1
 
 
 def test_sync_does_not_embed_existing_draft_assessment() -> None:
@@ -189,7 +185,7 @@ def test_sync_does_not_embed_existing_draft_assessment() -> None:
 
     with Session(engine) as session:
         note = _create_note(session, note_type="Dietary Assessment")
-        assessment = AssessmentSyncService._build_assessment(note)  # noqa: SLF001
+        assessment = AssessmentPipeline._build_assessment(note)  # noqa: SLF001
         assessment.status = StatusType.DRAFT
         assessment.finalized_at = None
         AssessmentRepo(session).create(assessment)
@@ -203,7 +199,7 @@ def test_sync_does_not_embed_existing_draft_assessment() -> None:
         assert result.embeddings_created == 0
         assert result.embeddings_existing == 0
         assert embedding_service.calls == []
-        assert session.exec(select(ResidentAssessmentEmbedding)).all() == []
+        assert session.exec(select(PersonAssessmentEmbedding)).all() == []
 
 
 def test_embedding_service_rejects_draft_assessment() -> None:
@@ -211,13 +207,13 @@ def test_embedding_service_rejects_draft_assessment() -> None:
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        resident = Resident(name="Test Resident")
-        session.add(resident)
+        person = Person(name="Test Person")
+        session.add(person)
         session.commit()
-        session.refresh(resident)
+        session.refresh(person)
         assessment = AssessmentRepo(session).create(
-            ResidentAssessment(
-                resident_id=typing.cast("int", resident.id),
+            PersonAssessment(
+                person_id=typing.cast("int", person.id),
                 content="Unapproved draft",
                 content_hash="draft-hash",
                 assessment_date=datetime(2026, 8, 30, tzinfo=UTC).date(),
@@ -228,18 +224,18 @@ def test_embedding_service_rejects_draft_assessment() -> None:
         embedding_service = FakeEmbeddingService()
 
         created = asyncio.run(
-            AssessmentEmbeddingService(
+            AssessmentPipeline(
                 AssessmentRepo(session),
-                typing.cast("EmbeddingService", embedding_service),
+                embedding_service=typing.cast("EmbeddingService", embedding_service),
             ).embed_assessment(assessment),
         )
 
         assert created is False
         assert embedding_service.calls == []
-        assert session.exec(select(ResidentAssessmentEmbedding)).all() == []
+        assert session.exec(select(PersonAssessmentEmbedding)).all() == []
 
 
-def test_assessment_preserves_resident_text_and_effective_date() -> None:
+def test_assessment_preserves_person_text_and_effective_date() -> None:
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
     note_text = "  Nutrition assessment verbatim.\nSecond line.  "
@@ -258,7 +254,7 @@ def test_assessment_preserves_resident_text_and_effective_date() -> None:
         )
         assessment = result.created_assessments[0]
 
-        assert assessment.resident_id == note.resident_id
+        assert assessment.person_id == note.person_id
         assert assessment.content == note_text
         assert assessment.assessment_date == note_date.date()
         assert assessment.finalized_at is not None
@@ -278,16 +274,16 @@ def test_embedding_failure_leaves_repairable_assessment() -> None:
 
         assert failed.assessments_created == 1
         assert failed.failed == 1
-        assert len(session.exec(select(ResidentAssessment)).all()) == 1
-        assert session.exec(select(ResidentAssessmentEmbedding)).all() == []
+        assert len(session.exec(select(PersonAssessment)).all()) == 1
+        assert session.exec(select(PersonAssessmentEmbedding)).all() == []
 
         embedding_service.fail = False
         repaired = asyncio.run(service.sync_assessments())
         assert repaired.assessments_existing == 1
         assert repaired.embeddings_created == 1
         assert repaired.failed == 0
-        assert len(session.exec(select(ResidentAssessment)).all()) == 1
-        assert len(session.exec(select(ResidentAssessmentEmbedding)).all()) == 1
+        assert len(session.exec(select(PersonAssessment)).all()) == 1
+        assert len(session.exec(select(PersonAssessmentEmbedding)).all()) == 1
 
 
 def test_sync_assessments_from_synchronous_cli_boundary() -> None:

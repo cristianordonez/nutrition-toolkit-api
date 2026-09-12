@@ -55,6 +55,7 @@ async def materialize_uploads(
     with TemporaryDirectory(prefix=requirements.directory_prefix) as directory:
         folder = pathlib.Path(directory)
         paths: list[pathlib.Path] = []
+        used_filenames: set[str] = set()
         for index, upload in enumerate(files):
             filename = pathlib.Path(
                 upload.filename or requirements.default_filename(index),
@@ -69,7 +70,23 @@ async def materialize_uploads(
             if requirements.reject_empty and not content:
                 msg = f"'{filename}' is empty"
                 raise UploadValidationError(msg)
-            path = folder / filename
+            path = _unique_upload_path(folder, filename, used_filenames)
             path.write_bytes(content)
             paths.append(path)
         yield MaterializedUploads(directory=folder, paths=paths)
+
+
+def _unique_upload_path(
+    folder: pathlib.Path,
+    filename: str,
+    used_filenames: set[str],
+) -> pathlib.Path:
+    """Return a collision-safe path for one upload in a shared directory."""
+    source = pathlib.Path(filename)
+    candidate = source.name
+    sequence = 2
+    while candidate.casefold() in used_filenames:
+        candidate = f"{source.stem}-{sequence}{source.suffix}"
+        sequence += 1
+    used_filenames.add(candidate.casefold())
+    return folder / candidate

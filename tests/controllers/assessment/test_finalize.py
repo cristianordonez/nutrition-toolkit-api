@@ -10,15 +10,15 @@ from ntk.controllers.assessment.finalize import (
     AssessmentFinalizeController,
     AssessmentFinalizeOptions,
 )
-from ntk.models.sql.resident import ResidentAssessment, StatusType
+from ntk.models.sql.person import PersonAssessment, StatusType
 
 
 def test_finalize_controller_returns_updated_assessment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assessment = ResidentAssessment(
+    assessment = PersonAssessment(
         id=1,
-        resident_id=1,
+        person_id=1,
         content="Assessment",
         content_hash="hash",
         assessment_date=date(2026, 8, 31),
@@ -31,7 +31,7 @@ def test_finalize_controller_returns_updated_assessment(
             pass
 
         @staticmethod
-        def finalize(assessment_id: int) -> ResidentAssessment | None:
+        def finalize(assessment_id: int) -> PersonAssessment | None:
             return assessment if assessment_id == assessment.id else None
 
         @staticmethod

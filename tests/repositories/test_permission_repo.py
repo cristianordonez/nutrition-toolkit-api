@@ -66,8 +66,8 @@ def test_default_permissions_cover_api_routes() -> None:
         "calculate:read",
         "knowledge:read",
         "knowledge:write",
-        "residents:read",
-        "residents:write",
+        "persons:read",
+        "persons:write",
     }
 
 

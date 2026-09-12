@@ -8,12 +8,12 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from ntk.models.extracted_fact_create import ExtractedFactCreate, WeightPayload
 from ntk.models.sql.extracted_fact import ExtractedFact
-from ntk.models.sql.resident import ResidentWeight
+from ntk.models.sql.person import PersonWeight
+from ntk.pipelines.person.ingestion.transformer import ExtractedFactTransformer
 from ntk.repositories.facility_repo import FacilityRepo
-from ntk.repositories.resident_facility_stay_repo import ResidentFacilityStayRepo
-from ntk.repositories.resident_repo import ResidentRepo
-from ntk.services.resident_data.resident_resolver import ResidentResolver
-from ntk.services.resident_data.transform.transformer import ExtractedFactTransformer
+from ntk.repositories.person_repo import PersonRepo
+from ntk.services.facility_resolver import FacilityResolver
+from ntk.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -36,13 +36,15 @@ def test_overlapping_weight_history_upserts_existing_observation(
     measured_at = datetime(2026, 8, 24, 22, 17, tzinfo=UTC)
 
     with Session(engine) as session:
-        repository = ResidentRepo(session)
-        resolver = ResidentResolver(
-            resident_repository=repository,
-            facility_repository=FacilityRepo(session),
-            stay_repository=ResidentFacilityStayRepo(session),
+        repository = PersonRepo(session)
+        facility_repository = FacilityRepo(session)
+        resolver = FacilityResolver(facility_repository)
+        resolver.register_trusted(name="Facility")
+        person_service = PersonService(
+            repository,
+            resolver,
         )
-        transformer = ExtractedFactTransformer(resolver)
+        transformer = ExtractedFactTransformer(person_service)
 
         first = transformer.transform(
             first_path,
@@ -62,7 +64,7 @@ def test_overlapping_weight_history_upserts_existing_observation(
         else:
             repository.load_transformed_documents([second])
 
-        weights = list(session.exec(select(ResidentWeight)).all())
+        weights = list(session.exec(select(PersonWeight)).all())
         assert len(weights) == 1
         assert weights[0].weight_lb == expected_weight
         assert weights[0].description == "Standing"
@@ -76,8 +78,8 @@ def _weight_fact(
     description: str,
 ) -> ExtractedFactCreate:
     return ExtractedFactCreate(
-        facility_resident_identifier="R-1",
-        resident_name="Resident",
+        source_person_identifier="R-1",
+        source_person_name="Person",
         facility_name="Facility",
         payload=WeightPayload(
             weight_lb=weight_lb,

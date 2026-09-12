@@ -18,7 +18,9 @@ def test_document_schema_and_persistence() -> None:
         "checksum",
         "storage_uri",
         "imported_at",
+        "source_observed_at",
         "document_type",
+        "facility_id",
     }
 
     engine = create_engine("sqlite://")
@@ -53,7 +55,7 @@ def test_document_checksum_is_indexed_and_unique() -> None:
             file_type="application/pdf",
             checksum="sha256:same-content",
             storage_uri=f"file:///{filename}",
-            document_type="resident-report",
+            document_type="person-report",
         )
         for filename in ("first.pdf", "second.pdf")
     ]

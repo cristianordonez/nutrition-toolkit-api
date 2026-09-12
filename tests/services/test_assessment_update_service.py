@@ -6,36 +6,33 @@ from hashlib import sha256
 
 import pytest
 
-from ntk.models.sql.resident import ResidentAssessment, StatusType
-from ntk.services.assessment import update_service
-from ntk.services.assessment.update_service import AssessmentUpdateService
+from ntk.models.sql.person import PersonAssessment, StatusType
+from ntk.pipelines.assessment import AssessmentPipeline
 
 
 class Repository:
-    def __init__(self, assessment: ResidentAssessment | None) -> None:
+    def __init__(self, assessment: PersonAssessment | None) -> None:
         self.assessment = assessment
-        self.updated: list[
-            tuple[ResidentAssessment, list[float] | None, str | None]
-        ] = []
+        self.updated: list[tuple[PersonAssessment, list[float] | None, str | None]] = []
 
-    def get_by_id(self, _assessment_id: int) -> ResidentAssessment | None:
+    def get_by_id(self, _assessment_id: int) -> PersonAssessment | None:
         return self.assessment
 
     def update(
         self,
-        assessment: ResidentAssessment,
+        assessment: PersonAssessment,
         *,
         embedding: list[float] | None,
         model_name: str | None,
-    ) -> ResidentAssessment:
+    ) -> PersonAssessment:
         self.updated.append((assessment, embedding, model_name))
         return assessment
 
 
-def _assessment() -> ResidentAssessment:
-    return ResidentAssessment(
+def _assessment() -> PersonAssessment:
+    return PersonAssessment(
         id=1,
-        resident_id=1,
+        person_id=1,
         content="Original",
         content_hash="old-hash",
         assessment_date=date(2026, 8, 1),
@@ -43,9 +40,7 @@ def _assessment() -> ResidentAssessment:
     )
 
 
-def test_update_changes_fields_and_refreshes_embedding(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_update_changes_fields_and_refreshes_embedding() -> None:
     assessment = _assessment()
     repository = Repository(assessment)
 
@@ -57,10 +52,11 @@ def test_update_changes_fields_and_refreshes_embedding(
             assert text == "Updated   assessment"
             return [0.1, 0.2]
 
-    monkeypatch.setattr(update_service, "EmbeddingService", Embeddings)
-
     result = asyncio.run(
-        AssessmentUpdateService(repository).update(  # ty: ignore[invalid-argument-type]
+        AssessmentPipeline(
+            repository,  # ty: ignore[invalid-argument-type]
+            embedding_service=Embeddings(),  # ty: ignore[invalid-argument-type]
+        ).update(
             1,
             content="  Updated   assessment  ",
             assessment_date=date(2026, 8, 31),
@@ -80,7 +76,7 @@ def test_update_changes_fields_and_refreshes_embedding(
 
 
 def test_update_handles_missing_draft_and_invalid_values() -> None:
-    missing = AssessmentUpdateService(Repository(None)).update(  # ty: ignore[invalid-argument-type]
+    missing = AssessmentPipeline(Repository(None)).update(  # ty: ignore[invalid-argument-type]
         999,
     )
     assert asyncio.run(missing) is None
@@ -89,7 +85,7 @@ def test_update_handles_missing_draft_and_invalid_values() -> None:
     assessment.status = StatusType.FINALIZED
     repository = Repository(assessment)
     result = asyncio.run(
-        AssessmentUpdateService(repository).update(  # ty: ignore[invalid-argument-type]
+        AssessmentPipeline(repository).update(  # ty: ignore[invalid-argument-type]
             1,
             status=StatusType.DRAFT,
         ),
@@ -99,35 +95,26 @@ def test_update_handles_missing_draft_and_invalid_values() -> None:
 
     with pytest.raises(ValueError, match="content cannot be empty"):
         asyncio.run(
-            AssessmentUpdateService(repository).update(  # ty: ignore[invalid-argument-type]
+            AssessmentPipeline(repository).update(  # ty: ignore[invalid-argument-type]
                 1,
                 content="  ",
             ),
         )
     with pytest.raises(ValueError, match="creator cannot be empty"):
         asyncio.run(
-            AssessmentUpdateService(repository).update(  # ty: ignore[invalid-argument-type]
+            AssessmentPipeline(repository).update(  # ty: ignore[invalid-argument-type]
                 1,
                 created_by="  ",
             ),
         )
 
 
-def test_updating_draft_content_does_not_create_embedding(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_updating_draft_content_does_not_create_embedding() -> None:
     assessment = _assessment()
     repository = Repository(assessment)
 
-    class Embeddings:
-        def __init__(self) -> None:
-            msg = "Draft content must not be embedded"
-            raise AssertionError(msg)
-
-    monkeypatch.setattr(update_service, "EmbeddingService", Embeddings)
-
     result = asyncio.run(
-        AssessmentUpdateService(repository).update(  # ty: ignore[invalid-argument-type]
+        AssessmentPipeline(repository).update(  # ty: ignore[invalid-argument-type]
             1,
             content="Updated draft",
         ),

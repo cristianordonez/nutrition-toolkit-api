@@ -6,6 +6,12 @@ _ESTIMATED_BYTES_PER_TOKEN = 3
 _TRUNCATION_MARKER = "\n[truncated]"
 
 
+def count_tokens(text: str) -> int:
+    """Return the same conservative, network-free estimate used for truncation."""
+    byte_count = len(text.encode())
+    return (byte_count + _ESTIMATED_BYTES_PER_TOKEN - 1) // (_ESTIMATED_BYTES_PER_TOKEN)
+
+
 def truncate_to_tokens(
     text: str,
     max_tokens: int,

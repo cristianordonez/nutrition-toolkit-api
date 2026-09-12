@@ -211,6 +211,8 @@ src/*/_version.py
 
 # Other
 test.json
+tmp
 
 # logfire
 .logfire
+

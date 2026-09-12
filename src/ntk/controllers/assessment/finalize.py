@@ -1,4 +1,4 @@
-"""CLI command for finalizing one resident assessment."""
+"""CLI command for finalizing one person assessment."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from ntk.controllers.base import BaseController
 from ntk.controllers.session import controller_session
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
-from ntk.models.sql.resident import ResidentAssessment  # noqa: TC001
+from ntk.models.sql.person import PersonAssessment  # noqa: TC001
+from ntk.pipelines.assessment import AssessmentPipeline
 from ntk.repositories.assessment_repo import AssessmentRepo
-from ntk.services.assessment import AssessmentFinalizationService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -25,7 +25,7 @@ class AssessmentFinalizeOptions(BaseModel):
 
 
 class AssessmentFinalizeController(BaseController):
-    """Finalize one resident assessment."""
+    """Finalize one person assessment."""
 
     name = "finalize"
     help = "Finalize an assessment by ID"
@@ -38,10 +38,10 @@ class AssessmentFinalizeController(BaseController):
     async def run(
         self,
         options: AssessmentFinalizeOptions,
-    ) -> Output[ResidentAssessment]:
+    ) -> Output[PersonAssessment]:
         """Finalize and return the requested assessment."""
         with controller_session(self.session) as session:
-            assessment = await AssessmentFinalizationService(
+            assessment = await AssessmentPipeline(
                 AssessmentRepo(session),
             ).finalize(options.assessment_id)
             if assessment is None:
@@ -53,7 +53,7 @@ class AssessmentFinalizeController(BaseController):
 class AssessmentFinalizeCommandResult(ConsoleRenderableModel):
     """Finalized assessment returned for display by the CLI."""
 
-    assessment: ResidentAssessment
+    assessment: PersonAssessment
 
     def to_console(self) -> str:
         """Render the finalized assessment as formatted JSON."""
@@ -61,7 +61,7 @@ class AssessmentFinalizeCommandResult(ConsoleRenderableModel):
 
 
 class AssessmentFinalizeCommandController(BaseController):
-    """Finalize one resident assessment from the CLI."""
+    """Finalize one person assessment from the CLI."""
 
     name = "finalize"
     help = "Finalize an assessment by ID"
@@ -77,8 +77,8 @@ class AssessmentFinalizeCommandController(BaseController):
     ) -> Output[AssessmentFinalizeCommandResult]:
         """Finalize the requested assessment or raise when it does not exist."""
         with controller_session(self.session) as session:
-            service = AssessmentFinalizationService(AssessmentRepo(session))
-            assessment = await service.finalize(options.assessment_id)
+            pipeline = AssessmentPipeline(AssessmentRepo(session))
+            assessment = await pipeline.finalize(options.assessment_id)
             if assessment is None:
                 message = f"Assessment {options.assessment_id} was not found"
                 raise LookupError(message)

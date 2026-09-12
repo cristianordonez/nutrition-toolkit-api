@@ -5,17 +5,17 @@ from hashlib import sha256
 
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from ntk.models.knowledge import KnowledgeType
+from ntk.models.knowledge import KnowledgeChunkCreate, KnowledgeType
 from ntk.models.sql.knowledge import (
     Knowledge,
     KnowledgeChunk,
     KnowledgeChunkEmbedding,
 )
-from ntk.models.sql.resident import (
+from ntk.models.sql.person import (
     AssessmentSource,
-    Resident,
-    ResidentAssessment,
-    ResidentAssessmentEmbedding,
+    Person,
+    PersonAssessment,
+    PersonAssessmentEmbedding,
     StatusType,
 )
 from ntk.repositories.assessment_repo import AssessmentRepo
@@ -24,12 +24,12 @@ from ntk.utils.misc import require_id
 
 
 def _assessment(
-    resident: Resident,
+    person: Person,
     filename: str,
     content: str,
-) -> ResidentAssessment:
-    return ResidentAssessment(
-        resident_id=require_id(resident.id),
+) -> PersonAssessment:
+    return PersonAssessment(
+        person_id=require_id(person.id),
         assessment_source=AssessmentSource.IMPORTED,
         source_filename=filename,
         created_by="dietitian",
@@ -40,11 +40,11 @@ def _assessment(
     )
 
 
-def _resident(session: Session) -> Resident:
-    resident = Resident(name="Resident")
-    session.add(resident)
+def _person(session: Session) -> Person:
+    person = Person(name="Person")
+    session.add(person)
     session.commit()
-    return resident
+    return person
 
 
 def test_assessment_repo_deduplicates_content_across_sources() -> None:
@@ -53,9 +53,9 @@ def test_assessment_repo_deduplicates_content_across_sources() -> None:
 
     with Session(engine) as session:
         repository = AssessmentRepo(session)
-        resident = _resident(session)
+        person = _person(session)
         first = _assessment(
-            resident,
+            person,
             "first-file.pdf",
             "Nutrition assessment\nwith plan",
         )
@@ -66,7 +66,7 @@ def test_assessment_repo_deduplicates_content_across_sources() -> None:
         )
         assert repository.get_by_id(require_id(first.id)) is first
         second = _assessment(
-            resident,
+            person,
             "second-file.pdf",
             " Nutrition assessment with plan ",
         )
@@ -76,8 +76,8 @@ def test_assessment_repo_deduplicates_content_across_sources() -> None:
             "embedding-model",
         )
 
-        assessments = session.exec(select(ResidentAssessment)).all()
-        embeddings = session.exec(select(ResidentAssessmentEmbedding)).all()
+        assessments = session.exec(select(PersonAssessment)).all()
+        embeddings = session.exec(select(PersonAssessmentEmbedding)).all()
 
     assert len(assessments) == 1
     assert len(embeddings) == 1
@@ -93,7 +93,7 @@ def test_assessment_repo_finalizes_assessment() -> None:
     with Session(engine) as session:
         repository = AssessmentRepo(session)
         assessment = _assessment(
-            _resident(session),
+            _person(session),
             "assessment.pdf",
             "Nutrition assessment",
         )
@@ -118,15 +118,15 @@ def test_assessment_repo_overwrites_by_source_filename() -> None:
 
     with Session(engine) as session:
         repository = AssessmentRepo(session)
-        resident = _resident(session)
-        source = _assessment(resident, "same-file.pdf", "Original assessment")
+        person = _person(session)
+        source = _assessment(person, "same-file.pdf", "Original assessment")
         repository.ingest(
             [source],
             [[0.1]],
             "embedding-model",
         )
         replacement = _assessment(
-            resident,
+            person,
             "same-file.pdf",
             "Replacement assessment",
         )
@@ -139,8 +139,8 @@ def test_assessment_repo_overwrites_by_source_filename() -> None:
             overwrite=True,
         )
 
-        assessments = session.exec(select(ResidentAssessment)).all()
-        embeddings = session.exec(select(ResidentAssessmentEmbedding)).all()
+        assessments = session.exec(select(PersonAssessment)).all()
+        embeddings = session.exec(select(PersonAssessmentEmbedding)).all()
         count = repository.count_assessments("same-file.pdf")
 
     assert len(assessments) == 1
@@ -165,7 +165,14 @@ def test_knowledge_repo_stores_duplicate_chunks_under_separate_sources() -> None
             )
             repository.ingest(
                 knowledge_source,
-                ["Shared educational heading"],
+                [
+                    KnowledgeChunkCreate(
+                        content="Shared educational heading",
+                        section_title="Education",
+                        source_page_start=4,
+                        source_page_end=4,
+                    ),
+                ],
                 [[0.1]],
                 "embedding-model",
             )
@@ -177,3 +184,5 @@ def test_knowledge_repo_stores_duplicate_chunks_under_separate_sources() -> None
     assert len(knowledge) == 2  # noqa: PLR2004
     assert len(chunks) == 2  # noqa: PLR2004
     assert len(embeddings) == 2  # noqa: PLR2004
+    assert all(chunk.section_title == "Education" for chunk in chunks)
+    assert all(chunk.source_page_start == 4 for chunk in chunks)  # noqa: PLR2004

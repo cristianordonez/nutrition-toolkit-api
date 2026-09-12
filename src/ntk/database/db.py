@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import typing
 
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, create_engine
 
-# Import every SQL model so its table is registered before create_all.
-import ntk.models.sql  # noqa: F401
 from ntk.models.settings import SETTINGS
+from ntk.repositories.facility_repo import FacilityRepo
+from ntk.repositories.food_repo import FoodRepo
 from ntk.repositories.permission_repo import PermissionRepo
 
 if typing.TYPE_CHECKING:
@@ -28,7 +28,12 @@ def get_session() -> Generator[Session, None, None]:
 
 
 def initialize_database() -> None:
-    """Create registered tables and seed built-in permissions explicitly."""
-    SQLModel.metadata.create_all(engine)
+    """Seed built-in data after Alembic has created the database schema.
+
+    This function intentionally does not create or alter tables. Deployments and
+    local environments must run ``alembic upgrade head`` before startup.
+    """
     with Session(engine) as session:
         PermissionRepo(session).seed_defaults()
+        FacilityRepo(session).seed_defaults()
+        FoodRepo(session).seed_default_formulas()

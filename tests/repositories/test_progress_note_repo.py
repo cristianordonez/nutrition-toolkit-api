@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlmodel import Session, SQLModel, create_engine
 
 import ntk.models.sql  # noqa: F401
-from ntk.models.sql.resident import ExtractionStatus, ResidentProgressNote
+from ntk.models.sql.person import ExtractionStatus, PersonProgressNote
 from ntk.repositories.progress_note_repo import ProgressNoteRepo
 
 
@@ -15,11 +15,11 @@ def test_create_persists_progress_note_and_get_by_key_finds_it() -> None:
 
     with Session(engine) as session:
         repository = ProgressNoteRepo(session)
-        note = ResidentProgressNote(
-            resident_id=1,
+        note = PersonProgressNote(
+            person_id=1,
             note_date=datetime(2026, 8, 20, tzinfo=UTC),
-            note_text="Resident consumed 75% of lunch.",
-            raw_text="Resident consumed 75% of lunch.",
+            note_text="Person consumed 75% of lunch.",
+            raw_text="Person consumed 75% of lunch.",
             note_key="note-key-1",
             extraction_status=ExtractionStatus.PENDING,
         )
@@ -37,10 +37,10 @@ def test_create_returns_existing_progress_note_with_the_same_key() -> None:
 
     with Session(engine) as session:
         repository = ProgressNoteRepo(session)
-        resident_id = 1
+        person_id = 1
         original = repository.create(
-            ResidentProgressNote(
-                resident_id=resident_id,
+            PersonProgressNote(
+                person_id=person_id,
                 note_date=datetime(2026, 8, 20, tzinfo=UTC),
                 note_text="Original note text.",
                 raw_text="Original note text.",
@@ -48,8 +48,8 @@ def test_create_returns_existing_progress_note_with_the_same_key() -> None:
                 extraction_status=ExtractionStatus.PENDING,
             ),
         )
-        duplicate = ResidentProgressNote(
-            resident_id=resident_id,
+        duplicate = PersonProgressNote(
+            person_id=person_id,
             note_date=datetime(2026, 8, 20, tzinfo=UTC),
             note_text="Duplicate note text.",
             raw_text="Duplicate note text.",
@@ -70,11 +70,11 @@ def test_set_extraction_status_persists_the_new_status() -> None:
     with Session(engine) as session:
         repository = ProgressNoteRepo(session)
         note = repository.create(
-            ResidentProgressNote(
-                resident_id=1,
+            PersonProgressNote(
+                person_id=1,
                 note_date=datetime(2026, 8, 20, tzinfo=UTC),
-                note_text="Resident consumed 75% of lunch.",
-                raw_text="Resident consumed 75% of lunch.",
+                note_text="Person consumed 75% of lunch.",
+                raw_text="Person consumed 75% of lunch.",
                 note_key="status-note",
                 extraction_status=ExtractionStatus.PENDING,
             ),
@@ -94,11 +94,11 @@ def test_update_identity_corrects_existing_note_ownership() -> None:
     with Session(engine) as session:
         repository = ProgressNoteRepo(session)
         note = repository.create(
-            ResidentProgressNote(
-                resident_id=1,
+            PersonProgressNote(
+                person_id=1,
                 note_date=datetime(2026, 9, 1, tzinfo=UTC),
-                note_text="Transferred resident note.",
-                raw_text="Transferred resident note.",
+                note_text="Transferred person note.",
+                raw_text="Transferred person note.",
                 note_key="transferred-note",
                 extraction_status=ExtractionStatus.EXTRACTED,
             ),
@@ -106,9 +106,7 @@ def test_update_identity_corrects_existing_note_ownership() -> None:
 
         updated = repository.update_identity(
             note,
-            resident_id=2,
-            resident_facility_stay_id=3,
+            person_id=2,
         )
 
-        assert updated.resident_id == 2  # noqa: PLR2004
-        assert updated.resident_facility_stay_id == 3  # noqa: PLR2004
+        assert updated.person_id == 2  # noqa: PLR2004

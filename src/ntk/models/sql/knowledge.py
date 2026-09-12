@@ -4,7 +4,7 @@
 from datetime import UTC, datetime
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import JSON, Column, Enum, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, Column, Enum, UniqueConstraint
 from sqlmodel import Field, Index, Relationship, SQLModel
 
 from ntk.models.knowledge import KnowledgeType
@@ -42,12 +42,26 @@ class KnowledgeChunk(SQLModel, table=True):
     """A bounded text chunk extracted from a knowledge document."""
 
     __tablename__ = "knowledge_chunks"
-    __table_args__ = (UniqueConstraint("knowledge_id", "chunk_index"),)
+    __table_args__ = (
+        UniqueConstraint("knowledge_id", "chunk_index"),
+        CheckConstraint(
+            "source_page_start IS NULL OR source_page_start >= 1",
+            name="ck_knowledge_chunks_source_page_start",
+        ),
+        CheckConstraint(
+            "source_page_end IS NULL OR source_page_start IS NULL "
+            "OR source_page_end >= source_page_start",
+            name="ck_knowledge_chunks_source_page_range",
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     knowledge_id: int = Field(foreign_key="knowledge.id", index=True)
     chunk_index: int
     content: str
+    section_title: str | None = None
+    source_page_start: int | None = None
+    source_page_end: int | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     knowledge: Knowledge = Relationship(back_populates="chunks")
 

@@ -17,6 +17,7 @@ authors = [
 urls.Repository = "https://github.com/cristianordonez/nutrition-toolkit-cli.git"
 requires-python = ">= 3.11"
 dependencies = [
+    "alembic>=1.16.5",
     "pyyaml>=6.0.3",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
@@ -68,7 +69,8 @@ docs = [
 ]
 fix = [
     "pre-commit>=4.6.0",
-    "pre-commit-uv"
+    "pre-commit-uv",
+    "ruff>=0.15.16",
 ]
 type = [
     "ty>=0.0.57",
@@ -138,7 +140,7 @@ src.include = [
 [tool.codespell]
 count = true
 quiet-level = 3
-ignore-words-list = "abl,abd,practioner,selectin,tge"
+ignore-words-list = "abl,abd,gir,practioner,selectin,tge"
 
 [tool.pytest]
 ini_options.testpaths = [

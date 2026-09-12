@@ -3,140 +3,139 @@ from __future__ import annotations
 import asyncio
 import json
 import pathlib
-import time
+import typing
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from pydantic_ai.models.test import TestModel
 
 from ntk.agents import assessment_agent
 from ntk.agents.assessment_agent import (
     AssessmentAgent,
     AssessmentGenerationTimeoutError,
 )
+from ntk.agents.tools import AssessmentToolDependencies
+from ntk.models.assessment_context import (
+    BudgetedAssessmentContext,
+    BudgetedPersonDetail,
+)
+from ntk.models.person_detail import (
+    AnthropometricCalculations,
+    DerivedPersonCalculations,
+    NutritionNeedsCalculation,
+    ParenteralNutritionCalculation,
+    TubeFeedCalculation,
+)
 from ntk.models.rag import RagSearchMatch
 
-RESIDENT_AGE = 80
-EXPECTED_NOTE_COUNT = 20
+if typing.TYPE_CHECKING:
+    from pydantic_ai.models import ModelRequestParameters
+
+PERSON_AGE = 80
+_FOOD_REPO = object()
+_EMBEDDING_SERVICE = object()
 
 
 class FakeAgent:
     def __init__(self, output: str) -> None:
         self.output = output
         self.prompt = ""
+        self.deps: object | None = None
 
-    async def run(self, prompt: str) -> object:
+    async def run(self, prompt: str, **kwargs: object) -> object:
         self.prompt = prompt
+        self.deps = kwargs.get("deps")
         return SimpleNamespace(output=self.output)
 
 
-class FakeEmbeddingService:
-    def __init__(self) -> None:
-        self.queries: list[tuple[str, int, int]] = []
-
-    def search_context(
-        self,
-        text: str,
-        *,
-        knowledge_top_k: int,
-        assessment_top_k: int,
-    ) -> tuple[list[RagSearchMatch], list[RagSearchMatch]]:
-        self.queries.append((text, knowledge_top_k, assessment_top_k))
-        return (
-            [_match("manual.pdf", "clinical guidance")],
-            [_match("assessment.pdf", "style example")],
-        )
-
-
-class FakeResidentContext:
-    def __init__(self, payload: dict[str, object] | None = None) -> None:
-        self.payload = payload or {}
-        self.summary_contexts: list[str | None] = []
-
-    def llm_payload(self) -> dict[str, object]:
-        return self.payload
-
-    def summary(self, context: str | None = None) -> str:
-        self.summary_contexts.append(context)
-        return json.dumps({"resident": self.payload, "context": context})
-
-
-def _match(filename: str, text: str) -> RagSearchMatch:
-    return RagSearchMatch(
-        document_id=1,
-        filename=filename,
-        chunk_text=text,
-        similarity=0.9,
+def _calculations() -> DerivedPersonCalculations:
+    return DerivedPersonCalculations(
+        calculated_on=date(2026, 9, 7),
+        anthropometrics=AnthropometricCalculations(),
+        nutrition_needs=NutritionNeedsCalculation(status="not_computed"),
+        tube_feed=TubeFeedCalculation(status="not_applicable"),
+        parenteral_nutrition=ParenteralNutritionCalculation(
+            status="not_applicable",
+        ),
     )
 
 
-def test_admission_agent_passes_explicit_input_contract() -> None:
+def _context() -> BudgetedAssessmentContext:
+    return BudgetedAssessmentContext(
+        person=BudgetedPersonDetail(
+            name="Doe, Jane",
+            age=PERSON_AGE,
+            derived_calculations=_calculations(),
+        ),
+        relevant_assessments=[
+            RagSearchMatch(
+                document_id=1,
+                filename="assessment.txt",
+                chunk_text="Style example",
+                similarity=0.9,
+            ),
+        ],
+        additional_context="wound healing",
+    )
+
+
+def test_assessment_agent_passes_prepared_context_and_tool_dependencies() -> None:
     fake = FakeAgent("  Nutrition Readmission Assessment  ")
-    embeddings = FakeEmbeddingService()
-    agent = AssessmentAgent(
-        agent=fake,  # ty: ignore[invalid-argument-type]
-        embedding_service=embeddings,  # ty: ignore[invalid-argument-type]
-    )
-    resident = FakeResidentContext(
-        {"age": RESIDENT_AGE, "progress_notes": []},
-    )
-    assessment = asyncio.run(
-        agent.run(resident, "wound healing"),
-    )
-    payload = json.loads(fake.prompt)
-    assert payload["resident_context"]["age"] == RESIDENT_AGE
-    assert payload["resident_context"]["progress_notes"] == []
-    assert "resident_id" not in payload["resident_context"]
-    assert payload["retrieved_knowledge"][0]["chunk_text"] == "clinical guidance"
-    assert payload["previous_assessments"][0]["chunk_text"] == "style example"
-    assert payload["optional_context"] == "wound healing"
-    assert len(embeddings.queries) == 1
-    query, knowledge_top_k, assessment_top_k = embeddings.queries[0]
-    assert "wound healing" in query
-    assert knowledge_top_k == 3  # noqa: PLR2004
-    assert assessment_top_k == 5  # noqa: PLR2004
-    assert assessment == "Nutrition Readmission Assessment"
 
-
-def test_assessment_agent_bounds_large_runtime_payload() -> None:
-    fake = FakeAgent("Nutrition Follow Up")
-    resident = FakeResidentContext(
-        {
-            "progress_notes": [
-                {"note_text": f"note {index}: intake stable."}
-                for index in range(EXPECTED_NOTE_COUNT)
-            ],
-        },
-    )
-
-    asyncio.run(
+    result = asyncio.run(
         AssessmentAgent(
             agent=fake,  # ty: ignore[invalid-argument-type]
-            embedding_service=FakeEmbeddingService(),  # ty: ignore[invalid-argument-type]
-        ).run(resident, "focus " * 2_000),
+            food_repo=_FOOD_REPO,  # ty: ignore[invalid-argument-type]
+            embedding_service=_EMBEDDING_SERVICE,  # ty: ignore[invalid-argument-type]
+        ).run(_context()),
     )
 
     payload = json.loads(fake.prompt)
-    notes = payload["resident_context"]["progress_notes"]
-    assert len(notes) == EXPECTED_NOTE_COUNT
-    assert {note["note_text"] for note in notes} == {
-        f"note {index}: intake stable." for index in range(EXPECTED_NOTE_COUNT)
-    }
-    assert payload["retrieved_knowledge"]
-    assert payload["previous_assessments"]
-    assert payload["optional_context"].endswith("[truncated]")
+    assert payload["person"]["age"] == PERSON_AGE
+    assert payload["relevant_assessments"][0]["chunk_text"] == "Style example"
+    assert payload["additional_context"] == "wound healing"
+    assert isinstance(fake.deps, AssessmentToolDependencies)
+    assert fake.deps.food_repo is _FOOD_REPO
+    assert fake.deps.embedding_service is _EMBEDDING_SERVICE
+    assert result == "Nutrition Readmission Assessment"
 
 
-def test_admission_agent_rejects_empty_note() -> None:
-    agent = AssessmentAgent(
-        agent=FakeAgent("  "),  # ty: ignore[invalid-argument-type]
-        embedding_service=FakeEmbeddingService(),  # ty: ignore[invalid-argument-type]
+def test_assessment_agent_registers_calculator_and_knowledge_tools() -> None:
+    model = TestModel(call_tools=[], custom_output_text="done")
+    dependencies = AssessmentToolDependencies(
+        food_repo=typing.cast("typing.Any", _FOOD_REPO),
+        embedding_service=typing.cast("typing.Any", _EMBEDDING_SERVICE),
     )
+
+    with assessment_agent.assessment_agent.override(model=model):
+        asyncio.run(
+            assessment_agent.assessment_agent.run(
+                "Inspect assessment tools",
+                deps=dependencies,
+            ),
+        )
+
+    request_parameters = typing.cast(
+        "ModelRequestParameters",
+        model.last_model_request_parameters,
+    )
+    assert {tool.name for tool in request_parameters.function_tools} == {
+        "calculate_nutrition_needs",
+        "calculate_tube_feed",
+        "get_knowledge_from_diet_manual",
+        "get_knowledge_from_nutrition_care_manual",
+    }
+
+
+def test_assessment_agent_rejects_empty_note() -> None:
     with pytest.raises(RuntimeError, match="empty note"):
         asyncio.run(
-            agent.run(
-                FakeResidentContext(),
-                "",
-            ),
+            AssessmentAgent(
+                agent=FakeAgent("  "),  # ty: ignore[invalid-argument-type]
+                food_repo=_FOOD_REPO,  # ty: ignore[invalid-argument-type]
+                embedding_service=_EMBEDDING_SERVICE,  # ty: ignore[invalid-argument-type]
+            ).run(_context()),
         )
 
 
@@ -145,7 +144,7 @@ def test_assessment_agent_times_out_stalled_model(
 ) -> None:
     class StalledAgent:
         @staticmethod
-        async def run(_prompt: str) -> object:
+        async def run(_prompt: str, **_kwargs: object) -> object:
             await asyncio.sleep(1)
             return SimpleNamespace(output="late")
 
@@ -159,155 +158,86 @@ def test_assessment_agent_times_out_stalled_model(
         asyncio.run(
             AssessmentAgent(
                 agent=StalledAgent(),  # ty: ignore[invalid-argument-type]
-                embedding_service=FakeEmbeddingService(),  # ty: ignore[invalid-argument-type]
-            ).run(FakeResidentContext()),
+                food_repo=_FOOD_REPO,  # ty: ignore[invalid-argument-type]
+                embedding_service=_EMBEDDING_SERVICE,  # ty: ignore[invalid-argument-type]
+            ).run(_context()),
         )
 
 
-def test_assessment_agent_times_out_stalled_retrieval(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class SlowEmbeddingService(FakeEmbeddingService):
-        def search_context(
-            self,
-            text: str,
-            *,
-            knowledge_top_k: int,
-            assessment_top_k: int,
-        ) -> tuple[list[RagSearchMatch], list[RagSearchMatch]]:
-            time.sleep(0.05)
-            return super().search_context(
-                text,
-                knowledge_top_k=knowledge_top_k,
-                assessment_top_k=assessment_top_k,
-            )
-
-    monkeypatch.setattr(
-        assessment_agent,
-        "_ASSESSMENT_GENERATION_TIMEOUT_SECONDS",
-        0.01,
-    )
-
-    with pytest.raises(AssessmentGenerationTimeoutError, match="timed out"):
+def test_assessment_agent_requires_tool_dependencies() -> None:
+    with pytest.raises(RuntimeError, match="food repository"):
         asyncio.run(
             AssessmentAgent(
-                agent=FakeAgent("late"),  # ty: ignore[invalid-argument-type]
-                embedding_service=SlowEmbeddingService(),  # ty: ignore[invalid-argument-type]
-            ).run(FakeResidentContext()),
+                agent=FakeAgent("unused"),  # ty: ignore[invalid-argument-type]
+            ).run(_context()),
         )
 
-
-def test_assessment_agent_does_not_call_model_when_retrieval_fails() -> None:
-    fake_agent = FakeAgent("must not be returned")
-
-    class FailingEmbeddingService(FakeEmbeddingService):
-        def search_context(
-            self,
-            text: str,
-            *,
-            knowledge_top_k: int,
-            assessment_top_k: int,
-        ) -> tuple[list[RagSearchMatch], list[RagSearchMatch]]:
-            assert text
-            assert knowledge_top_k == 3  # noqa: PLR2004
-            assert assessment_top_k == 5  # noqa: PLR2004
-            message = "vector index unavailable"
-            raise RuntimeError(message)
-
-    with pytest.raises(RuntimeError, match="vector index unavailable"):
+    with pytest.raises(RuntimeError, match="embedding service"):
         asyncio.run(
             AssessmentAgent(
-                agent=fake_agent,  # ty: ignore[invalid-argument-type]
-                embedding_service=FailingEmbeddingService(),  # ty: ignore[invalid-argument-type]
-            ).run(FakeResidentContext()),
+                agent=FakeAgent("unused"),  # ty: ignore[invalid-argument-type]
+                food_repo=_FOOD_REPO,  # ty: ignore[invalid-argument-type]
+            ).run(_context()),
         )
 
-    assert fake_agent.prompt == ""
 
-
-def test_assessment_agent_normalizes_whitespace_only_context() -> None:
-    fake_agent = FakeAgent("Assessment")
-    resident = FakeResidentContext({"resident_id": 7})
-
-    asyncio.run(
-        AssessmentAgent(
-            agent=fake_agent,  # ty: ignore[invalid-argument-type]
-            embedding_service=FakeEmbeddingService(),  # ty: ignore[invalid-argument-type]
-        ).run(resident, " \n\t "),
-    )
-
-    payload = json.loads(fake_agent.prompt)
-    assert resident.summary_contexts == [None]
-    assert payload["optional_context"] is None
-
-
-def test_assessment_agent_bounds_and_sanitizes_retrieved_matches() -> None:
-    fake_agent = FakeAgent("Assessment")
-
-    class LargeMatchEmbeddingService(FakeEmbeddingService):
-        def search_context(
-            self,
-            text: str,
-            *,
-            knowledge_top_k: int,
-            assessment_top_k: int,
-        ) -> tuple[list[RagSearchMatch], list[RagSearchMatch]]:
-            assert text
-            assert knowledge_top_k == 3  # noqa: PLR2004
-            assert assessment_top_k == 5  # noqa: PLR2004
-            return (
-                [_match("manual.pdf", "guidance " * 2_000)],
-                [_match("assessment.pdf", "example " * 3_000)],
-            )
-
-    asyncio.run(
-        AssessmentAgent(
-            agent=fake_agent,  # ty: ignore[invalid-argument-type]
-            embedding_service=LargeMatchEmbeddingService(),  # ty: ignore[invalid-argument-type]
-        ).run(FakeResidentContext()),
-    )
-
-    payload = json.loads(fake_agent.prompt)
-    for key in ("retrieved_knowledge", "previous_assessments"):
-        match = payload[key][0]
-        assert set(match) == {"filename", "chunk_text", "similarity"}
-        assert match["chunk_text"].endswith("[truncated]")
-
-
-def test_assessment_prompt_defines_inputs_and_style() -> None:
+def test_assessment_prompt_defines_budgeted_context_contract() -> None:
     prompt = (
         pathlib.Path(__file__).parents[2]
         / "src/ntk/agents/prompts/assessment_prompt.md"
     ).read_text(encoding="utf-8")
 
     assert "## Inputs and evidence" in prompt
-    assert "`resident_context`" in prompt
-    assert "`comparison`" in prompt
-    assert "`retrieved_knowledge`" in prompt
-    assert "`previous_assessments`" in prompt
+    assert "`person`" in prompt
+    assert "`relevant_assessments`" in prompt
+    assert "`additional_context`" in prompt
+    assert "Treat `person.derived_calculations` as the authoritative source" in prompt
+    assert "Call `calculate_nutrition_needs` only when" in prompt
+    assert "Call `calculate_tube_feed` only when" in prompt
+    assert "Call `get_knowledge_from_nutrition_care_manual` when" in prompt
+    assert "Call `get_knowledge_from_diet_manual` when" in prompt
+    assert "Do not search either manual for resident-specific facts" in prompt
+    assert "always call the subject the `resident` or `res`" in prompt
+    assert '"Resident is a [age] yo [gender]' in prompt
+    assert "never as `person`, `patient`, `client`, or `individual`" in prompt
+    assert "If formula lookup is ambiguous" in prompt
+    assert "Do not perform BMI, weight-change, nutrition-needs" in prompt
+    assert "state the latest weight once in the `Weight/BMI:` line" in prompt
+    assert "copy each `comparison_text`" in prompt
+    assert "verbatim on its own new line" in prompt
+    assert "Every statement describing weight loss or weight gain" in prompt
+    assert "calendar-based elapsed time rounded to whole months" in prompt
+    assert "Significant weight-change rationale:" in prompt
+    assert (
+        "Weight change rationale: Cause undetermined from available records." in prompt
+    )
+    assert (
+        "Apply this requirement to both significant loss and significant gain" in prompt
+    )
+    assert "compare prior weights with one another" in prompt
+    assert "interpret the entire supplied weight trend" in prompt
+    assert "continued change or recent stabilization" in prompt
+    assert "resident's full supplied clinical picture" in prompt
+    assert "A new intervention is then not automatically required" in prompt
+    assert "current plan is adequate" in prompt
+    assert "dated `recent_clinical_facts` entry" in prompt
+    assert "their presence does not prove adequate intake" in prompt
+    assert "missing or stale evidence of current meal/supplement acceptance" in prompt
+    assert "does not satisfy the response to significant weight loss" in prompt
+    assert "Do not infer adequacy from active orders alone" in prompt
+    assert (
+        "the measurement date is required whenever the latest weight is present"
+        in prompt
+    )
+    assert "Never convert the supplied month timeframe back to days" in prompt
+    assert "Never print fractional months" in prompt
     assert "## Style" in prompt
     assert "## Final validation" in prompt
-    assert "Do not add a `Care Coordination:` section" in prompt
-    assert "(current - prior) / prior x 100" in prompt
-    assert "Do not present an old diet" in prompt
-    assert "Suggest protein supplementation based on wound size" in prompt
-    assert "no dosage or other SIG details" in prompt
-    assert "grouped by indication" in prompt
-    assert "include only nutrition-relevant results" in prompt
-    assert "MUST trigger at least one new or intensified" in prompt
-    assert "merely relist the current interventions as continuations" in prompt
-    assert "continuation of existing interventions alone fails" in prompt
-    assert "do not satisfy the new-nutrition-intervention requirement" in prompt
-    assert "monitoring/evaluation alone is insufficient" in prompt
+    assert "resolved, healed, or closed" in prompt
     assert "always state `Malnutrition status:`" in prompt
-    assert (
-        "Every note MUST contain exactly one explicit `Malnutrition status:`" in prompt
-    )
-    assert "no current malnutrition risk identified from supplied data" in prompt
-    assert "Missing active diet order" in prompt
-    assert "always make a new diet-order recommendation" in prompt
-    assert "immediate recommendation to clarify the diet order" in prompt
-    assert "Every recommendation must include a concise resident-specific" in prompt
-    assert "no recommendation is presented without a rationale" in prompt
-    assert "every abnormal value" in prompt
-    assert "briefly interpret each abnormal result" in prompt
+    assert "six diagnostic characteristics" in prompt
+    assert "BMI is not an Academy/ASPEN diagnostic characteristic" in prompt
+    assert "at least two of the six characteristics meet severe thresholds" in prompt
+    assert "Meal-completion percentages and appetite descriptions alone" in prompt
+    assert "Albumin, prealbumin, total protein" in prompt
+    assert "`Risk for malnutrition` is a screening/clinical-risk conclusion" in prompt

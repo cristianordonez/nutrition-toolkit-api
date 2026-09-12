@@ -1,0 +1,1 @@
+"""Knowledge-document ingestion pipeline."""

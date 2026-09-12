@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ntk.controllers.calculate.energy import EnergyController, EnergyOptions
-from ntk.services.calculator_service import CalculatorService
+from ntk.services.calculators import Gender, NutritionCalculator
 
 _TEST_WEIGHT = 180.0
 _TEST_HEIGHT = 70
@@ -15,17 +15,22 @@ def test_energy_controller_run_returns_expected_output() -> None:
     assert output.exit_code == 0
 
     result = output.result
-    calc = CalculatorService(
-        height=_TEST_HEIGHT,
-        weight=_TEST_WEIGHT,
-        gender="m",
-        age=_TEST_AGE,
-        activity_level=options.activity_level,
+    assert result.bmi == NutritionCalculator.calculate_bmi(
+        _TEST_WEIGHT,
+        _TEST_HEIGHT,
     )
-    assert result.bmi == calc.bmi
     assert result.cbw == _TEST_WEIGHT
-    assert result.mifflin == calc.mifflin
-    assert result.ibw == calc.ibw
+    assert result.mifflin == NutritionCalculator.calculate_mifflin(
+        _TEST_WEIGHT,
+        _TEST_HEIGHT,
+        Gender.MALE,
+        _TEST_AGE,
+        options.activity_level,
+    )
+    assert result.ibw == NutritionCalculator.calculate_ibw(
+        Gender.MALE,
+        _TEST_HEIGHT,
+    )
     assert result.calories == (
         int(result.weight_used_for_calculations_in_kg * 25),
         int(result.weight_used_for_calculations_in_kg * 30),

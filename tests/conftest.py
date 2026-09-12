@@ -19,6 +19,7 @@ _TEST_SETTINGS = {
     "NTK_FATSECRET_CLIENT_SECRET": "test-fatsecret-client-secret",
     "NTK_OPEN_AI_API_KEY": "test-openai-key",
     "NTK_REDIS_DSN": "redis://localhost:6379/0",
+    "NTK_USDA_API_KEY": "test-usda-api-key",
 }
 
 if typing.TYPE_CHECKING:

@@ -9,15 +9,15 @@ from ntk.controllers.assessment.get import (
     AssessmentGetCommandController,
     AssessmentGetOptions,
 )
-from ntk.models.sql.resident import ResidentAssessment
+from ntk.models.sql.person import PersonAssessment
 
 
 def test_get_controller_returns_assessment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assessment = ResidentAssessment(
+    assessment = PersonAssessment(
         id=1,
-        resident_id=1,
+        person_id=1,
         content="Assessment",
         content_hash="hash",
         assessment_date=date(2026, 8, 31),
@@ -29,7 +29,7 @@ def test_get_controller_returns_assessment(
             pass
 
         @staticmethod
-        def get_by_id(assessment_id: int) -> ResidentAssessment | None:
+        def get_by_id(assessment_id: int) -> PersonAssessment | None:
             return assessment if assessment_id == assessment.id else None
 
     monkeypatch.setattr(get, "AssessmentRepo", Repository)

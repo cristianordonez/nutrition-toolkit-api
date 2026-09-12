@@ -16,53 +16,64 @@ from fastapi import (
 from sqlmodel import Session  # noqa: TC002
 
 from ntk.agents.assessment_agent import AssessmentGenerationTimeoutError
-from ntk.controllers.assessment.finalize import (
-    AssessmentFinalizeController,
-    AssessmentFinalizeOptions,
-)
-from ntk.controllers.assessment.generation import (
-    AssessmentGenerationController,
+from ntk.controllers.assessment.generate import (
     AssessmentGenerationOptions,
-    GeneratedResidentAssessment,
-)
-from ntk.controllers.assessment.get import (
-    AssessmentGetCommandController,
-    AssessmentGetOptions,
+    AssessmentGenerationResult,
+    GeneratedPersonAssessment,
 )
 from ntk.controllers.assessment.import_assessments import (
     AssessmentImportController,
     AssessmentImportResult,
 )
-from ntk.controllers.assessment.list import (
-    AssessmentListController,
-    AssessmentListOptions,
-)
-from ntk.controllers.assessment.sync import (
-    AssessmentSyncController,
-    AssessmentSyncOptions,
+from ntk.controllers.assessment.search import (
+    AssessmentSearchOptions,  # noqa: TC001 - FastAPI evaluates annotations
 )
 from ntk.controllers.assessment.update import (
-    AssessmentUpdateController,
-    AssessmentUpdateOptions,
-    AssessmentUpdateRequest,
+    AssessmentUpdateRequest,  # noqa: TC001 - FastAPI evaluates annotations
 )
-from ntk.controllers.uploads import UploadValidationError
 from ntk.database.db import get_session
 from ntk.defaults import (
     ADMIN_PERMISSION,
     ASSESSMENTS_READ_PERMISSION,
     ASSESSMENTS_WRITE_PERMISSION,
 )
-from ntk.models.sql.resident import ResidentAssessment
+from ntk.models.rag import RagSearchMatch
+from ntk.models.sql.person import PersonAssessment
+from ntk.pipelines.assessment import (
+    AssessmentPipeline,
+    AssessmentSyncResult,
+)
 from ntk.presentation.api.middleware import rate_limit, require_any_permission
-from ntk.services.assessment import AssessmentSyncResult
+from ntk.repositories.assessment_repo import AssessmentRepo
+from ntk.repositories.embedding_repo import EmbeddingRepo
+from ntk.repositories.facility_repo import FacilityRepo
+from ntk.repositories.food_repo import FoodRepo
+from ntk.repositories.person_repo import PersonRepo
+from ntk.repositories.progress_note_repo import ProgressNoteRepo
+from ntk.services.assessment_service import AssessmentService
+from ntk.services.calculators.tubefeed_calculator import TubeFeedCalculator
+from ntk.services.embedding_service import EmbeddingService
+from ntk.services.facility_resolver import FacilityResolver
+from ntk.services.person.detail_builder import PersonDetailBuilder
+from ntk.services.person.person_service import PersonService
 
 router = APIRouter()
 
 
+def _require_assessment(
+    assessment: PersonAssessment | None,
+    assessment_id: int,
+) -> PersonAssessment:
+    """Return an assessment or raise the shared not-found error."""
+    if assessment is None:
+        message = f"Assessment {assessment_id} was not found"
+        raise LookupError(message)
+    return assessment
+
+
 @router.get(
     "/assessments",
-    response_model=list[ResidentAssessment],
+    response_model=list[PersonAssessment],
     dependencies=[
         Depends(
             require_any_permission(
@@ -74,20 +85,14 @@ router = APIRouter()
 )
 async def list_assessments(
     session: typing.Annotated[Session, Depends(get_session)],
-) -> list[ResidentAssessment]:
-    """Return all resident assessments."""
-    return (
-        AssessmentListController(session)
-        .run(
-            AssessmentListOptions(),
-        )
-        .result.assessments
-    )
+) -> list[PersonAssessment]:
+    """Return all person assessments."""
+    return AssessmentService(AssessmentRepo(session)).list_assessments()
 
 
 @router.get(
     "/assessments/{assessment_id}",
-    response_model=ResidentAssessment,
+    response_model=PersonAssessment,
     dependencies=[
         Depends(
             require_any_permission(
@@ -100,23 +105,24 @@ async def list_assessments(
 async def get_assessment(
     assessment_id: int,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> ResidentAssessment:
-    """Return one resident assessment by ID."""
+) -> PersonAssessment:
+    """Return one person assessment by ID."""
     try:
-        output = AssessmentGetCommandController(session).run(
-            AssessmentGetOptions(assessment_id=assessment_id),
+        assessment = _require_assessment(
+            AssessmentService(AssessmentRepo(session)).get(assessment_id),
+            assessment_id,
         )
     except LookupError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
         ) from error
-    return output.result.assessment
+    return assessment
 
 
 @router.patch(
     "/assessments/{assessment_id}",
-    response_model=ResidentAssessment,
+    response_model=PersonAssessment,
     dependencies=[
         Depends(
             require_any_permission(
@@ -130,14 +136,15 @@ async def update_assessment(
     assessment_id: int,
     request: AssessmentUpdateRequest,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> ResidentAssessment:
-    """Update editable fields on one resident assessment."""
+) -> PersonAssessment:
+    """Update editable fields on one person assessment."""
     try:
-        output = await AssessmentUpdateController(session).run(
-            AssessmentUpdateOptions(
-                assessment_id=assessment_id,
+        assessment = _require_assessment(
+            await AssessmentPipeline(AssessmentRepo(session)).update(
+                assessment_id,
                 **request.model_dump(),
             ),
+            assessment_id,
         )
     except LookupError as error:
         raise HTTPException(
@@ -149,12 +156,12 @@ async def update_assessment(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
         ) from error
-    return output.result
+    return assessment
 
 
 @router.post(
     "/assessments/{assessment_id}/finalize",
-    response_model=ResidentAssessment,
+    response_model=PersonAssessment,
     dependencies=[
         Depends(
             require_any_permission(
@@ -167,18 +174,19 @@ async def update_assessment(
 async def finalize_assessment(
     assessment_id: int,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> ResidentAssessment:
-    """Mark one resident assessment as finalized."""
+) -> PersonAssessment:
+    """Mark one person assessment as finalized."""
     try:
-        output = await AssessmentFinalizeController(session).run(
-            AssessmentFinalizeOptions(assessment_id=assessment_id),
+        assessment = _require_assessment(
+            await AssessmentPipeline(AssessmentRepo(session)).finalize(assessment_id),
+            assessment_id,
         )
     except LookupError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
         ) from error
-    return output.result
+    return assessment
 
 
 @router.post(
@@ -197,13 +205,15 @@ async def sync_assessments(
     session: typing.Annotated[Session, Depends(get_session)],
 ) -> AssessmentSyncResult:
     """Synchronize historical nutrition assessments and their embeddings."""
-    output = await AssessmentSyncController(session).run(AssessmentSyncOptions())
-    return output.result
+    return await AssessmentPipeline(
+        AssessmentRepo(session),
+        progress_note_repository=ProgressNoteRepo(session),
+    ).sync_assessments()
 
 
 @router.post(
     "/assessments/generate",
-    response_model=list[GeneratedResidentAssessment],
+    response_model=list[GeneratedPersonAssessment],
     dependencies=[
         Depends(
             require_any_permission(
@@ -216,10 +226,21 @@ async def sync_assessments(
 async def generate_assessments(
     options: AssessmentGenerationOptions,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> list[GeneratedResidentAssessment]:
-    """Generate assessments from external resident identifiers and context."""
+) -> list[GeneratedPersonAssessment]:
+    """Generate assessments from external person identifiers and context."""
     try:
-        output = await AssessmentGenerationController(session).run(options)
+        facility_resolver = FacilityResolver(FacilityRepo(session))
+        food_repository = FoodRepo(session)
+        assessments = await AssessmentPipeline(
+            AssessmentRepo(session),
+            person_service=PersonService(
+                PersonRepo(session),
+                facility_resolver,
+                PersonDetailBuilder(TubeFeedCalculator(food_repository)),
+            ),
+            embedding_repository=EmbeddingRepo(session),
+            food_repository=food_repository,
+        ).generate_many(options.persons)
     except LookupError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -230,7 +251,7 @@ async def generate_assessments(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=str(error),
         ) from error
-    return output.result.assessments
+    return AssessmentGenerationResult.from_assessments(assessments).assessments
 
 
 @router.post(
@@ -246,25 +267,55 @@ async def generate_assessments(
     ],
 )
 async def import_assessments(
-    file: typing.Annotated[
-        UploadFile,
-        File(description="PCC progress-note report PDF"),
+    files: typing.Annotated[
+        list[UploadFile],
+        File(description="One or more PCC progress-note report PDFs"),
     ],
+    session: typing.Annotated[Session, Depends(get_session)],
     *,
     overwrite: typing.Annotated[bool, Form()] = False,
     created_by: typing.Annotated[str | None, Form()] = None,
-    session: typing.Annotated[Session | None, Depends(get_session)] = None,
 ) -> AssessmentImportResult:
-    """Import nutrition notes from one PCC progress-note report."""
+    """Import nutrition notes from multiple PCC progress-note reports."""
     try:
-        output = await AssessmentImportController(session).run_upload(
-            file,
+        output = await AssessmentImportController(session).run_uploads(
+            files,
             overwrite=overwrite,
             created_by=created_by,
         )
-    except (TypeError, UploadValidationError, ValueError) as error:
+    except (TypeError, ValueError) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
         ) from error
     return output.result
+
+
+@router.post(
+    "/assessments/search",
+    response_model=list[RagSearchMatch],
+    dependencies=[
+        Depends(
+            require_any_permission([ADMIN_PERMISSION, ASSESSMENTS_READ_PERMISSION]),
+        ),
+        Depends(rate_limit(60, window=3600, scope="search-assessments")),
+    ],
+)
+async def search_assessments(
+    options: AssessmentSearchOptions,
+    session: typing.Annotated[Session, Depends(get_session)],
+) -> list[RagSearchMatch]:
+    """Return assessments closest to the supplied query."""
+    try:
+        matches = await EmbeddingService(
+            EmbeddingRepo(session),
+        ).search_assessments_async(
+            options.text,
+            options.top_k,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+    return matches

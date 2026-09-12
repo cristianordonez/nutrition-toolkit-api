@@ -1,1 +1,0 @@
-"""Resident controller tests."""

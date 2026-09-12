@@ -3,7 +3,6 @@ from __future__ import annotations
 from sqlalchemy import Integer, String
 from sqlmodel import Session, SQLModel, create_engine
 
-from ntk.models.sql.facility import Facility
 from ntk.models.sql.user import User, UserHash
 
 
@@ -21,16 +20,14 @@ def test_user_hash_schema_and_persistence() -> None:
 
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
-    facility = Facility(facility_id="FAC-1", name="Facility")
     user = User(
         name="User",
         email="user@example.com",
-        facility=facility,
     )
     user_hash = UserHash(user_id=0, user=user, hash="test-hash")
 
     with Session(engine) as session:
-        session.add_all([facility, user, user_hash])
+        session.add_all([user, user_hash])
         session.commit()
         session.refresh(user_hash)
 

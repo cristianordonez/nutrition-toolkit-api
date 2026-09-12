@@ -15,17 +15,17 @@ from ntk.models.sql.knowledge import (
     KnowledgeChunk,
     KnowledgeChunkEmbedding,
 )
-from ntk.models.sql.resident import (
+from ntk.models.sql.person import (
     AssessmentSource,
-    ResidentAssessment,
-    ResidentAssessmentEmbedding,
+    PersonAssessment,
+    PersonAssessmentEmbedding,
 )
 from ntk.services.embedding_service import EMBEDDING_DIMENSIONS
 
 
-def test_storage_uses_one_resident_assessment_table() -> None:
-    assert ResidentAssessment.__tablename__ == "resident_assessment"
-    assert ResidentAssessmentEmbedding.__tablename__ == "resident_assessment_embeddings"
+def test_storage_uses_one_person_assessment_table() -> None:
+    assert PersonAssessment.__tablename__ == "person_assessment"
+    assert PersonAssessmentEmbedding.__tablename__ == "person_assessment_embeddings"
     assert Knowledge.__tablename__ == "knowledge"
     assert KnowledgeChunk.__tablename__ == "knowledge_chunks"
     assert KnowledgeChunkEmbedding.__tablename__ == "knowledge_chunks_embeddings"
@@ -33,9 +33,9 @@ def test_storage_uses_one_resident_assessment_table() -> None:
 
 
 def test_assessment_and_embedding_link_directly() -> None:
-    assessment = ResidentAssessment(
+    assessment = PersonAssessment(
         id=1,
-        resident_id=1,
+        person_id=1,
         assessment_source=AssessmentSource.IMPORTED,
         source_filename="assessment.pdf",
         assessment_index=0,
@@ -44,28 +44,28 @@ def test_assessment_and_embedding_link_directly() -> None:
         assessment_date=date(2026, 8, 31),
         created_by="dietitian",
     )
-    embedding = ResidentAssessmentEmbedding(
-        resident_assessment_id=1,
+    embedding = PersonAssessmentEmbedding(
+        person_assessment_id=1,
         embedding_vector=[0.1, 0.2],
         model_name="text-embedding-3-small",
-        resident_assessment=assessment,
+        person_assessment=assessment,
     )
 
     assert assessment.assessment_source is AssessmentSource.IMPORTED
     assert assessment.source_filename == "assessment.pdf"
     assert assessment.created_by == "dietitian"
-    assert embedding.resident_assessment_id == assessment.id
-    assert embedding.resident_assessment is assessment
+    assert embedding.person_assessment_id == assessment.id
+    assert embedding.person_assessment is assessment
     assert assessment.embeddings == [embedding]
-    assert "created_by" in ResidentAssessment.__table__.c  # ty: ignore[unresolved-attribute]
+    assert "created_by" in PersonAssessment.__table__.c  # ty: ignore[unresolved-attribute]
     assert "assessment" not in SQLModel.metadata.tables
     assert "assessment_embeddings" not in SQLModel.metadata.tables
     foreign_key = next(
         iter(
-            ResidentAssessmentEmbedding.__table__.c.resident_assessment_id.foreign_keys,  # ty: ignore[unresolved-attribute]
+            PersonAssessmentEmbedding.__table__.c.person_assessment_id.foreign_keys,  # ty: ignore[unresolved-attribute]
         ),
     )
-    assert foreign_key.target_fullname == "resident_assessment.id"
+    assert foreign_key.target_fullname == "person_assessment.id"
 
 
 def test_assessment_sources_are_generated_or_imported() -> None:
@@ -87,6 +87,9 @@ def test_knowledge_chunk_and_embedding_link_to_knowledge() -> None:
         knowledge_id=1,
         chunk_index=0,
         content="Clinical guidance",
+        section_title="Protein Requirements",
+        source_page_start=12,
+        source_page_end=13,
     )
     embedding = KnowledgeChunkEmbedding(
         knowledge_chunk_id=1,
@@ -97,6 +100,9 @@ def test_knowledge_chunk_and_embedding_link_to_knowledge() -> None:
 
     assert knowledge.chunks == [chunk]
     assert chunk.knowledge is knowledge
+    assert chunk.section_title == "Protein Requirements"
+    assert chunk.source_page_start == 12  # noqa: PLR2004
+    assert chunk.source_page_end == 13  # noqa: PLR2004
     assert embedding.knowledge_chunk_id == chunk.id
 
 
@@ -105,9 +111,9 @@ def test_embedding_tables_use_indexed_postgres_vectors() -> None:
     assert KNOWLEDGE_EMBEDDING_DIMENSIONS == 384  # noqa: PLR2004
     dialect = postgresql.dialect()
     expectations = {
-        ResidentAssessmentEmbedding: (
-            "resident_assessment_embeddings",
-            "ix_resident_assessment_embeddings_embedding_vector_hnsw",
+        PersonAssessmentEmbedding: (
+            "person_assessment_embeddings",
+            "ix_person_assessment_embeddings_embedding_vector_hnsw",
             EMBEDDING_DIMENSIONS,
         ),
         KnowledgeChunkEmbedding: (

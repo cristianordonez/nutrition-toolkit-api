@@ -18,34 +18,55 @@ from .document import Document, DocumentSource, DocumentSourceType
 
 if typing.TYPE_CHECKING:
     from .clinical import (
-        ResidentClinicalFact,
-        ResidentEdema,
-        ResidentLab,
-        ResidentMealIntake,
-        ResidentOrder,
-        ResidentWeight,
-        ResidentWound,
+        PersonAllergy,
+        PersonAppetiteObservation,
+        PersonClinicalFact,
+        PersonDiagnosis,
+        PersonDialysis,
+        PersonDiet,
+        PersonEdema,
+        PersonEnteralFeeding,
+        PersonFluidPlan,
+        PersonFoodPreference,
+        PersonGIObservation,
+        PersonLab,
+        PersonMealIntake,
+        PersonMedication,
+        PersonMiscOrder,
+        PersonNutritionGoal,
+        PersonOralFeedingStatus,
+        PersonParenteralNutrition,
+        PersonSupplement,
+        PersonWeight,
+        PersonWound,
     )
-    from .resident import Resident
+    from .person import Person
 
 logger = logging.getLogger(__name__)
 
 
 class ExtractionMethod(StrEnum):
+    """Method used to produce a source fact."""
+
     DETERMINISTIC = "deterministic"
     AI = "ai"
+    API = "api"
+    IMPORT = "import"
+    MANUAL = "manual"
 
 
 def build_fact_key(
     fact_type: str,
     payload: dict[str, typing.Any],
     effective_at: datetime | None,
+    observed_at: datetime | None = None,
 ) -> str:
     """Return a stable SHA-256 identity for the normalized fact content."""
     serialized_fact = json.dumps(
         {
             "fact_type": fact_type,
             "payload": payload,
+            "observed_at": observed_at,
             "effective_at": effective_at,
         },
         default=str,
@@ -64,9 +85,9 @@ class ExtractedFact(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
 
     # Resolved identity
-    resident_id: int | None = Field(
+    person_id: int | None = Field(
         default=None,
-        foreign_key="resident.id",
+        foreign_key="person.id",
         index=True,
     )
     facility_id: int | None = Field(
@@ -74,21 +95,17 @@ class ExtractedFact(SQLModel, table=True):
         foreign_key="facility.id",
         index=True,
     )
-    resident_facility_stay_id: int | None = Field(
-        default=None,
-        foreign_key="resident_facility_stay.id",
-        index=True,
-    )
     progress_note_id: int | None = Field(
         default=None,
-        foreign_key="resident_progress_note.id",
+        foreign_key="person_progress_note.id",
         index=True,
     )
 
     # Extracted identity hints
-    resident_name: str | None = None
-    facility_resident_identifier: str | None = Field(default=None, index=True)
+    source_person_name: str | None = None
+    source_person_identifier: str | None = Field(default=None, index=True)
     facility_name: str | None = None
+    source_facility_identifier: str | None = Field(default=None, index=True)
 
     # Source
     source_id: int | None = Field(
@@ -105,9 +122,14 @@ class ExtractedFact(SQLModel, table=True):
     fact_key: str = Field(default="", max_length=64, index=True)
     fact_type: str = Field(index=True)
     payload: dict[str, typing.Any] = Field(sa_type=JSON)
+    observed_at: datetime | None = Field(default=None, index=True)
     effective_at: datetime | None = Field(default=None, index=True)
 
     # Extraction metadata
+    extraction_method: ExtractionMethod = Field(
+        default=ExtractionMethod.DETERMINISTIC,
+        index=True,
+    )
     confidence: float
     confidence_reason: str | None = None
     model_name: str | None = None
@@ -116,61 +138,152 @@ class ExtractedFact(SQLModel, table=True):
     extracted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     transformed_at: datetime | None = None
 
-    @property
-    def extraction_method(self) -> ExtractionMethod:
-        """Report whether provenance identifies AI or deterministic extraction."""
-        if self.model_name:
-            return ExtractionMethod.AI
-        return ExtractionMethod.DETERMINISTIC
-
     # Relationships
     source: DocumentSource = Relationship(back_populates="extracted_facts")
-    resident: Resident = Relationship(back_populates="extracted_facts")
-    wounds: list[ResidentWound] = Relationship(
+    person: Person = Relationship(back_populates="extracted_facts")
+    diagnoses: list[PersonDiagnosis] = Relationship(
         sa_relationship=relationship(
-            "ResidentWound",
+            "PersonDiagnosis",
             back_populates="extracted_fact",
             collection_class=list,
         ),
     )
-    labs: list[ResidentLab] = Relationship(
+    allergies: list[PersonAllergy] = Relationship(
         sa_relationship=relationship(
-            "ResidentLab",
+            "PersonAllergy",
             back_populates="extracted_fact",
             collection_class=list,
         ),
     )
-    edema: list[ResidentEdema] = Relationship(
+    appetite_observations: list[PersonAppetiteObservation] = Relationship(
         sa_relationship=relationship(
-            "ResidentEdema",
+            "PersonAppetiteObservation",
             back_populates="extracted_fact",
             collection_class=list,
         ),
     )
-    meal_intakes: list[ResidentMealIntake] = Relationship(
+    medications: list[PersonMedication] = Relationship(
         sa_relationship=relationship(
-            "ResidentMealIntake",
+            "PersonMedication",
             back_populates="extracted_fact",
             collection_class=list,
         ),
     )
-    orders: list[ResidentOrder] = Relationship(
+    diets: list[PersonDiet] = Relationship(
         sa_relationship=relationship(
-            "ResidentOrder",
+            "PersonDiet",
             back_populates="extracted_fact",
             collection_class=list,
         ),
     )
-    clinical_facts: list[ResidentClinicalFact] = Relationship(
+    enteral_feedings: list[PersonEnteralFeeding] = Relationship(
         sa_relationship=relationship(
-            "ResidentClinicalFact",
+            "PersonEnteralFeeding",
             back_populates="extracted_fact",
             collection_class=list,
         ),
     )
-    weights: list[ResidentWeight] = Relationship(
+    parenteral_nutrition_records: list[PersonParenteralNutrition] = Relationship(
         sa_relationship=relationship(
-            "ResidentWeight",
+            "PersonParenteralNutrition",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    fluid_plans: list[PersonFluidPlan] = Relationship(
+        sa_relationship=relationship(
+            "PersonFluidPlan",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    gi_observations: list[PersonGIObservation] = Relationship(
+        sa_relationship=relationship(
+            "PersonGIObservation",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    supplements: list[PersonSupplement] = Relationship(
+        sa_relationship=relationship(
+            "PersonSupplement",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    dialysis_records: list[PersonDialysis] = Relationship(
+        sa_relationship=relationship(
+            "PersonDialysis",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    oral_feeding_status_history: list[PersonOralFeedingStatus] = Relationship(
+        sa_relationship=relationship(
+            "PersonOralFeedingStatus",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    food_preferences: list[PersonFoodPreference] = Relationship(
+        sa_relationship=relationship(
+            "PersonFoodPreference",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    misc_orders: list[PersonMiscOrder] = Relationship(
+        sa_relationship=relationship(
+            "PersonMiscOrder",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    nutrition_goals: list[PersonNutritionGoal] = Relationship(
+        sa_relationship=relationship(
+            "PersonNutritionGoal",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    wounds: list[PersonWound] = Relationship(
+        sa_relationship=relationship(
+            "PersonWound",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    labs: list[PersonLab] = Relationship(
+        sa_relationship=relationship(
+            "PersonLab",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    edema: list[PersonEdema] = Relationship(
+        sa_relationship=relationship(
+            "PersonEdema",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    meal_intakes: list[PersonMealIntake] = Relationship(
+        sa_relationship=relationship(
+            "PersonMealIntake",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    clinical_facts: list[PersonClinicalFact] = Relationship(
+        sa_relationship=relationship(
+            "PersonClinicalFact",
+            back_populates="extracted_fact",
+            collection_class=list,
+        ),
+    )
+    weights: list[PersonWeight] = Relationship(
+        sa_relationship=relationship(
+            "PersonWeight",
             back_populates="extracted_fact",
             collection_class=list,
         ),
@@ -183,6 +296,7 @@ class ExtractedFact(SQLModel, table=True):
                 data["fact_type"],
                 data["payload"],
                 data.get("effective_at"),
+                data.get("observed_at"),
             )
         super().__init__(**data)
 
@@ -197,6 +311,7 @@ class ExtractedFact(SQLModel, table=True):
             normalized_data["fact_type"],
             normalized_data["payload"],
             normalized_data.get("effective_at"),
+            normalized_data.get("observed_at"),
         )
         logger.debug("Fact key: %s", normalized_data["fact_key"])
         return normalized_data
