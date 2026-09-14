@@ -33,10 +33,10 @@ def test_assessment_search_only_uses_finalized_assessments() -> None:
 
     matches = EmbeddingRepo(
         typing.cast("typing.Any", session),
-    ).search_assessments("[0.1]", 5)
+    ).search_ncps("[0.1]", 5)
 
     assert matches == []
-    assert "WHERE a.status = :finalized_status" in session.sql
+    assert "WHERE n.status = :finalized_status" in session.sql
     assert session.params["finalized_status"] == "finalized"
 
 

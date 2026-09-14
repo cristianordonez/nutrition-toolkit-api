@@ -25,7 +25,14 @@ from ntk.database.db import initialize_database
 from ntk.logger import setup_logging
 from ntk.presentation.cli.app import create_root_parser
 
-from .routers import assessments, calculate, demo, documents, knowledge, persons
+from .routers import (
+    calculate,
+    demo,
+    documents,
+    knowledge,
+    nutrition_care_processes,
+    persons,
+)
 
 app = FastAPI()
 
@@ -58,9 +65,9 @@ app.include_router(
 
 
 app.include_router(
-    assessments.router,
+    nutrition_care_processes.router,
     prefix="/api/v1",
-    tags=["assessments"],
+    tags=["nutrition-care-processes"],
 )
 
 

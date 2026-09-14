@@ -44,7 +44,7 @@ if typing.TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from ntk.models.sql.person import Person
-    from ntk.repositories.person_repo import PersonAssessmentRecords
+    from ntk.repositories.person_repo import PersonClinicalRecords
     from ntk.services.calculators.tubefeed_calculator import TubeFeedCalculator
 
 
@@ -71,7 +71,7 @@ class PersonDetailBuilder:
     def build(
         self,
         person: Person,
-        records: PersonAssessmentRecords,
+        records: PersonClinicalRecords,
         *,
         on_date: date | None = None,
     ) -> PersonDetail:
@@ -212,8 +212,7 @@ class PersonDetailBuilder:
             gi_observations=self._ordered_records(records.gi_observations),
             wounds=self._ordered_records(records.wounds),
             clinical_facts=self._ordered_records(records.clinical_facts),
-            progress_notes=self._ordered_records(records.progress_notes),
-            assessments=self._ordered_records(person.assessments or ()),
+            clinical_notes=self._ordered_records(records.clinical_notes),
             extracted_facts=self._ordered_records(person.extracted_facts or ()),
             conflicts=conflicts,
             derived_calculations=derived_calculations,
@@ -658,7 +657,7 @@ class PersonDetailBuilder:
                     "observed_at",
                     "measured_at",
                     "note_date",
-                    "assessment_date",
+                    "ncp_date",
                     "extracted_at",
                 )
             )

@@ -214,8 +214,8 @@ class PersonService:
             ),
         )
 
-    def resolve_progress_note(self, note: ParsedProgressNote) -> Person | None:
-        """Resolve an existing person for a parsed progress note."""
+    def resolve_clinical_note(self, note: ParsedProgressNote) -> Person | None:
+        """Resolve an existing person for a parsed PCC note."""
         facility = (
             self.facility_resolver.resolve(note.facility_name)
             if self.facility_resolver is not None and note.facility_name
@@ -228,8 +228,8 @@ class PersonService:
             birth_date=note.date_of_birth,
         )
 
-    def resolve_or_create_progress_note(self, note: ParsedProgressNote) -> Person:
-        """Resolve or create the person for a parsed progress note."""
+    def resolve_or_create_clinical_note(self, note: ParsedProgressNote) -> Person:
+        """Resolve or create the person for a parsed PCC note."""
         return self.resolve_or_create_person(
             facility_name=note.facility_name,
             source_person_identifier=note.source_person_identifier,
@@ -282,7 +282,7 @@ class PersonService:
         self,
         person: Person,
     ) -> PersonDetail:
-        records = self.repository.get_assessment_records(require_id(person.id))
+        records = self.repository.get_clinical_records(require_id(person.id))
         return self.person_detail_builder.build(person, records)
 
     def _require_facility_resolver(self) -> FacilityResolver:

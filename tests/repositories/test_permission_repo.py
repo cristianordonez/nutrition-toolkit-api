@@ -61,8 +61,8 @@ def test_seed_defaults_adds_missing_permissions(session: Session) -> None:
 def test_default_permissions_cover_api_routes() -> None:
     assert set(DEFAULT_PERMISSIONS) == {
         "admin",
-        "assessments:read",
-        "assessments:write",
+        "nutrition-care-processes:read",
+        "nutrition-care-processes:write",
         "calculate:read",
         "knowledge:read",
         "knowledge:write",

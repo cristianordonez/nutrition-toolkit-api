@@ -12,7 +12,7 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from ntk.models.ai_extraction import (  # noqa: TC001
-    AIExtractedClinicalFact,
+    AIExtractedFact,
     AIUnknownDocumentFact,
 )
 from ntk.models.settings import SETTINGS
@@ -38,7 +38,7 @@ class ExtractionInput(BaseModel):
 class ExtractedClinicalFacts(BaseModel):
     """Clinical facts not handled by a dedicated document extractor."""
 
-    facts: list[AIExtractedClinicalFact] = Field(default_factory=list)
+    facts: list[AIExtractedFact] = Field(default_factory=list)
 
 
 class UnknownDocumentExtractionResult(BaseModel):

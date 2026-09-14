@@ -10,15 +10,15 @@ import pytest
 from ntk.models.sql.person import (
     ClinicalFactType,
     Person,
-    PersonAssessment,
     PersonClinicalFact,
+    PersonClinicalNote,
     PersonWeight,
 )
 from ntk.presentation.api.routers import persons
 
 if typing.TYPE_CHECKING:
-    from ntk.controllers.persons.assessments import PersonAssessmentsOptions
     from ntk.controllers.persons.clinical_facts import PersonClinicalFactsOptions
+    from ntk.controllers.persons.ncps import PersonNCPsOptions
     from ntk.controllers.persons.weights import PersonWeightsOptions
 
 
@@ -31,11 +31,13 @@ def test_person_routes_use_request_scoped_controllers(
         name="Person",
         facility_id=1,
     )
-    assessment = PersonAssessment(
+    assessment = PersonClinicalNote(
         person_id=1,
-        content="Assessment",
+        note_text="Assessment",
+        raw_text="Assessment",
+        note_key="ncp-1",
         content_hash="hash",
-        assessment_date=date(2026, 8, 31),
+        note_date=date(2026, 8, 31),
         created_by="model",
     )
     weight = PersonWeight(
@@ -63,9 +65,9 @@ def test_person_routes_use_request_scoped_controllers(
             assert session == "session"
 
         @staticmethod
-        def run(options: PersonAssessmentsOptions) -> object:
+        def run(options: PersonNCPsOptions) -> object:
             assert options.person_ids == [person.id]
-            return SimpleNamespace(result=SimpleNamespace(assessments=[assessment]))
+            return SimpleNamespace(result=SimpleNamespace(ncps=[assessment]))
 
     class WeightsController:
         def __init__(self, session: object) -> None:
@@ -88,7 +90,7 @@ def test_person_routes_use_request_scoped_controllers(
     monkeypatch.setattr(persons, "PersonListController", ListController)
     monkeypatch.setattr(
         persons,
-        "PersonAssessmentsController",
+        "PersonNCPsController",
         AssessmentsController,
     )
     monkeypatch.setattr(persons, "PersonWeightsController", WeightsController)
@@ -100,7 +102,7 @@ def test_person_routes_use_request_scoped_controllers(
 
     assert asyncio.run(persons.list_persons("session")) == [person]  # ty: ignore[invalid-argument-type]
     assert asyncio.run(
-        persons.get_person_assessments(person.id, "session"),  # ty: ignore[invalid-argument-type]
+        persons.get_person_ncps(person.id, "session"),  # ty: ignore[invalid-argument-type]
     ) == [assessment]
     assert asyncio.run(
         persons.get_person_weights(person.id, "session"),  # ty: ignore[invalid-argument-type]

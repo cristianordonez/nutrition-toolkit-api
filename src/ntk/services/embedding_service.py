@@ -56,25 +56,25 @@ class EmbeddingService:
         """Embed documents off-loop through the serialized local model."""
         return await asyncio.to_thread(self.get_embeddings, contents)
 
-    def search_assessments(
+    def search_ncps(
         self,
         text: str,
         top_k: int = 5,
     ) -> list[RagSearchMatch]:
-        """Return assessments most similar to the supplied text."""
+        """Return Nutrition Care Processes most similar to the supplied text."""
         self._validate_top_k(top_k)
         vector = self._embed_query(text)
-        return self._repository().search_assessments(vector, top_k)
+        return self._repository().search_ncps(vector, top_k)
 
-    async def search_assessments_async(
+    async def search_ncps_async(
         self,
         text: str,
         top_k: int = 5,
     ) -> list[RagSearchMatch]:
-        """Return similar assessments without blocking or nesting an event loop."""
+        """Return similar NCPs without blocking or nesting an event loop."""
         self._validate_top_k(top_k)
         vector = await asyncio.to_thread(self._embed_query, text)
-        return self._repository().search_assessments(vector, top_k)
+        return self._repository().search_ncps(vector, top_k)
 
     async def search_knowledge(
         self,

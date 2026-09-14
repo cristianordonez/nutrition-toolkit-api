@@ -13,7 +13,7 @@ from ntk.models.ai_extraction import (
     AIExtractedIdentity,
     AIUnknownDocumentFact,
 )
-from ntk.models.extracted_fact_create import WeightPayload
+from ntk.models.extracted_fact_create import MealIntakePayload
 from ntk.pipelines.person.ingestion.extract.unknown_file import (
     UnknownFileExtractor,
     UnknownFileTooLargeError,
@@ -38,9 +38,10 @@ def unknown_fact() -> AIUnknownDocumentFact:
             facility_name="Sunrise Care",
         ),
         fact=AIExtractedFact(
-            payload=WeightPayload(
-                weight_lb=140,
-                measured_at=datetime(2026, 8, 1, tzinfo=UTC),
+            payload=MealIntakePayload(
+                min_percent=50,
+                max_percent=75,
+                observed_at=datetime(2026, 8, 1, tzinfo=UTC),
             ),
             confidence=0.95,
         ),

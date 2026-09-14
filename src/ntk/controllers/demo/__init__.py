@@ -1,7 +1,7 @@
-"""Controllers for the end-to-end assessment demo."""
+"""Controllers for the end-to-end Nutrition Care Process demo."""
 
 from __future__ import annotations
 
-from .assessment import DemoAssessmentController, DemoAssessmentOptions
+from .ncp import DemoNCPController, DemoNCPOptions
 
-__all__ = ["DemoAssessmentController", "DemoAssessmentOptions"]
+__all__ = ["DemoNCPController", "DemoNCPOptions"]

@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 import pytest
 
 from ntk.agents.data_extraction_agent import ExtractedClinicalFacts, ExtractionInput
-from ntk.models.ai_extraction import AIExtractedClinicalFact
+from ntk.models.ai_extraction import AIExtractedFact
 from ntk.models.extracted_fact_create import (
     AllergyPayload,
     ClinicalFactPayload,
@@ -18,7 +18,7 @@ from ntk.models.extracted_fact_create import (
     WoundPayload,
 )
 from ntk.models.sql.document import SourceAuthority
-from ntk.models.sql.person import ExtractionStatus, PersonProgressNote
+from ntk.models.sql.person import ExtractionStatus, PersonClinicalNote
 from ntk.pipelines.person.ingestion.extract.pcc_progress_notes import (
     ExtractedNote,
     ParsedHeaderDiagnosis,
@@ -127,7 +127,7 @@ def test_resident_death_nursing_note_is_not_filtered() -> None:
         PccProgressNotesExtractor._decide_note_action(note)  # noqa: SLF001
         is ProgressNoteAction.SEND_TO_AI
     )
-    assert PccProgressNotesExtractor.select_assessment_notes([note]) == [note]
+    assert PccProgressNotesExtractor.select_ncp_notes([note]) == [note]
 
 
 def test_hospitalized_nursing_note_is_selected_for_assessment() -> None:
@@ -138,7 +138,7 @@ def test_hospitalized_nursing_note_is_selected_for_assessment() -> None:
         source_filename="notes.pdf",
     )
 
-    assert PccProgressNotesExtractor.select_assessment_notes([note]) == [note]
+    assert PccProgressNotesExtractor.select_ncp_notes([note]) == [note]
 
 
 def test_extract_notes_removes_filtered_notes_before_ai_or_persistence(
@@ -231,7 +231,7 @@ def test_assessment_note_selection_keeps_clinical_notes_and_rejects_conflicts() 
         ),
     ]
 
-    selected = PccProgressNotesExtractor.select_assessment_notes(notes)
+    selected = PccProgressNotesExtractor.select_ncp_notes(notes)
 
     assert [(item.note_type, item.source_page) for item in selected] == [
         ("Nutrition/Dietary Note", 1),
@@ -268,7 +268,7 @@ def test_assessment_extraction_handles_administration_notes_deterministically(
     extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
     monkeypatch.setattr(extractor, "_parse_report_notes", lambda: notes)
 
-    facts = asyncio.run(extractor.extract_for_assessment())
+    facts = asyncio.run(extractor.extract_for_ncp())
 
     lab_payloads = [
         fact.payload for fact in facts if isinstance(fact.payload, LabPayload)
@@ -317,7 +317,7 @@ def test_progress_note_extractor_has_no_persistence_dependencies(
 ) -> None:
     extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
 
-    assert not hasattr(extractor, "progress_note_repository")
+    assert not hasattr(extractor, "clinical_note_repository")
     assert not hasattr(extractor, "person_resolver")
 
 
@@ -339,28 +339,28 @@ def test_progress_note_is_persisted_before_ai_extraction(
     )
     events: list[str] = []
 
-    class PersistingProgressNoteRepo:
+    class PersistingClinicalNoteRepo:
         def __init__(self) -> None:
-            self.note: PersonProgressNote | None = None
+            self.note: PersonClinicalNote | None = None
 
         def get_by_key(self, _note_key: str) -> None:
             return None
 
-        def create(self, progress_note: PersonProgressNote) -> PersonProgressNote:
+        def create(self, progress_note: PersonClinicalNote) -> PersonClinicalNote:
             events.append("persisted")
             self.note = progress_note
             return progress_note
 
         def set_extraction_status(
             self,
-            progress_note: PersonProgressNote,
+            progress_note: PersonClinicalNote,
             status: ExtractionStatus,
-        ) -> PersonProgressNote:
+        ) -> PersonClinicalNote:
             events.append(status.value)
             progress_note.extraction_status = status
             return progress_note
 
-    repository = PersistingProgressNoteRepo()
+    repository = PersistingClinicalNoteRepo()
     extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
 
     async def run_agent(
@@ -372,7 +372,7 @@ def test_progress_note_is_persisted_before_ai_extraction(
         events.append("agent")
         return ExtractedClinicalFacts()
 
-    progress_note = PersonProgressNote(
+    progress_note = PersonClinicalNote(
         id=1,
         person_id=7,
         note_date=note.note_date,  # ty: ignore[invalid-argument-type]
@@ -486,7 +486,7 @@ def test_progress_notes_use_bounded_async_concurrency_with_isolated_failures(
                 raise AgentUnavailableError
             return ExtractedClinicalFacts(
                 facts=[
-                    AIExtractedClinicalFact(
+                    AIExtractedFact(
                         payload=ClinicalFactPayload(
                             clinical_fact_type="observation",
                             observation_type="appetite",
@@ -502,7 +502,7 @@ def test_progress_notes_use_bounded_async_concurrency_with_isolated_failures(
 
     monkeypatch.setattr(extractor, "_run_data_extraction_agent", run_agent)
     prepared = [
-        PreparedProgressNoteExtraction(note=item, person_id=7, progress_note_id=index)
+        PreparedProgressNoteExtraction(note=item, person_id=7, clinical_note_id=index)
         for index, (_key, item) in enumerate(
             extractor.deduplicate_notes(notes),
             start=1,
@@ -530,7 +530,7 @@ def test_progress_notes_use_bounded_async_concurrency_with_isolated_failures(
         "Successful note C",
     ]
     assert [fact.source_page for fact in facts] == [1, 2, 4]
-    assert [fact.progress_note_id for fact in facts] == [1, 2, 4]
+    assert [fact.clinical_note_id for fact in facts] == [1, 2, 4]
     assert all(fact.person_id == 7 for fact in facts)  # noqa: PLR2004
     assert len([outcome for outcome in outcomes if outcome.error]) == 1
     assert "notes=4 concurrency=2" in caplog.text
@@ -552,7 +552,7 @@ def test_ai_clinical_fact_does_not_carry_demographic_updates(
         raw_text="Person has fair intake.",
         source_filename="notes.pdf",
     )
-    progress_note = PersonProgressNote(
+    progress_note = PersonClinicalNote(
         id=1,
         person_id=7,
         note_date=datetime(2026, 8, 20, tzinfo=UTC),
@@ -561,7 +561,7 @@ def test_ai_clinical_fact_does_not_carry_demographic_updates(
         note_key="note-key",
         extraction_status=ExtractionStatus.PENDING,
     )
-    ai_fact = AIExtractedClinicalFact(
+    ai_fact = AIExtractedFact(
         payload=ClinicalFactPayload(
             clinical_fact_type="observation",
             observation_type="appetite",
@@ -597,7 +597,7 @@ def test_ai_wound_uses_progress_note_date_when_observed_at_is_missing(
         raw_text="Pressure injury documented without a separate wound date.",
         source_filename="notes.pdf",
     )
-    progress_note = PersonProgressNote(
+    progress_note = PersonClinicalNote(
         id=1,
         person_id=7,
         note_date=note_date,
@@ -606,7 +606,7 @@ def test_ai_wound_uses_progress_note_date_when_observed_at_is_missing(
         note_key="wound-note-key",
         extraction_status=ExtractionStatus.PENDING,
     )
-    ai_fact = AIExtractedClinicalFact(
+    ai_fact = AIExtractedFact(
         payload=WoundPayload(
             wound_type="Pressure injury",
             location=None,

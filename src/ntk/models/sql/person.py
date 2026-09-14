@@ -1,4 +1,4 @@
-"""Person identity, progress-note, and assessment models."""
+"""Person identity, clinical-note, and Nutrition Care Process models."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import JSON, Column, Enum, UniqueConstraint, text
+from sqlalchemy import JSON, CheckConstraint, Column, Enum, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 from sqlmodel import Field, Index, Relationship, SQLModel
 
@@ -43,19 +43,26 @@ if typing.TYPE_CHECKING:
     from .extracted_fact import ExtractedFact
 
 
-class StatusType(StrEnum):
-    """Status for person assessments."""
+class NutritionCareProcessStatus(StrEnum):
+    """Lifecycle status for a person's Nutrition Care Process note."""
 
     DRAFT = "draft"
     FINALIZED = "finalized"
     DISCARDED = "discarded"
 
 
-class AssessmentSource(StrEnum):
-    """Identify how a person assessment entered the system."""
+class NutritionCareProcessSource(StrEnum):
+    """Identify how a Nutrition Care Process note entered the system."""
 
     GENERATED = "generated"
     IMPORTED = "imported"
+
+
+class NutritionClinicalNoteType(StrEnum):
+    """Canonical nutrition note categories eligible for vector search."""
+
+    NUTRITION_DIETARY = "Nutrition/Dietary"
+    DIETICIAN = "Dietician"
 
 
 class ExtractionStatus(StrEnum):
@@ -63,6 +70,7 @@ class ExtractionStatus(StrEnum):
     EXTRACTED = "extracted"
     SKIPPED = "skipped"
     FAILED = "failed"
+    NOT_APPLICABLE = "not_applicable"
 
 
 def normalize_person_name_part(value: str) -> str:
@@ -226,19 +234,11 @@ class Person(SQLModel, table=True):
         ),
     )
 
-    progress_notes: list[PersonProgressNote] = Relationship(
+    clinical_notes: list[PersonClinicalNote] = Relationship(
         sa_relationship=relationship(
-            "PersonProgressNote",
+            "PersonClinicalNote",
             back_populates="person",
             collection_class=list,
-        ),
-    )
-    assessments: list[PersonAssessment] = Relationship(
-        sa_relationship=relationship(
-            "PersonAssessment",
-            back_populates="person",
-            collection_class=list,
-            passive_deletes="all",
         ),
     )
     extracted_facts: list[ExtractedFact] = Relationship(
@@ -271,14 +271,25 @@ class Person(SQLModel, table=True):
         super().__init__(**data)
 
 
-class PersonProgressNote(SQLModel, table=True):
-    """A persisted person progress note."""
+class PersonClinicalNote(SQLModel, table=True):
+    """A persisted person clinical note."""
 
-    __tablename__ = "person_progress_note"
+    __tablename__ = "person_clinical_note"
     __table_args__ = (
         UniqueConstraint(
             "person_id",
             "note_key",
+        ),
+        UniqueConstraint(
+            "person_id",
+            "content_hash",
+            name="uq_person_clinical_note_person_content_hash",
+        ),
+        CheckConstraint(
+            "(ncp_source IS NULL AND status IS NULL AND content_hash IS NULL) OR "
+            "(ncp_source IS NOT NULL AND status IS NOT NULL AND "
+            "content_hash IS NOT NULL)",
+            name="ck_person_clinical_note_ncp_metadata",
         ),
     )
     id: int | None = Field(default=None, primary_key=True)
@@ -290,6 +301,7 @@ class PersonProgressNote(SQLModel, table=True):
     raw_text: str
     note_key: str = Field(index=True, unique=True)
     extraction_status: ExtractionStatus = Field(
+        default=ExtractionStatus.PENDING,
         sa_column=Column(
             Enum(
                 ExtractionStatus,
@@ -301,59 +313,39 @@ class PersonProgressNote(SQLModel, table=True):
             index=True,
         ),
     )
-    person: Person = Relationship(back_populates="progress_notes")
+    person: Person = Relationship(back_populates="clinical_notes")
     source_id: int | None = Field(
         default=None,
         foreign_key="document_source.id",
         index=True,
     )
-
-
-class PersonAssessment(SQLModel, table=True):
-    """A generated or imported nutrition assessment for one person."""
-
-    __tablename__ = "person_assessment"
-    __table_args__ = (UniqueConstraint("person_id", "content_hash"),)
-    id: int | None = Field(default=None, primary_key=True)
-    person_id: int = Field(
-        foreign_key="person.id",
-        index=True,
-    )
-    source_progress_note_id: int | None = Field(
+    ncp_source: NutritionCareProcessSource | None = Field(
         default=None,
-        foreign_key="person_progress_note.id",
-        index=True,
-        unique=True,
-    )
-    content: str
-    assessment_source: AssessmentSource = Field(
-        default=AssessmentSource.GENERATED,
         sa_column=Column(
             Enum(
-                AssessmentSource,
-                name="assessment_source",
+                NutritionCareProcessSource,
+                name="nutrition_care_process_source",
                 native_enum=False,
                 create_constraint=True,
                 values_callable=lambda enum_type: [item.value for item in enum_type],
             ),
-            nullable=False,
+            nullable=True,
             index=True,
         ),
     )
     source_filename: str | None = None
-    content_hash: str = Field(index=True)
-    assessment_index: int = 0
-    assessment_date: date = Field(index=True)
-    created_by: str = Field(index=True)
-    status: StatusType = Field(
-        default=StatusType.DRAFT,
+    content_hash: str | None = Field(default=None, index=True)
+    ncp_index: int | None = None
+    created_by: str | None = Field(default=None, index=True)
+    status: NutritionCareProcessStatus | None = Field(
+        default=None,
         sa_column=Column(
             Enum(
-                StatusType,
-                name="status_type",
+                NutritionCareProcessStatus,
+                name="nutrition_care_process_status",
                 values_callable=lambda enum_type: [item.value for item in enum_type],
             ),
-            nullable=False,
+            nullable=True,
             index=True,
         ),
     )
@@ -363,28 +355,31 @@ class PersonAssessment(SQLModel, table=True):
         index=True,
     )
     finalized_at: datetime | None = None
-    person: Person = Relationship(
-        back_populates="assessments",
-    )
-    embeddings: list[PersonAssessmentEmbedding] = Relationship(
+    nutrition_embeddings: list[PersonNutritionClinicalNoteEmbedding] = Relationship(
         sa_relationship=relationship(
-            "PersonAssessmentEmbedding",
-            back_populates="person_assessment",
+            "PersonNutritionClinicalNoteEmbedding",
+            back_populates="clinical_note",
             collection_class=list,
+            cascade="all, delete-orphan",
         ),
     )
 
 
-class PersonAssessmentEmbedding(SQLModel, table=True):
-    """An embedding generated for one complete nutrition assessment."""
+class PersonNutritionClinicalNoteEmbedding(SQLModel, table=True):
+    """An embedding for an eligible finalized nutrition clinical note."""
 
-    __tablename__ = "person_assessment_embeddings"
+    __tablename__ = "person_nutrition_clinical_note_embeddings"
     __table_args__ = (
         Index(
-            "ix_person_assessment_embeddings_embedding_vector_hnsw",
+            "ix_person_nutrition_clinical_note_embeddings_vector_hnsw",
             "embedding_vector",
             postgresql_using="hnsw",
             postgresql_ops={"embedding_vector": "vector_cosine_ops"},
+        ),
+        Index(
+            "uq_nutrition_clinical_note_embedding_note_id",
+            "person_clinical_note_id",
+            unique=True,
         ),
     )
     id: int | None = Field(default=None, primary_key=True)
@@ -398,30 +393,42 @@ class PersonAssessmentEmbedding(SQLModel, table=True):
         ),
     )
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    person_assessment_id: int = Field(
-        foreign_key="person_assessment.id",
-        index=True,
-        unique=True,
+    person_clinical_note_id: int = Field(
+        foreign_key="person_clinical_note.id",
+    )
+    type: NutritionClinicalNoteType = Field(
+        sa_column=Column(
+            Enum(
+                NutritionClinicalNoteType,
+                name="nutrition_clinical_note_type",
+                native_enum=False,
+                create_constraint=True,
+                values_callable=lambda enum_type: [item.value for item in enum_type],
+            ),
+            nullable=False,
+            index=True,
+        ),
     )
     model_name: str
-    person_assessment: PersonAssessment = Relationship(
+    clinical_note: PersonClinicalNote = Relationship(
         sa_relationship=relationship(
-            "PersonAssessment",
-            back_populates="embeddings",
+            "PersonClinicalNote",
+            back_populates="nutrition_embeddings",
         ),
     )
 
 
 __all__ = [
-    "AssessmentSource",
     "ClinicalFactType",
     "ExtractionStatus",
+    "NutritionCareProcessSource",
+    "NutritionCareProcessStatus",
+    "NutritionClinicalNoteType",
     "Person",
     "PersonAllergy",
     "PersonAppetiteObservation",
-    "PersonAssessment",
-    "PersonAssessmentEmbedding",
     "PersonClinicalFact",
+    "PersonClinicalNote",
     "PersonDiagnosis",
     "PersonDialysis",
     "PersonDiet",
@@ -434,14 +441,13 @@ __all__ = [
     "PersonMealIntake",
     "PersonMedication",
     "PersonMiscOrder",
+    "PersonNutritionClinicalNoteEmbedding",
     "PersonNutritionGoal",
     "PersonOralFeedingStatus",
     "PersonParenteralNutrition",
-    "PersonProgressNote",
     "PersonSupplement",
     "PersonWeight",
     "PersonWound",
-    "StatusType",
     "normalize_person_name_part",
     "parse_person_name",
 ]

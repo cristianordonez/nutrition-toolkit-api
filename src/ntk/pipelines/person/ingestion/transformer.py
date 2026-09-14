@@ -241,7 +241,7 @@ class ExtractedFactTransformer:
             extracted_fact = ExtractedFact(
                 person_id=require_id(person.id),
                 facility_id=facility_id,
-                progress_note_id=create.progress_note_id,
+                clinical_note_id=create.clinical_note_id,
                 source_person_name=create.source_person_name,
                 source_person_identifier=create.source_person_identifier,
                 facility_name=create.facility_name,

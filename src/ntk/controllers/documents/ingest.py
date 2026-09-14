@@ -21,9 +21,9 @@ from ntk.pipelines.person.ingestion.transformer import (
     ExtractedFactTransformer,
     PersonTransformationResult,
 )
+from ntk.repositories.clinical_note_repo import ClinicalNoteRepo
 from ntk.repositories.facility_repo import FacilityRepo
 from ntk.repositories.person_repo import PersonRepo
-from ntk.repositories.progress_note_repo import ProgressNoteRepo
 from ntk.services.facility_resolver import FacilityResolver
 from ntk.services.person.person_service import PersonService
 from ntk.utils.parallel import ParallelPoolHandler
@@ -44,7 +44,7 @@ def _ingest_document(path: pathlib.Path) -> PersonTransformationResult:
             facility_resolver,
         )
         service = PersonIngestionPipeline(
-            progress_note_repository=ProgressNoteRepo(session),
+            clinical_note_repository=ClinicalNoteRepo(session),
             person_service=person_service,
             facility_resolver=facility_resolver,
         )
@@ -97,7 +97,7 @@ class DocumentIngestController(BaseController):
                         facility_resolver,
                     )
                     service = PersonIngestionPipeline(
-                        progress_note_repository=ProgressNoteRepo(session),
+                        clinical_note_repository=ClinicalNoteRepo(session),
                         person_service=person_service,
                         facility_resolver=facility_resolver,
                     )

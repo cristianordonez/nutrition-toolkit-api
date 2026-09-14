@@ -46,7 +46,7 @@ class Repository:
         self.knowledge_args: tuple[str, int] | None = None
         self.knowledge_type: KnowledgeType | None = None
 
-    def search_assessments(self, vector: str, top_k: int) -> list[RagSearchMatch]:
+    def search_ncps(self, vector: str, top_k: int) -> list[RagSearchMatch]:
         self.assessment_args = vector, top_k
         return self.matches
 
@@ -100,7 +100,7 @@ def test_embeds_documents_inside_running_event_loop() -> None:
     assert embedder.document_batches == [["assessment", "knowledge"]]
 
 
-def test_search_assessments_uses_query_embedding() -> None:
+def test_search_ncps_uses_query_embedding() -> None:
     document_id = 1
     match = RagSearchMatch(
         document_id=document_id,
@@ -110,7 +110,7 @@ def test_search_assessments_uses_query_embedding() -> None:
     )
     service, embedder, repository = _service([match])
 
-    matches = service.search_assessments("  weight loss  ", top_k=3)
+    matches = service.search_ncps("  weight loss  ", top_k=3)
 
     assert embedder.queries == ["weight loss"]
     assert repository.assessment_args == ("[0.1,0.2]", 3)
@@ -118,11 +118,11 @@ def test_search_assessments_uses_query_embedding() -> None:
     assert matches[0].filename == "assessment.pdf"
 
 
-def test_search_assessments_inside_running_event_loop() -> None:
+def test_search_ncps_inside_running_event_loop() -> None:
     service, embedder, repository = _service()
 
     matches = asyncio.run(
-        service.search_assessments_async("weight loss", top_k=3),
+        service.search_ncps_async("weight loss", top_k=3),
     )
 
     assert matches == []
@@ -169,7 +169,7 @@ def test_search_rejects_blank_text(text: str) -> None:
     service, _, _ = _service()
 
     with pytest.raises(ValueError, match="must not be empty"):
-        service.search_assessments(text)
+        service.search_ncps(text)
 
 
 @pytest.mark.parametrize("top_k", [0, 21])

@@ -8,17 +8,17 @@ from sqlalchemy import text
 
 from ntk.models.knowledge import KnowledgeType
 from ntk.models.rag import RagSearchMatch
-from ntk.models.sql.person import StatusType
+from ntk.models.sql.person import NutritionCareProcessStatus
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
 
-_ASSESSMENT_SEARCH_SQL = """
-    SELECT a.id, a.source_filename, a.content,
+_NCP_SEARCH_SQL = """
+    SELECT n.id, n.source_filename, n.note_text,
            1 - (e.embedding_vector <=> CAST(:vector AS vector)) AS similarity
-    FROM person_assessment_embeddings e
-    JOIN person_assessment a ON a.id = e.person_assessment_id
-    WHERE a.status = :finalized_status
+    FROM person_nutrition_clinical_note_embeddings e
+    JOIN person_clinical_note n ON n.id = e.person_clinical_note_id
+    WHERE n.status = :finalized_status
     ORDER BY e.embedding_vector <=> CAST(:vector AS vector)
     LIMIT :top_k
 """
@@ -44,27 +44,27 @@ _KNOWLEDGE_SEARCH_SQL = """
 
 
 class EmbeddingRepo:
-    """Search stored assessment and knowledge vectors using one session."""
+    """Search stored NCP and knowledge vectors using one session."""
 
     def __init__(self, session: Session) -> None:
         """Store the controller-owned session."""
         self.session = session
 
-    def search_assessments(
+    def search_ncps(
         self,
         vector: str,
         top_k: int,
     ) -> list[RagSearchMatch]:
-        """Return assessment rows nearest to the query vector."""
+        """Return NCP rows nearest to the query vector."""
         rows = self.session.exec(  # ty: ignore[no-matching-overload]
-            text(_ASSESSMENT_SEARCH_SQL),
+            text(_NCP_SEARCH_SQL),
             params={
                 "vector": vector,
                 "top_k": top_k,
-                "finalized_status": StatusType.FINALIZED.value,
+                "finalized_status": NutritionCareProcessStatus.FINALIZED.value,
             },
         ).all()
-        return self._matches(rows, default_filename="generated-assessment")
+        return self._matches(rows, default_filename="generated-ncp")
 
     def search_knowledge(
         self,

@@ -1,7 +1,7 @@
 """initial
 
 Revision ID: 20260912_0001
-Revises:
+Revises: 20260912_0000
 Create Date: 2026-09-12 17:23:24.023083
 """
 
@@ -15,7 +15,7 @@ if typing.TYPE_CHECKING:
     from collections.abc import Sequence
 
 revision: str = "20260912_0001"
-down_revision: str | Sequence[str] | None = None
+down_revision: str | Sequence[str] | None = "20260912_0000"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

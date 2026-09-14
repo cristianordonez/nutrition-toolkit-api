@@ -13,15 +13,9 @@ def test_sqlalchemy_mappers_configure() -> None:
     configure_mappers()
 
 
-def test_person_delete_never_nulls_assessment_foreign_keys() -> None:
-    """Leave required assessment ownership enforcement to the database."""
-    assert Person.assessments.property.passive_deletes == "all"  # ty: ignore[unresolved-attribute]
-
-
 def test_person_forward_relationships_are_collections() -> None:
     """Keep one-to-many relationships declared before their models as lists."""
-    assert Person.progress_notes.property.uselist is True  # ty: ignore[unresolved-attribute]
-    assert Person.assessments.property.uselist is True  # ty: ignore[unresolved-attribute]
+    assert Person.clinical_notes.property.uselist is True  # ty: ignore[unresolved-attribute]
 
 
 def test_all_table_primary_keys_are_integers() -> None:

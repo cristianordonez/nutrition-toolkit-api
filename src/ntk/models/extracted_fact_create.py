@@ -1,4 +1,9 @@
-"""Model used to created ExtractedFact."""
+"""Transient person-fact payloads produced before database persistence.
+
+Payload models describe clinical data independently of how it was extracted.
+The capability unions near the end of this module define which payloads an AI
+extractor may emit and which payloads are reserved for deterministic extractors.
+"""
 
 from __future__ import annotations
 
@@ -58,7 +63,6 @@ class FactType(StrEnum):
     FOOD_PREFERENCE = "food_preference"
     MISC_ORDER = "misc_order"
     NUTRITION_GOAL = "nutrition_goal"
-    KNOWLEDGE_CHUNK = "knowledge_chunk"
 
 
 class WeightPayload(BaseModel):
@@ -98,7 +102,7 @@ class WoundPayload(BaseModel):
     assessment_note: str | None = None
     physician_orders: str | None = None
     physician_orders_notes: str | None = None
-    # May be supplied by a containing progress-note timestamp before persistence.
+    # May be supplied by a containing clinical-note timestamp before persistence.
     observed_at: datetime | None = None
 
 
@@ -140,7 +144,7 @@ class ClinicalFactPayload(BaseModel):
     observed_at: datetime | None = None
 
 
-class _StatefulPayload(BaseModel):
+class _StatefulFactPayload(BaseModel):
     """Common optional lifecycle values supported by stateful source facts."""
 
     status: ClinicalStatus = ClinicalStatus.UNKNOWN
@@ -152,7 +156,7 @@ class _StatefulPayload(BaseModel):
     source_revision_date: date | None = None
 
 
-class MedicationPayload(_StatefulPayload):
+class MedicationPayload(_StatefulFactPayload):
     type: typing.Literal["medication"] = "medication"
     name: str
     dose: float | None = None
@@ -164,7 +168,7 @@ class MedicationPayload(_StatefulPayload):
     action: str | None = None
 
 
-class DiagnosisPayload(_StatefulPayload):
+class DiagnosisPayload(_StatefulFactPayload):
     type: typing.Literal["diagnosis"] = "diagnosis"
     diagnosis: str
     code: str | None = None
@@ -188,7 +192,7 @@ class AllergyPayload(BaseModel):
         return self
 
 
-class DietPayload(_StatefulPayload):
+class DietPayload(_StatefulFactPayload):
     type: typing.Literal["diet"] = "diet"
     diet_type: str | None = None
     texture: str | None = None
@@ -223,7 +227,7 @@ class DietPayload(_StatefulPayload):
         return list(dict.fromkeys(normalized))
 
 
-class EnteralFeedingPayload(_StatefulPayload):
+class EnteralFeedingPayload(_StatefulFactPayload):
     type: typing.Literal["enteral_feeding"] = "enteral_feeding"
     formula: str | None = None
     route: str | None = None
@@ -270,7 +274,7 @@ class ParenteralNutritionPayload(BaseModel):
     source_revision_date: date | None = None
 
 
-class SupplementPayload(_StatefulPayload):
+class SupplementPayload(_StatefulFactPayload):
     type: typing.Literal["supplement"] = "supplement"
     product_name: str
     amount: float | None = Field(default=None, gt=0)
@@ -279,7 +283,7 @@ class SupplementPayload(_StatefulPayload):
     route: str | None = None
 
 
-class DialysisPayload(_StatefulPayload):
+class DialysisPayload(_StatefulFactPayload):
     type: typing.Literal["dialysis"] = "dialysis"
     dialysis_type: DialysisType | None = None
     schedule: str | None = None
@@ -311,13 +315,13 @@ class FoodPreferencePayload(BaseModel):
     observed_at: datetime | None = None
 
 
-class MiscOrderPayload(_StatefulPayload):
+class MiscOrderPayload(_StatefulFactPayload):
     type: typing.Literal["misc_order"] = "misc_order"
     order_type: str | None = None
     description: str
 
 
-class FluidPlanPayload(_StatefulPayload):
+class FluidPlanPayload(_StatefulFactPayload):
     """A documented overall fluid target or restriction."""
 
     type: typing.Literal["fluid_plan"] = "fluid_plan"
@@ -337,7 +341,7 @@ class FluidPlanPayload(_StatefulPayload):
         return self
 
 
-class NutritionGoalPayload(_StatefulPayload):
+class NutritionGoalPayload(_StatefulFactPayload):
     type: typing.Literal["nutrition_goal"] = "nutrition_goal"
     goal_type: NutritionGoalType
     target_value: float | None = None
@@ -346,36 +350,45 @@ class NutritionGoalPayload(_StatefulPayload):
     notes: str | None = None
 
 
-class KnowledgeChunkPayload(BaseModel):
-    type: typing.Literal["knowledge_chunk"] = "knowledge_chunk"
-    content: str
-    chunk_index: int
-    knowledge_type: str
+# Extraction capability contracts
+# AI extractors receive only this curated narrative-clinical subset. Structured
+# report facts such as weights, labs, orders, and nutrition support are excluded
+# so the model cannot duplicate or replace deterministic report extraction.
+AIExtractedFactPayload = (
+    AllergyPayload
+    | AppetitePayload
+    | ClinicalFactPayload
+    | DiagnosisPayload
+    | DialysisPayload
+    | EdemaPayload
+    | FoodPreferencePayload
+    | GIObservationPayload
+    | MealIntakePayload
+    | NutritionGoalPayload
+    | OralFeedingStatusPayload
+    | WoundPayload
+)
 
-
-FactPayload = typing.Annotated[
+# These payloads must come from dedicated deterministic extractors. They contain
+# structured measurements, active orders, nutrition support, or fluid plans for
+# which model inference would be less reliable than source-specific parsing.
+DeterministicOnlyFactPayload = (
     WeightPayload
     | LabPayload
-    | EdemaPayload
-    | WoundPayload
-    | MealIntakePayload
-    | AppetitePayload
-    | GIObservationPayload
-    | ClinicalFactPayload
     | MedicationPayload
-    | DiagnosisPayload
-    | AllergyPayload
     | DietPayload
     | EnteralFeedingPayload
     | ParenteralNutritionPayload
     | SupplementPayload
-    | DialysisPayload
-    | OralFeedingStatusPayload
     | FluidPlanPayload
-    | FoodPreferencePayload
     | MiscOrderPayload
-    | NutritionGoalPayload
-    | KnowledgeChunkPayload,
+)
+
+# Common person-ingestion and persistence boundary. Deterministic extractors may
+# create any supported person fact; AI extractors remain constrained by the
+# narrower AIExtractedFactPayload contract above.
+PersonFactPayload = typing.Annotated[
+    AIExtractedFactPayload | DeterministicOnlyFactPayload,
     Field(discriminator="type"),
 ]
 
@@ -385,7 +398,7 @@ class ExtractedFactCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    payload: FactPayload
+    payload: PersonFactPayload
     confidence: float = Field(ge=0.0, le=1.0)
     confidence_reason: str | None = None
     model_name: str | None = None
@@ -402,7 +415,7 @@ class ExtractedFactCreate(BaseModel):
     # already known identity
     person_id: int | None = None
     facility_id: int | None = None
-    progress_note_id: int | None = None
+    clinical_note_id: int | None = None
 
     # source-system identity and authority
     source_system: str | None = None
@@ -417,21 +430,21 @@ class ExtractedFactCreate(BaseModel):
 
 
 __all__ = [
+    "AIExtractedFactPayload",
     "AllergyPayload",
     "AppetitePayload",
     "ClinicalFactPayload",
+    "DeterministicOnlyFactPayload",
     "DiagnosisPayload",
     "DialysisPayload",
     "DietPayload",
     "EdemaPayload",
     "EnteralFeedingPayload",
     "ExtractedFactCreate",
-    "FactPayload",
     "FactType",
     "FluidPlanPayload",
     "FoodPreferencePayload",
     "GIObservationPayload",
-    "KnowledgeChunkPayload",
     "LabPayload",
     "MealIntakePayload",
     "MedicationPayload",
@@ -439,6 +452,7 @@ __all__ = [
     "NutritionGoalPayload",
     "OralFeedingStatusPayload",
     "ParenteralNutritionPayload",
+    "PersonFactPayload",
     "SupplementPayload",
     "WeightPayload",
     "WoundPayload",

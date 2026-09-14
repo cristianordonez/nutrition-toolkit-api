@@ -7,15 +7,15 @@ import typing
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import Session  # noqa: TC002
 
-from ntk.controllers.persons.assessments import (
-    PersonAssessmentsController,
-    PersonAssessmentsOptions,
-)
 from ntk.controllers.persons.clinical_facts import (
     PersonClinicalFactsController,
     PersonClinicalFactsOptions,
 )
 from ntk.controllers.persons.list import PersonListController, PersonListOptions
+from ntk.controllers.persons.ncps import (
+    PersonNCPsController,
+    PersonNCPsOptions,
+)
 from ntk.controllers.persons.weights import (
     PersonWeightsController,
     PersonWeightsOptions,
@@ -23,11 +23,11 @@ from ntk.controllers.persons.weights import (
 from ntk.database.db import get_session
 from ntk.defaults import (
     ADMIN_PERMISSION,
-    ASSESSMENTS_READ_PERMISSION,
+    NCP_READ_PERMISSION,
     PERSONS_READ_PERMISSION,
 )
 from ntk.models.sql.clinical import PersonClinicalFact, PersonWeight
-from ntk.models.sql.person import Person, PersonAssessment
+from ntk.models.sql.person import Person, PersonClinicalNote
 from ntk.presentation.api.middleware import rate_limit, require_any_permission
 from ntk.repositories.food_repo import FoodRepo
 from ntk.repositories.person_repo import PersonRepo
@@ -41,8 +41,8 @@ _READ_DEPENDENCIES = [
     Depends(require_any_permission([ADMIN_PERMISSION, PERSONS_READ_PERMISSION])),
 ]
 
-_ASSESSMENT_READ_DEPENDENCIES = [
-    Depends(require_any_permission([ADMIN_PERMISSION, ASSESSMENTS_READ_PERMISSION])),
+_NCP_READ_DEPENDENCIES = [
+    Depends(require_any_permission([ADMIN_PERMISSION, NCP_READ_PERMISSION])),
 ]
 
 
@@ -73,7 +73,7 @@ async def get_person_detail(
     person_id: int,
     session: typing.Annotated[Session, Depends(get_session)],
 ) -> Response:
-    """Return assessment-ready clinical context for one person."""
+    """Return NCP-ready clinical context for one person."""
     try:
         service = PersonService(
             PersonRepo(session),
@@ -96,22 +96,22 @@ async def get_person_detail(
 
 
 @router.get(
-    "/persons/{person_id}/assessments",
-    response_model=list[PersonAssessment],
+    "/persons/{person_id}/nutrition-care-processes",
+    response_model=list[PersonClinicalNote],
     dependencies=[
-        *_ASSESSMENT_READ_DEPENDENCIES,
-        Depends(rate_limit(60, window=3600, scope="persons-assessments")),
+        *_NCP_READ_DEPENDENCIES,
+        Depends(rate_limit(60, window=3600, scope="persons-ncps")),
     ],
 )
-async def get_person_assessments(
+async def get_person_ncps(
     person_id: int,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> list[PersonAssessment]:
-    """Return assessments for one person."""
-    output = PersonAssessmentsController(session).run(
-        PersonAssessmentsOptions(person_ids=[person_id]),
+) -> list[PersonClinicalNote]:
+    """Return Nutrition Care Processes for one person."""
+    output = PersonNCPsController(session).run(
+        PersonNCPsOptions(person_ids=[person_id]),
     )
-    return output.result.assessments
+    return output.result.ncps
 
 
 @router.get(

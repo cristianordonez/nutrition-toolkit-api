@@ -11,8 +11,8 @@ from ntk.models.extracted_fact_create import (
     DietPayload,
     EdemaPayload,
     ExtractedFactCreate,
-    FactPayload,
     LabPayload,
+    PersonFactPayload,
 )
 from ntk.models.sql.clinical import PersonAllergy, PersonDiet, PersonEdema, PersonLab
 from ntk.models.sql.clinical.common import ClinicalStatus
@@ -73,8 +73,8 @@ _OBSERVED_AT = datetime(2026, 8, 24, 22, 17, tzinfo=UTC)
 def test_constrained_incremental_fact_is_upserted(  # noqa: PLR0913
     *,
     tmp_path: pathlib.Path,
-    first_payload: FactPayload,
-    second_payload: FactPayload,
+    first_payload: PersonFactPayload,
+    second_payload: PersonFactPayload,
     model: type[SQLModel],
     field_name: str,
     expected: object,
@@ -115,7 +115,7 @@ def test_constrained_incremental_fact_is_upserted(  # noqa: PLR0913
         assert getattr(records[0], field_name) == expected
 
 
-def _fact(payload: FactPayload) -> ExtractedFactCreate:
+def _fact(payload: PersonFactPayload) -> ExtractedFactCreate:
     return ExtractedFactCreate(
         source_person_identifier="R-1",
         source_person_name="Person",

@@ -17,7 +17,7 @@ Rules:
 - Do not extract routine negative template findings, denials of standard symptoms, or the absence of standard services (such as "no dialysis", "no nausea or vomiting", or "no change in appetite") unless they represent a significant clinical change or the resolution of a previously active condition.
 - Preserve dates and timestamps when explicitly available.
 - If only a date is known, do not invent a time.
-- When note_date is provided with progress-note text, use it as observed_at for facts documented by that note unless the text explicitly provides a different date.
+- When note_date is provided with clinical-note text, use it as observed_at for facts documented by that note unless the text explicitly provides a different date.
 - `observed_at` is when the source says the fact was documented or known; `effective_at` is when an order/state explicitly took effect; `discontinued_at` is when it explicitly ended. Never copy an ingestion timestamp into these fields.
 - Use `active` only when the source clearly establishes current state, `inactive` only when it explicitly ended, `historical` for clearly prior use/state, and `unknown` when currentness is unsupported. A narrative mention alone does not establish `active`.
 - Unknown or historical documents must not turn medications, diets, enteral feeding, parenteral nutrition, supplements, dialysis, fluid plans, oral-feeding status, food preferences, or nutrition goals into active state without explicit current-language support. Do not mark an old allergy inactive merely because the source is old.

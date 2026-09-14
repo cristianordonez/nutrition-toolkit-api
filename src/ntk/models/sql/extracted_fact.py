@@ -95,9 +95,9 @@ class ExtractedFact(SQLModel, table=True):
         foreign_key="facility.id",
         index=True,
     )
-    progress_note_id: int | None = Field(
+    clinical_note_id: int | None = Field(
         default=None,
-        foreign_key="person_progress_note.id",
+        foreign_key="person_clinical_note.id",
         index=True,
     )
 

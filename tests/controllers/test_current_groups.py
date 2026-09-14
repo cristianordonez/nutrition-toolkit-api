@@ -4,7 +4,6 @@ import asyncio
 
 import pytest
 
-from ntk.controllers.assessment.app import AssessmentControllerGroup
 from ntk.controllers.documents.app import DocumentControllerGroup
 from ntk.controllers.food.app import FoodControllerGroup
 from ntk.controllers.food.sync import (
@@ -13,11 +12,12 @@ from ntk.controllers.food.sync import (
     FoodSyncResponse,
 )
 from ntk.controllers.knowledge.app import KnowledgeControllerGroup
+from ntk.controllers.ncp.app import NCPControllerGroup
 from ntk.models.sql.knowledge import Knowledge
 
 
 def test_current_controller_groups_expose_their_commands() -> None:
-    assessment = AssessmentControllerGroup()
+    assessment = NCPControllerGroup()
     documents = DocumentControllerGroup()
     food = FoodControllerGroup()
     knowledge = KnowledgeControllerGroup()

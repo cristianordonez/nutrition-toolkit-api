@@ -38,8 +38,7 @@ from ntk.models.sql.document import Document, DocumentSource
 from ntk.models.sql.extracted_fact import ExtractedFact
 from ntk.models.sql.person import (
     Person,
-    PersonAssessment,
-    PersonProgressNote,
+    PersonClinicalNote,
     normalize_person_name_part,
     parse_person_name,
 )
@@ -68,7 +67,7 @@ PersonClinicalRecord: typing.TypeAlias = (
     | PersonMiscOrder
     | PersonOralFeedingStatus
     | PersonParenteralNutrition
-    | PersonProgressNote
+    | PersonClinicalNote
     | PersonSupplement
     | PersonWeight
     | PersonNutritionGoal
@@ -143,8 +142,8 @@ _RECENT_DOMAIN_LIMIT = 50
 
 
 @dataclass(frozen=True)
-class PersonAssessmentRecords:
-    """Bounded persisted records used to construct an assessment prompt."""
+class PersonClinicalRecords:
+    """Bounded persisted records used to construct an NCP prompt."""
 
     weights: list[PersonWeight] = field(default_factory=list)
     labs: list[PersonLab] = field(default_factory=list)
@@ -167,7 +166,7 @@ class PersonAssessmentRecords:
     food_preferences: list[PersonFoodPreference] = field(default_factory=list)
     misc_orders: list[PersonMiscOrder] = field(default_factory=list)
     nutrition_goals: list[PersonNutritionGoal] = field(default_factory=list)
-    progress_notes: list[PersonProgressNote] = field(default_factory=list)
+    clinical_notes: list[PersonClinicalNote] = field(default_factory=list)
     wounds: list[PersonWound] = field(default_factory=list)
     edema: list[PersonEdema] = field(default_factory=list)
     meal_intakes: list[PersonMealIntake] = field(default_factory=list)
@@ -447,22 +446,25 @@ class PersonRepo:
             msg = f"Unsupported person sex: {sex!r}"
             raise ValueError(msg) from error
 
-    def get_assessments_by_person_ids(
+    def get_ncps_by_person_ids(
         self,
         person_ids: Sequence[int],
-    ) -> list[PersonAssessment]:
-        """Return assessments belonging to the supplied person IDs."""
+    ) -> list[PersonClinicalNote]:
+        """Return Nutrition Care Processes for the supplied person IDs."""
         if not person_ids:
             return []
         return list(
             self.session.exec(
-                select(PersonAssessment)
-                .where(col(PersonAssessment.person_id).in_(person_ids))
+                select(PersonClinicalNote)
+                .where(
+                    col(PersonClinicalNote.person_id).in_(person_ids),
+                    col(PersonClinicalNote.ncp_source).is_not(None),
+                )
                 .order_by(
-                    col(PersonAssessment.person_id),
-                    col(PersonAssessment.assessment_date).desc(),
-                    col(PersonAssessment.created_at).desc(),
-                    col(PersonAssessment.id).desc(),
+                    col(PersonClinicalNote.person_id),
+                    col(PersonClinicalNote.note_date).desc(),
+                    col(PersonClinicalNote.created_at).desc(),
+                    col(PersonClinicalNote.id).desc(),
                 ),
             ).all(),
         )
@@ -504,8 +506,8 @@ class PersonRepo:
             ).all(),
         )
 
-    def get_assessment_records(self, person_id: int) -> PersonAssessmentRecords:
-        """Load bounded, reverse-chronological data for assessment generation."""
+    def get_clinical_records(self, person_id: int) -> PersonClinicalRecords:
+        """Load bounded, reverse-chronological data for NCP generation."""
         weights = list(
             self.session.exec(
                 select(PersonWeight)
@@ -528,13 +530,13 @@ class PersonRepo:
                 .limit(_RECENT_LAB_LIMIT),
             ).all(),
         )
-        progress_notes = list(
+        clinical_notes = list(
             self.session.exec(
-                select(PersonProgressNote)
-                .where(PersonProgressNote.person_id == person_id)
+                select(PersonClinicalNote)
+                .where(PersonClinicalNote.person_id == person_id)
                 .order_by(
-                    col(PersonProgressNote.note_date).desc(),
-                    col(PersonProgressNote.id).desc(),
+                    col(PersonClinicalNote.note_date).desc(),
+                    col(PersonClinicalNote.id).desc(),
                 )
                 .limit(_RECENT_NOTE_LIMIT),
             ).all(),
@@ -637,7 +639,7 @@ class PersonRepo:
         )
         misc_orders = self._recent_domain_records(PersonMiscOrder, person_id)
         nutrition_goals = self._recent_domain_records(PersonNutritionGoal, person_id)
-        return PersonAssessmentRecords(
+        return PersonClinicalRecords(
             weights=weights,
             labs=labs,
             diagnoses=diagnoses,
@@ -653,7 +655,7 @@ class PersonRepo:
             food_preferences=food_preferences,
             misc_orders=misc_orders,
             nutrition_goals=nutrition_goals,
-            progress_notes=progress_notes,
+            clinical_notes=clinical_notes,
             wounds=wounds,
             edema=edema,
             meal_intakes=meal_intakes,
@@ -686,13 +688,6 @@ class PersonRepo:
             .limit(_RECENT_DOMAIN_LIMIT)
         )
         return list(self.session.exec(statement).all())
-
-    def create_assessment(
-        self,
-        assessment: PersonAssessment,
-    ) -> PersonAssessment:
-        """Persist a generated person assessment."""
-        return self._persist(assessment)
 
     def load_transformed_documents(  # noqa: C901, PLR0912, PLR0915
         self,
@@ -1058,7 +1053,7 @@ class PersonRepo:
             return ("person_id", "name", "observed_at")
         if isinstance(record, PersonEdema):
             return ("person_id", "location", "observed_at")
-        if isinstance(record, PersonProgressNote):
+        if isinstance(record, PersonClinicalNote):
             return ("person_id", "note_date", "note_type", "author", "note_text")
         if isinstance(record, PersonWound):
             return ("person_id", "wound_number", "observed_at")

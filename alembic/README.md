@@ -12,7 +12,7 @@ alembic/
 ├── script.py.mako
 ├── README.md
 └── versions/
-    ├── <YYYYDDMM_NNNN_>.py
+    ├── <YYYYDDMM_NNNN_description>.py
     └── ...
 ```
 
@@ -89,27 +89,29 @@ Only downgrade when the migration is safely reversible.
 
 ## Existing Database
 
-If an existing database already matches the baseline represented by:
+If an existing database has separate NCP and legacy note tables represented by:
 
 ```text
-20260904_0001
+20260912_0002
 ```
 
 initialize Alembic tracking with:
 
 ```bash
-alembic stamp 20260904_0001
-```
-
-Then run:
-
-```bash
-alembic upgrade head
+alembic stamp 20260912_0002
 ```
 
 `stamp` does not execute schema changes. It only tells Alembic that the database should be considered to already be at that revision.
 
-Only stamp a database after verifying that its schema actually matches the baseline.
+Then run `alembic upgrade head` to consolidate both tables into
+`person_clinical_note`. Only stamp a database at `20260913_0003` after verifying
+that it already matches the consolidated schema.
+
+For a legacy database that still has `person_assessment` and
+`person_assessment_embeddings`, stamp `20260912_0000` and run `alembic upgrade
+head`. Revisions `0001`, `0002`, and `0003` will then apply the diet constraint,
+NCP renames, and clinical-note consolidation without recreating application
+tables.
 
 ## New Database
 
@@ -122,6 +124,9 @@ alembic upgrade head
 ```
 
 The complete database schema should be reproducible from the Alembic migration history.
+The baseline enables PostgreSQL's `vector` extension before it creates any
+pgvector columns or indexes, so the migration role must have permission to
+enable that extension.
 
 ## Required Columns and Data Backfills
 

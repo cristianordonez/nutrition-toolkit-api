@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date  # noqa: TC003
 
-from ntk.models.extracted_fact_create import ExtractedFactCreate, FactPayload
+from ntk.models.extracted_fact_create import ExtractedFactCreate, PersonFactPayload
 from ntk.models.sql.document import SourceAuthority
 from ntk.pipelines.extraction import DocumentExtractor
 
@@ -18,7 +18,7 @@ class PersonExtractor(DocumentExtractor[list[ExtractedFactCreate]]):
 
     def _build_extracted_fact(  # noqa: PLR0913
         self,
-        payload: FactPayload,
+        payload: PersonFactPayload,
         *,
         source_person_identifier: str | None = None,
         source_person_name: str | None = None,

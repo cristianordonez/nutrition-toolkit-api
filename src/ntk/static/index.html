@@ -269,12 +269,12 @@
             .lab-flag { color: var(--warning); font-weight: 800; }
             .empty-note { color: var(--muted); font-size: .8rem; padding: 20px 0; }
 
-            .assessment-panel { box-shadow: var(--shadow); }
-            .assessment-body { padding: 7px 28px 16px; }
-            .assessment-section { border-bottom: 1px solid #e8edef; padding: 24px 0; }
-            .assessment-section:last-child { border-bottom: 0; }
-            .assessment-section h3 { font-size: .96rem; margin-bottom: 11px; }
-            .assessment-section p { color: #344651; font-family: Georgia, "Times New Roman", serif; font-size: .96rem; line-height: 1.75; margin: 0; white-space: pre-wrap; }
+            .ncp-panel { box-shadow: var(--shadow); }
+            .ncp-body { padding: 7px 28px 16px; }
+            .ncp-section { border-bottom: 1px solid #e8edef; padding: 24px 0; }
+            .ncp-section:last-child { border-bottom: 0; }
+            .ncp-section h3 { font-size: .96rem; margin-bottom: 11px; }
+            .ncp-section p { color: #344651; font-family: Georgia, "Times New Roman", serif; font-size: .96rem; line-height: 1.75; margin: 0; white-space: pre-wrap; }
             .evidence-link { background: none; border: 0; color: var(--green); font-size: .72rem; font-weight: 750; margin-top: 11px; padding: 0; }
             .editor {
                 border: 1px solid #adbfba;
@@ -312,7 +312,7 @@
                 .upload-intro .lede { margin-left: auto; margin-right: auto; }
                 .result-grid { grid-template-columns: 1fr; }
                 .clinical-panel { order: 1; }
-                .assessment-panel { order: 2; }
+                .ncp-panel { order: 2; }
                 .tool-layout, .knowledge-layout { grid-template-columns: 1fr; }
             }
             @media (max-width: 620px) {
@@ -321,7 +321,7 @@
                 .shell { padding: 24px 16px; }
                 .result-header { align-items: flex-start; flex-direction: column; }
                 .result-status { align-items: flex-start; }
-                .assessment-body { padding-left: 20px; padding-right: 20px; }
+                .ncp-body { padding-left: 20px; padding-right: 20px; }
                 .panel-actions { flex-wrap: wrap; }
                 .save-state { flex-basis: 100%; }
                 .metric-grid { grid-template-columns: 1fr; }
@@ -420,7 +420,7 @@
                         <div class="avatar" id="person-initials" aria-hidden="true"></div>
                         <div><p class="eyebrow">Nutrition Care Process</p><h1 id="person-name"></h1><p class="person-meta" id="person-meta"></p></div>
                     </div>
-                    <div class="result-status"><span class="badge" id="assessment-status">NCP note complete</span><button class="button secondary" id="regenerate-button" type="button">Regenerate</button></div>
+                    <div class="result-status"><span class="badge" id="ncp-status">NCP note complete</span><button class="button secondary" id="regenerate-button" type="button">Regenerate</button></div>
                 </header>
 
                 <div class="result-grid">
@@ -428,10 +428,10 @@
                         <div class="panel-heading"><h2 id="snapshot-heading">Clinical snapshot</h2><button class="button ghost" id="all-evidence-button" type="button">View supporting data</button></div>
                         <div class="snapshot-body" id="clinical-snapshot"></div>
                     </aside>
-                    <article class="panel assessment-panel" aria-labelledby="assessment-heading">
-                        <div class="panel-heading"><h2 id="assessment-heading">Nutrition Care Process note</h2><span class="badge">AI-assisted</span></div>
-                        <div class="assessment-body" id="assessment-content"></div>
-                        <textarea class="editor" id="assessment-editor" aria-label="Edit nutrition assessment" hidden></textarea>
+                    <article class="panel ncp-panel" aria-labelledby="ncp-heading">
+                        <div class="panel-heading"><h2 id="ncp-heading">Nutrition Care Process note</h2><span class="badge">AI-assisted</span></div>
+                        <div class="ncp-body" id="ncp-content"></div>
+                        <textarea class="editor" id="ncp-editor" aria-label="Edit Nutrition Care Process note" hidden></textarea>
                         <footer class="panel-actions">
                             <span class="save-state" id="save-state" aria-live="polite"></span>
                             <button class="button secondary" id="copy-button" type="button">Copy</button>
@@ -537,9 +537,9 @@
 ↓ Clinical fact extraction in memory
 ↓ PersonDetail clinical profile assembled
 ↓ Deterministic calculations completed
-↓ AssessmentContext building
+↓ BudgetedNCPContext building
 ↓ ContextBudgeter optimization
-↓ Assessment generation</p>
+↓ NCP generation</p>
                 <div class="metric-grid" id="metric-grid"></div>
             </div>
         </dialog>
@@ -564,8 +564,8 @@
             const fileInput = $("#clinical-file");
             const dropZone = $("#drop-zone");
             const uploadError = $("#upload-error");
-            const assessmentContent = $("#assessment-content");
-            const assessmentEditor = $("#assessment-editor");
+            const ncpContent = $("#ncp-content");
+            const ncpEditor = $("#ncp-editor");
             const saveState = $("#save-state");
             const generateButton = $("#generate-button");
 
@@ -606,7 +606,7 @@
 
             const api = {
                 generateNutritionCareProcess(data) {
-                    return requestJson("/api/v1/demo/assessment", { method: "POST", body: data });
+                    return requestJson("/api/v1/demo/nutrition-care-process", { method: "POST", body: data });
                 },
                 calculateEnergyNeeds(payload) {
                     return requestJson("/api/v1/calculate/", {
@@ -873,7 +873,7 @@
                 }
             }
 
-            function splitAssessment(content) {
+            function splitNCP(content) {
                 const intervention = /\n\s*Interventions?:\s*/i.exec(content);
                 const monitoring = /\n\s*Monitoring(?:\s*&\s*Evaluation)?:\s*/i.exec(content);
                 if (!intervention && !monitoring) return [{ title: "Assessment & nutrition diagnosis", text: content }];
@@ -887,11 +887,11 @@
                 return sections.filter((section) => section.text);
             }
 
-            function renderAssessment(content) {
-                assessmentContent.replaceChildren();
-                splitAssessment(content).forEach((section) => {
+            function renderNCP(content) {
+                ncpContent.replaceChildren();
+                splitNCP(content).forEach((section) => {
                     const wrapper = document.createElement("section");
-                    wrapper.className = "assessment-section";
+                    wrapper.className = "ncp-section";
                     const heading = document.createElement("h3");
                     heading.textContent = section.title;
                     const paragraph = document.createElement("p");
@@ -902,7 +902,7 @@
                     evidence.textContent = "View supporting data";
                     evidence.addEventListener("click", openEvidence);
                     wrapper.append(heading, paragraph, evidence);
-                    assessmentContent.append(wrapper);
+                    ncpContent.append(wrapper);
                 });
             }
 
@@ -925,7 +925,7 @@
                 const list = $("#evidence-list");
                 list.replaceChildren();
                 const items = evidenceItems(state.response.detail);
-                (items.length ? items : ["No supporting clinical records were returned for this assessment."]).forEach((text) => {
+                (items.length ? items : ["No supporting clinical records were returned for this NCP."]).forEach((text) => {
                     const item = document.createElement("li");
                     item.textContent = text;
                     list.append(item);
@@ -958,7 +958,7 @@
                 addMetric("Tokens removed", number(response.context.tokens_removed, 0));
                 addMetric("Context reduction", `${number(response.context.token_reduction_percent)}%`);
                 addMetric("Document types", documentTypes.map(titleCase).join(", ") || titleCase(response.ingestion.document_type));
-                addMetric("Assessment model", response.assessment.model_name);
+                addMetric("NCP model", response.ncp.model_name);
             }
 
             function renderResult(response) {
@@ -975,14 +975,14 @@
                     present(bmi) ? `BMI ${number(bmi)}` : null,
                     person.facility_name,
                 );
-                $("#assessment-status").textContent = titleCase(response.assessment.status || "complete");
+                $("#ncp-status").textContent = titleCase(response.ncp.status || "complete");
                 renderSnapshot(detail);
-                renderAssessment(response.assessment.content);
+                renderNCP(response.ncp.content);
                 renderMetrics(response);
-                assessmentEditor.value = response.assessment.content;
-                const finalized = String(valueOf(response.assessment.status)).toLowerCase() === "finalized";
-                $("#edit-button").disabled = finalized || !response.assessment.id;
-                $("#finalize-button").disabled = finalized || !response.assessment.id;
+                ncpEditor.value = response.ncp.content;
+                const finalized = String(valueOf(response.ncp.status)).toLowerCase() === "finalized";
+                $("#edit-button").disabled = finalized || !response.ncp.id;
+                $("#finalize-button").disabled = finalized || !response.ncp.id;
                 $("#finalize-button").textContent = finalized ? "Finalized" : "Finalize";
                 $("#demo-details-button").hidden = false;
                 uploadScreen.hidden = true;
@@ -991,7 +991,7 @@
                 window.scrollTo({ top: 0, behavior: "smooth" });
             }
 
-            async function generateAssessment() {
+            async function generateNCP() {
                 if (!state.files.length) throw new Error("Choose at least one clinical report first.");
                 if (state.generating) return;
                 startProcessing();
@@ -1012,7 +1012,7 @@
                 if (state.generating) return;
                 uploadError.hidden = true;
                 try {
-                    await generateAssessment();
+                    await generateNCP();
                 } catch (error) {
                     uploadError.textContent = generationErrorMessage(error);
                     uploadError.hidden = false;
@@ -1021,40 +1021,40 @@
 
             $("#regenerate-button").addEventListener("click", async () => {
                 $("#regenerate-button").disabled = true;
-                try { await generateAssessment(); }
+                try { await generateNCP(); }
                 catch (error) { showToast(`Regeneration failed: ${generationErrorMessage(error)}`); }
                 finally { $("#regenerate-button").disabled = false; }
             });
 
             function setEditing(editing) {
                 state.editing = editing;
-                assessmentContent.hidden = editing;
-                assessmentEditor.hidden = !editing;
+                ncpContent.hidden = editing;
+                ncpEditor.hidden = !editing;
                 $("#edit-button").hidden = editing;
                 $("#copy-button").hidden = editing;
                 $("#finalize-button").hidden = editing;
                 $("#cancel-edit-button").hidden = !editing;
                 $("#save-button").hidden = !editing;
-                if (editing) { assessmentEditor.value = state.response.assessment.content; assessmentEditor.focus(); }
+                if (editing) { ncpEditor.value = state.response.ncp.content; ncpEditor.focus(); }
             }
             $("#edit-button").addEventListener("click", () => setEditing(true));
             $("#cancel-edit-button").addEventListener("click", () => setEditing(false));
             $("#save-button").addEventListener("click", async () => {
-                const assessmentId = state.response.assessment.id;
-                const content = assessmentEditor.value.trim();
-                if (!assessmentId || !content) return;
+                const ncpId = state.response.ncp.id;
+                const content = ncpEditor.value.trim();
+                if (!ncpId || !content) return;
                 $("#save-button").disabled = true;
                 saveState.textContent = "Saving…";
                 try {
-                    const response = await authorizedFetch(`/api/v1/assessments/${assessmentId}`, {
+                    const response = await authorizedFetch(`/api/v1/nutrition-care-processes/${ncpId}`, {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ content }),
                     });
                     const body = await response.json().catch(() => ({}));
                     if (!response.ok) throw new Error(apiError(body, response));
-                    state.response.assessment = { ...state.response.assessment, ...body };
-                    renderAssessment(body.content);
+                    state.response.ncp = { ...state.response.ncp, ...body };
+                    renderNCP(body.content);
                     setEditing(false);
                     saveState.textContent = "Changes saved";
                 } catch (error) { saveState.textContent = `Save failed: ${error.message}`; }
@@ -1062,38 +1062,38 @@
             });
 
             $("#finalize-button").addEventListener("click", async () => {
-                const assessmentId = state.response.assessment.id;
-                if (!assessmentId) return;
+                const ncpId = state.response.ncp.id;
+                if (!ncpId) return;
                 $("#finalize-button").disabled = true;
                 saveState.textContent = "Finalizing…";
                 try {
-                    const response = await authorizedFetch(`/api/v1/assessments/${assessmentId}/finalize`, { method: "POST" });
+                    const response = await authorizedFetch(`/api/v1/nutrition-care-processes/${ncpId}/finalize`, { method: "POST" });
                     const body = await response.json().catch(() => ({}));
                     if (!response.ok) throw new Error(apiError(body, response));
-                    state.response.assessment = { ...state.response.assessment, ...body };
-                    $("#assessment-status").textContent = titleCase(body.status || "finalized");
+                    state.response.ncp = { ...state.response.ncp, ...body };
+                    $("#ncp-status").textContent = titleCase(body.status || "finalized");
                     $("#finalize-button").textContent = "Finalized";
                     $("#edit-button").disabled = true;
-                    saveState.textContent = "Assessment finalized";
+                    saveState.textContent = "NCP finalized";
                 } catch (error) {
                     $("#finalize-button").disabled = false;
                     saveState.textContent = `Finalize failed: ${error.message}`;
                 }
             });
 
-            async function copyAssessment() {
-                const content = state.response.assessment.content;
+            async function copyNCP() {
+                const content = state.response.ncp.content;
                 if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(content);
                 else {
-                    assessmentEditor.hidden = false;
-                    assessmentEditor.value = content;
-                    assessmentEditor.select();
+                    ncpEditor.hidden = false;
+                    ncpEditor.value = content;
+                    ncpEditor.select();
                     document.execCommand("copy");
-                    assessmentEditor.hidden = true;
+                    ncpEditor.hidden = true;
                 }
-                showToast("Assessment copied");
+                showToast("NCP copied");
             }
-            $("#copy-button").addEventListener("click", () => copyAssessment().catch(() => showToast("Unable to copy assessment")));
+            $("#copy-button").addEventListener("click", () => copyNCP().catch(() => showToast("Unable to copy NCP")));
 
             function resetDemo() {
                 clearGenerationTimers();

@@ -27,7 +27,7 @@ class Settings(CustomBaseSettings):
     usda_api_key: str = Field(description="API key for USDA API")
     document_ingestion_pool_mode: PoolMode = Field(default=PoolMode.THREAD)
     document_ingestion_workers: int = Field(default=3, ge=1)
-    progress_note_extraction_concurrency: int = Field(default=8, ge=1)
+    clinical_note_extraction_concurrency: int = Field(default=8, ge=1)
 
 
 SETTINGS = Settings()

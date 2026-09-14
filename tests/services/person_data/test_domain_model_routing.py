@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from sqlmodel import Session, SQLModel, create_engine, select
 
 import ntk.models.sql  # noqa: F401
-from ntk.models.ai_extraction import AIExtractedClinicalFact
+from ntk.models.ai_extraction import AIExtractedFact
 from ntk.models.extracted_fact_create import (
     ClinicalFactPayload,
     EdemaPayload,
@@ -50,7 +50,7 @@ _AI_MODEL = "test-ai-extractor"
 
 
 def _ai_fact(payload: object) -> ExtractedFactCreate:
-    validated = AIExtractedClinicalFact.model_validate(
+    validated = AIExtractedFact.model_validate(
         {
             "payload": payload,
             "confidence": 0.9,
@@ -188,7 +188,7 @@ def test_typed_facts_route_to_domain_models_with_provenance(
             record.extracted_fact is not None for record in transformed.related_models
         )
 
-        context = PersonRepo(session).get_assessment_records(person_id)
+        context = PersonRepo(session).get_clinical_records(person_id)
         assert len(context.weights) == 1
         assert len(context.labs) == 1
         assert len(context.supplements) == 1

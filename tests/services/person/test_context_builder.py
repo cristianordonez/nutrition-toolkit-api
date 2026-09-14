@@ -26,8 +26,8 @@ from ntk.models.sql.clinical import (
     PersonWeight,
 )
 from ntk.models.sql.person import Person
-from ntk.pipelines.assessment.create.context_budgeter import ContextBudgeter
-from ntk.repositories.person_repo import PersonAssessmentRecords
+from ntk.pipelines.ncp.create.context_budgeter import ContextBudgeter
+from ntk.repositories.person_repo import PersonClinicalRecords
 from ntk.services.person.detail_builder import PersonDetailBuilder
 
 _OLDER = datetime(2026, 3, 1, tzinfo=UTC)
@@ -69,7 +69,7 @@ def test_older_clinical_state_imported_later_does_not_become_current() -> None:
 
     context = PersonDetailBuilder().build(
         Person(id=1, name="Person"),
-        PersonAssessmentRecords(diets=[historical_import, newer]),
+        PersonClinicalRecords(diets=[historical_import, newer]),
     )
 
     assert context.current_diet is newer
@@ -78,7 +78,7 @@ def test_older_clinical_state_imported_later_does_not_become_current() -> None:
 def test_equally_current_singletons_are_reported_as_a_conflict() -> None:
     context = PersonDetailBuilder().build(
         Person(id=1, name="Person"),
-        PersonAssessmentRecords(
+        PersonClinicalRecords(
             diets=[
                 _diet("Renal", _NEWER, record_id=1, created_at=_NEWER),
                 _diet("Cardiac", _NEWER, record_id=2, created_at=_NEWER),
@@ -92,7 +92,7 @@ def test_equally_current_singletons_are_reported_as_a_conflict() -> None:
 
 
 def test_active_medications_keep_distinct_active_regimens() -> None:
-    records = PersonAssessmentRecords(
+    records = PersonClinicalRecords(
         medications=[
             PersonMedication(
                 id=1,
@@ -137,7 +137,7 @@ def test_structured_dialysis_and_nutrition_goal_drive_needs_profile() -> None:
         sex="female",
         height_in=64,
     )
-    records = PersonAssessmentRecords(
+    records = PersonClinicalRecords(
         weights=[
             PersonWeight(
                 id=1,
@@ -201,12 +201,12 @@ def test_budgeter_keeps_current_state_and_bounds_history() -> None:
     ]
     context = PersonDetailBuilder().build(
         Person(id=1, name="Person"),
-        PersonAssessmentRecords(diets=diets, weights=weights),
+        PersonClinicalRecords(diets=diets, weights=weights),
     )
 
     budgeted = ContextBudgeter().budget(context)
 
-    person = budgeted.assessment_context.person
+    person = budgeted.ncp_context.person
     assert person.current_diet is not None
     assert person.current_diet.diet_type == "Diet 0"
     assert len(person.weight_history) == 12
@@ -221,7 +221,7 @@ def test_context_keeps_new_domains_separate_and_calculates_pn() -> None:
         sex="female",
         height_in=64,
     )
-    records = PersonAssessmentRecords(
+    records = PersonClinicalRecords(
         weights=[
             PersonWeight(
                 id=1,
@@ -334,7 +334,7 @@ def test_multiple_active_weight_directions_are_an_explicit_conflict() -> None:
 
     context = PersonDetailBuilder().build(
         Person(id=1, name="Person"),
-        PersonAssessmentRecords(nutrition_goals=goals),
+        PersonClinicalRecords(nutrition_goals=goals),
     )
 
     assert context.current_weight_goal is None

@@ -6,38 +6,19 @@ from hashlib import sha256
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from ntk.models.knowledge import KnowledgeChunkCreate, KnowledgeType
-from ntk.models.sql.knowledge import (
-    Knowledge,
-    KnowledgeChunk,
-    KnowledgeChunkEmbedding,
-)
+from ntk.models.sql.knowledge import Knowledge, KnowledgeChunk, KnowledgeChunkEmbedding
 from ntk.models.sql.person import (
-    AssessmentSource,
+    ExtractionStatus,
+    NutritionCareProcessSource,
+    NutritionCareProcessStatus,
+    NutritionClinicalNoteType,
     Person,
-    PersonAssessment,
-    PersonAssessmentEmbedding,
-    StatusType,
+    PersonClinicalNote,
+    PersonNutritionClinicalNoteEmbedding,
 )
-from ntk.repositories.assessment_repo import AssessmentRepo
+from ntk.repositories.clinical_note_repo import ClinicalNoteRepo
 from ntk.repositories.knowledge_repo import KnowledgeRepo
 from ntk.utils.misc import require_id
-
-
-def _assessment(
-    person: Person,
-    filename: str,
-    content: str,
-) -> PersonAssessment:
-    return PersonAssessment(
-        person_id=require_id(person.id),
-        assessment_source=AssessmentSource.IMPORTED,
-        source_filename=filename,
-        created_by="dietitian",
-        assessment_index=0,
-        assessment_date=datetime.now(UTC).date(),
-        content=content,
-        content_hash=sha256(" ".join(content.split()).encode()).hexdigest(),
-    )
 
 
 def _person(session: Session) -> Person:
@@ -47,124 +28,107 @@ def _person(session: Session) -> Person:
     return person
 
 
-def test_assessment_repo_deduplicates_content_across_sources() -> None:
+def _generated_draft(person: Person, content: str) -> PersonClinicalNote:
+    content_hash = sha256(" ".join(content.split()).encode()).hexdigest()
+    return PersonClinicalNote(
+        person_id=require_id(person.id),
+        note_date=datetime.now(UTC),
+        note_type=NutritionClinicalNoteType.NUTRITION_DIETARY.value,
+        author="generation-model",
+        note_text=content,
+        raw_text=content,
+        note_key=f"generated:{require_id(person.id)}:{content_hash}",
+        extraction_status=ExtractionStatus.NOT_APPLICABLE,
+        ncp_source=NutritionCareProcessSource.GENERATED,
+        created_by="generation-model",
+        ncp_index=0,
+        content_hash=content_hash,
+        status=NutritionCareProcessStatus.DRAFT,
+    )
+
+
+def test_clinical_note_repo_deduplicates_note_keys() -> None:
     engine = create_engine("sqlite:///:memory:")
     SQLModel.metadata.create_all(engine)
-
     with Session(engine) as session:
-        repository = AssessmentRepo(session)
+        repository = ClinicalNoteRepo(session)
         person = _person(session)
-        first = _assessment(
-            person,
-            "first-file.pdf",
-            "Nutrition assessment\nwith plan",
-        )
-        repository.ingest(
-            [first],
-            [[0.1]],
-            "embedding-model",
-        )
-        assert repository.get_by_id(require_id(first.id)) is first
-        second = _assessment(
-            person,
-            "second-file.pdf",
-            " Nutrition assessment with plan ",
-        )
-        repository.ingest(
-            [second],
-            [[0.2]],
-            "embedding-model",
-        )
-
-        assessments = session.exec(select(PersonAssessment)).all()
-        embeddings = session.exec(select(PersonAssessmentEmbedding)).all()
-
-    assert len(assessments) == 1
-    assert len(embeddings) == 1
-    assert assessments[0].assessment_source is AssessmentSource.IMPORTED
-    assert assessments[0].source_filename == "first-file.pdf"
-    assert assessments[0].created_by == "dietitian"
+        first = _generated_draft(person, "Nutrition assessment")
+        assert repository.create(first) is first
+        duplicate = _generated_draft(person, "Nutrition assessment")
+        assert repository.create(duplicate) is first
 
 
-def test_assessment_repo_finalizes_assessment() -> None:
+def test_generated_draft_is_deduplicated_by_content() -> None:
     engine = create_engine("sqlite:///:memory:")
     SQLModel.metadata.create_all(engine)
-
     with Session(engine) as session:
-        repository = AssessmentRepo(session)
-        assessment = _assessment(
-            _person(session),
-            "assessment.pdf",
-            "Nutrition assessment",
+        repository = ClinicalNoteRepo(session)
+        person = _person(session)
+        existing = repository.create_generated_draft(
+            _generated_draft(person, "Identical generated content"),
         )
-        session.add(assessment)
+        candidate = _generated_draft(person, "  Identical  generated content  ")
+        assert repository.create_generated_draft(candidate) is existing
+        assert len(session.exec(select(PersonClinicalNote)).all()) == 1
+
+
+def test_finalize_and_embed_nutrition_clinical_note() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        repository = ClinicalNoteRepo(session)
+        note = repository.create_generated_draft(
+            _generated_draft(_person(session), "Nutrition assessment"),
+        )
+        finalized = repository.finalize_ncp(require_id(note.id))
+        assert finalized is note
+        assert finalized.status is NutritionCareProcessStatus.FINALIZED
+        repository.update_ncp(
+            note,
+            embedding=[0.1],
+            embedding_type=NutritionClinicalNoteType.NUTRITION_DIETARY,
+            model_name="embedding-model",
+        )
+        embedding = session.exec(select(PersonNutritionClinicalNoteEmbedding)).one()
+        assert embedding.person_clinical_note_id == note.id
+        assert embedding.type is NutritionClinicalNoteType.NUTRITION_DIETARY
+
+
+def test_list_ncps_excludes_regular_clinical_notes() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        repository = ClinicalNoteRepo(session)
+        person = _person(session)
+        ncp = repository.create_generated_draft(_generated_draft(person, "NCP"))
+        repository.create(
+            PersonClinicalNote(
+                person_id=require_id(person.id),
+                note_date=datetime.now(UTC),
+                note_type="Nursing Note",
+                note_text="Routine note",
+                raw_text="Routine note",
+                note_key="regular-note",
+            ),
+        )
         session.commit()
-
-        result = repository.finalize(require_id(assessment.id))
-
-        assert result is assessment
-        assert result.status is StatusType.FINALIZED
-        assert result.finalized_at is not None
-
-        finalized_at = result.finalized_at
-        repeated_result = repository.finalize(require_id(assessment.id))
-        assert repeated_result is not None
-        assert repeated_result.finalized_at == finalized_at
-
-
-def test_assessment_repo_overwrites_by_source_filename() -> None:
-    engine = create_engine("sqlite:///:memory:")
-    SQLModel.metadata.create_all(engine)
-
-    with Session(engine) as session:
-        repository = AssessmentRepo(session)
-        person = _person(session)
-        source = _assessment(person, "same-file.pdf", "Original assessment")
-        repository.ingest(
-            [source],
-            [[0.1]],
-            "embedding-model",
-        )
-        replacement = _assessment(
-            person,
-            "same-file.pdf",
-            "Replacement assessment",
-        )
-        replacement.assessment_index = 1
-        replacement.created_by = "consultant"
-        repository.ingest(
-            [replacement],
-            [[0.2]],
-            "embedding-model",
-            overwrite=True,
-        )
-
-        assessments = session.exec(select(PersonAssessment)).all()
-        embeddings = session.exec(select(PersonAssessmentEmbedding)).all()
-        count = repository.count_assessments("same-file.pdf")
-
-    assert len(assessments) == 1
-    assert len(embeddings) == 1
-    assert count == 1
-    assert assessments[0].content == "Replacement assessment"
-    assert assessments[0].assessment_index == 1
-    assert assessments[0].created_by == "consultant"
+        assert repository.list_ncps() == [ncp]
+        assert len(repository.list_clinical_notes()) == 2  # noqa: PLR2004
 
 
 def test_knowledge_repo_stores_duplicate_chunks_under_separate_sources() -> None:
     engine = create_engine("sqlite:///:memory:")
     SQLModel.metadata.create_all(engine)
-
     with Session(engine) as session:
         repository = KnowledgeRepo(session)
         for file_hash in ("first-file", "second-file"):
-            knowledge_source = Knowledge(
-                filename=f"{file_hash}.pdf",
-                knowledge_type=KnowledgeType.NUTRITION_CARE_MANUAL,
-                file_hash=file_hash,
-            )
             repository.ingest(
-                knowledge_source,
+                Knowledge(
+                    filename=f"{file_hash}.pdf",
+                    knowledge_type=KnowledgeType.NUTRITION_CARE_MANUAL,
+                    file_hash=file_hash,
+                ),
                 [
                     KnowledgeChunkCreate(
                         content="Shared educational heading",
@@ -176,11 +140,9 @@ def test_knowledge_repo_stores_duplicate_chunks_under_separate_sources() -> None
                 [[0.1]],
                 "embedding-model",
             )
-
         knowledge = session.exec(select(Knowledge)).all()
         chunks = session.exec(select(KnowledgeChunk)).all()
         embeddings = session.exec(select(KnowledgeChunkEmbedding)).all()
-
     assert len(knowledge) == 2  # noqa: PLR2004
     assert len(chunks) == 2  # noqa: PLR2004
     assert len(embeddings) == 2  # noqa: PLR2004

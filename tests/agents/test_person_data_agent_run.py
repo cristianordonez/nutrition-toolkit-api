@@ -14,7 +14,6 @@ from ntk.agents.data_extraction_agent import (
     UnknownDocumentExtractionResult,
 )
 from ntk.models.ai_extraction import (
-    AIExtractedClinicalFact,
     AIExtractedFact,
     AIExtractedIdentity,
     AIUnknownDocumentFact,
@@ -23,7 +22,6 @@ from ntk.models.extracted_fact_create import (
     AppetitePayload,
     DialysisPayload,
     MealIntakePayload,
-    WeightPayload,
 )
 from ntk.models.sql.clinical import AppetiteLevel, ClinicalStatus, DialysisType
 
@@ -51,7 +49,7 @@ class FakeUnknownDocumentAgent:
 def test_run_returns_extracted_clinical_facts() -> None:
     observed_at = datetime(2026, 8, 20, tzinfo=UTC)
     facts = [
-        AIExtractedClinicalFact(
+        AIExtractedFact(
             payload=MealIntakePayload(
                 min_percent=50,
                 max_percent=75,
@@ -59,7 +57,7 @@ def test_run_returns_extracted_clinical_facts() -> None:
             ),
             confidence=0.9,
         ),
-        AIExtractedClinicalFact(
+        AIExtractedFact(
             payload=AppetitePayload(
                 appetite=AppetiteLevel.FAIR,
                 observed_at=observed_at,
@@ -108,6 +106,18 @@ def test_agent_output_schema_uses_semantic_clinical_payloads() -> None:
     assert "OralFeedingStatusPayload" in definitions
     assert "FoodPreferencePayload" in definitions
     assert "NutritionGoalPayload" in definitions
+
+
+def test_unknown_document_schema_uses_restricted_clinical_payloads() -> None:
+    definitions = UnknownDocumentExtractionResult.model_json_schema()["$defs"]
+
+    assert "WeightPayload" not in definitions
+    assert "LabPayload" not in definitions
+    assert "MedicationPayload" not in definitions
+    assert "DietPayload" not in definitions
+    assert "EnteralFeedingPayload" not in definitions
+    assert "MealIntakePayload" in definitions
+    assert "ClinicalFactPayload" in definitions
 
 
 def test_dialysis_is_returned_as_a_semantic_domain_fact() -> None:
@@ -166,9 +176,10 @@ def test_run_unknown_document_returns_identity_bound_facts() -> None:
             facility_name="Embassy Manor at Edison",
         ),
         fact=AIExtractedFact(
-            payload=WeightPayload(
-                weight_lb=138,
-                measured_at=datetime(2026, 9, 1, tzinfo=UTC),
+            payload=MealIntakePayload(
+                min_percent=75,
+                max_percent=75,
+                observed_at=datetime(2026, 9, 1, tzinfo=UTC),
             ),
             confidence=0.98,
         ),
@@ -177,7 +188,7 @@ def test_run_unknown_document_returns_identity_bound_facts() -> None:
         UnknownDocumentExtractionResult(facts=[fact]),
     )
     extraction_input = ExtractionInput(
-        text="Person Name: Patel, Sushilaben (EN140519); weight 138 lb",
+        text="Person Name: Patel, Sushilaben (EN140519); meal intake 75%",
         document_filename="unknown.pdf",
     )
 
@@ -224,7 +235,7 @@ def test_extraction_result_fact_lists_are_not_shared() -> None:
     second = ExtractedClinicalFacts()
 
     first.facts.append(
-        AIExtractedClinicalFact(
+        AIExtractedFact(
             payload=MealIntakePayload(
                 min_percent=50,
                 observed_at=datetime(2026, 9, 2, tzinfo=UTC),

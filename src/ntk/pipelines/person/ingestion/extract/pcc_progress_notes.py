@@ -38,9 +38,9 @@ from .registry import register_extractor
 if typing.TYPE_CHECKING:
     import pathlib
 
-    from ntk.models.ai_extraction import AIExtractedClinicalFact
-    from ntk.models.extracted_fact_create import FactPayload
-    from ntk.models.sql.person import PersonProgressNote
+    from ntk.models.ai_extraction import AIExtractedFact
+    from ntk.models.extracted_fact_create import PersonFactPayload
+    from ntk.models.sql.person import PersonClinicalNote
 
 
 logger = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ _NUTRITION_TERM_RE = re.compile(
     + r")(?:s|es)?(?!\w)",
     flags=re.IGNORECASE,
 )
-_ASSESSMENT_NOTE_TYPE_TERMS = (
+_NCP_NOTE_TYPE_TERMS = (
     "dietary",
     "dietitian",
     "dietician",
@@ -181,7 +181,7 @@ _ASSESSMENT_NOTE_TYPE_TERMS = (
     "skin",
     "wound",
 )
-_ASSESSMENT_CLINICAL_TERM_RE = re.compile(
+_NCP_CLINICAL_TERM_RE = re.compile(
     r"(?<!\w)(?:"
     r"weight|appetite|meal|po\s+intake|intake|diet|supplement|ensure|glucerna|"
     r"prostat|tube\s+feed|feeding|peg|npo|chew(?:ing)?|swallow(?:ing)?|dysphagia|"
@@ -191,7 +191,7 @@ _ASSESSMENT_CLINICAL_TERM_RE = re.compile(
     r")(?!\w)",
     flags=re.IGNORECASE,
 )
-_ASSESSMENT_SOCIAL_TERM_RE = re.compile(
+_NCP_SOCIAL_TERM_RE = re.compile(
     r"(?<!\w)(?:food\s+insecurity|food\s+access|meal\s+(?:access|delivery|support)|"
     r"grocer(?:y|ies)|snap|kitchen|home\s+delivered\s+meal)(?!\w)",
     flags=re.IGNORECASE,
@@ -288,7 +288,7 @@ class PreparedProgressNoteExtraction:
 
     note: ParsedProgressNote
     person_id: int | None
-    progress_note_id: int | None
+    clinical_note_id: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,7 +312,7 @@ class PccProgressNotesExtractor(PersonExtractor):
         """Initialize the persistence-free progress-note extractor."""
         super().__init__(path)
         resolved_concurrency = (
-            SETTINGS.progress_note_extraction_concurrency
+            SETTINGS.clinical_note_extraction_concurrency
             if concurrency is None
             else concurrency
         )
@@ -335,19 +335,19 @@ class PccProgressNotesExtractor(PersonExtractor):
         facts.extend(self.extract_header_facts())
         return facts
 
-    async def extract_for_assessment(self) -> list[ExtractedFactCreate]:
-        """Extract an assessment-focused, provenance-preserving fact set."""
+    async def extract_for_ncp(self) -> list[ExtractedFactCreate]:
+        """Extract an NCP-focused, provenance-preserving fact set."""
         notes = self._parse_report_notes()
-        selected_notes = self.select_assessment_notes(notes)
+        selected_notes = self.select_ncp_notes(notes)
         facts = await self._extract_note_facts(selected_notes)
         facts.extend(self._extract_administration_facts(notes))
         facts.extend(self.extract_header_facts(notes))
         return facts
 
     async def extract_for_demo(self) -> list[ExtractedFactCreate]:
-        """Extract assessment facts without requiring source identity fields."""
+        """Extract NCP facts without requiring source identity fields."""
         notes = self._parse_report_notes(require_identity=False)
-        selected_notes = self.select_assessment_notes(notes)
+        selected_notes = self.select_ncp_notes(notes)
         facts = await self._extract_note_facts(selected_notes)
         facts.extend(self._extract_administration_facts(notes))
         facts.extend(self.extract_header_facts(notes))
@@ -439,7 +439,7 @@ class PccProgressNotesExtractor(PersonExtractor):
             PreparedProgressNoteExtraction(
                 note=note,
                 person_id=None,
-                progress_note_id=None,
+                clinical_note_id=None,
             )
             for _note_key, note in self.deduplicate_notes(notes)
         ]
@@ -451,7 +451,7 @@ class PccProgressNotesExtractor(PersonExtractor):
         return facts
 
     @classmethod
-    def select_assessment_notes(
+    def select_ncp_notes(
         cls,
         notes: list[ParsedProgressNote],
     ) -> list[ParsedProgressNote]:
@@ -472,15 +472,15 @@ class PccProgressNotesExtractor(PersonExtractor):
                 selected.append(note)
                 continue
             if note_type in _ALWAYS_EXTRACT_NOTE_TYPES or any(
-                term in note_type for term in _ASSESSMENT_NOTE_TYPE_TERMS
+                term in note_type for term in _NCP_NOTE_TYPE_TERMS
             ):
                 selected.append(note)
                 continue
             if note_type.startswith("social"):
-                if _ASSESSMENT_SOCIAL_TERM_RE.search(note.note_text):
+                if _NCP_SOCIAL_TERM_RE.search(note.note_text):
                     selected.append(note)
                 continue
-            if _ASSESSMENT_CLINICAL_TERM_RE.search(note.note_text):
+            if _NCP_CLINICAL_TERM_RE.search(note.note_text):
                 selected.append(note)
         return selected
 
@@ -571,7 +571,7 @@ class PccProgressNotesExtractor(PersonExtractor):
     @staticmethod
     def _build_deterministic_fact(
         note: ParsedProgressNote,
-        payload: FactPayload,
+        payload: PersonFactPayload,
         *,
         source_record_type: str | None = None,
         source_authority: SourceAuthority = SourceAuthority.CLINICAL_DOCUMENT,
@@ -669,7 +669,7 @@ class PccProgressNotesExtractor(PersonExtractor):
                 note,
                 ai_fact,
                 person_id=prepared.person_id,
-                progress_note_id=prepared.progress_note_id,
+                clinical_note_id=prepared.clinical_note_id,
             )
             for ai_fact in extracted_clinical_facts.facts
         ]
@@ -677,24 +677,24 @@ class PccProgressNotesExtractor(PersonExtractor):
     def _build_fact_from_ai_output(
         self,
         note: ParsedProgressNote,
-        progress_note: PersonProgressNote,
-        ai_fact: AIExtractedClinicalFact,
+        progress_note: PersonClinicalNote,
+        ai_fact: AIExtractedFact,
     ) -> ExtractedFactCreate:
         """Build a fact from a progress-note model for compatibility callers."""
         return self._build_fact_create(
             note,
             ai_fact,
             person_id=progress_note.person_id,
-            progress_note_id=progress_note.id,
+            clinical_note_id=progress_note.id,
         )
 
     @staticmethod
     def _build_fact_create(
         note: ParsedProgressNote,
-        ai_fact: AIExtractedClinicalFact,
+        ai_fact: AIExtractedFact,
         *,
         person_id: int | None,
-        progress_note_id: int | None,
+        clinical_note_id: int | None,
     ) -> ExtractedFactCreate:
         """Build the transient fact returned by a session-free worker."""
         logger.debug("AI Fact: %s", ai_fact)
@@ -712,7 +712,7 @@ class PccProgressNotesExtractor(PersonExtractor):
             model_name=DATA_EXTRACTION_MODEL,
             extraction_method=ExtractionMethod.AI,
             person_id=person_id,
-            progress_note_id=progress_note_id,
+            clinical_note_id=clinical_note_id,
             source_person_identifier=note.source_person_identifier,
             source_person_name=note.source_person_name,
             facility_name=note.facility_name,

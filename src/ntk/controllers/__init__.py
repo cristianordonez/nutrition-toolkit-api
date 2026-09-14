@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 
 _COMMAND_GROUP_MODULES = (
-    "ntk.controllers.assessment.app",
+    "ntk.controllers.ncp.app",
     "ntk.controllers.calculate.app",
     "ntk.controllers.documents.app",
     "ntk.controllers.key.app",

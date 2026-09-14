@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 
 from ntk.controllers.base import BaseControllerGroup
-from ntk.controllers.persons.assessments import PersonAssessmentsController
+from ntk.controllers.persons.ncps import PersonNCPsController
 from ntk.controllers.persons.weights import PersonWeightsController
 from ntk.controllers.registry import register_command_group
 
@@ -20,7 +20,7 @@ class PersonControllerGroup(BaseControllerGroup):
     def __init__(self) -> None:
         """Initialize the person subcommands."""
         self._subcommands = [
-            PersonAssessmentsController(),
+            PersonNCPsController(),
             PersonWeightsController(),
         ]
 

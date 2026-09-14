@@ -4,7 +4,13 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, SQLModel, create_engine
 
-from ntk.models.sql.person import Person, PersonAssessment, PersonWeight
+from ntk.models.sql.person import (
+    NutritionCareProcessSource,
+    NutritionCareProcessStatus,
+    Person,
+    PersonClinicalNote,
+    PersonWeight,
+)
 from ntk.repositories.person_repo import PersonRepo
 
 
@@ -21,19 +27,31 @@ def test_person_repo_queries_assessments_and_weights_by_person_ids() -> None:
         assert second.id is not None
         session.add_all(
             [
-                PersonAssessment(
+                PersonClinicalNote(
                     person_id=first.id,
-                    content="First assessment",
+                    note_date=datetime(2026, 8, 28, tzinfo=UTC),
+                    note_type="Nutrition/Dietary",
+                    note_text="First assessment",
+                    raw_text="First assessment",
+                    note_key="first",
+                    ncp_source=NutritionCareProcessSource.GENERATED,
                     content_hash="first",
-                    assessment_date=datetime(2026, 8, 28, tzinfo=UTC).date(),
+                    ncp_index=0,
                     created_by="model",
+                    status=NutritionCareProcessStatus.DRAFT,
                 ),
-                PersonAssessment(
+                PersonClinicalNote(
                     person_id=second.id,
-                    content="Second assessment",
+                    note_date=datetime(2026, 8, 28, tzinfo=UTC),
+                    note_type="Nutrition/Dietary",
+                    note_text="Second assessment",
+                    raw_text="Second assessment",
+                    note_key="second",
+                    ncp_source=NutritionCareProcessSource.GENERATED,
                     content_hash="second",
-                    assessment_date=datetime(2026, 8, 28, tzinfo=UTC).date(),
+                    ncp_index=0,
                     created_by="model",
+                    status=NutritionCareProcessStatus.DRAFT,
                 ),
                 PersonWeight(
                     person_id=first.id,
@@ -50,8 +68,8 @@ def test_person_repo_queries_assessments_and_weights_by_person_ids() -> None:
         session.commit()
         repository = PersonRepo(session)
 
-        found_assessments = repository.get_assessments_by_person_ids([first.id])
+        found_assessments = repository.get_ncps_by_person_ids([first.id])
         found_weights = repository.get_weights_by_person_ids([first.id])
 
-    assert [item.content for item in found_assessments] == ["First assessment"]
+    assert [item.note_text for item in found_assessments] == ["First assessment"]
     assert [item.weight_lb for item in found_weights] == [150]

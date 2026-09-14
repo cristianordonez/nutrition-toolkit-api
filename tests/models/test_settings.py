@@ -24,15 +24,15 @@ def test_document_ingestion_pool_defaults() -> None:
 
     assert settings.document_ingestion_pool_mode is PoolMode.THREAD
     assert settings.document_ingestion_workers == 3  # noqa: PLR2004
-    assert settings.progress_note_extraction_concurrency == 8  # noqa: PLR2004
+    assert settings.clinical_note_extraction_concurrency == 8  # noqa: PLR2004
 
 
-def test_progress_note_extraction_concurrency_is_configurable(
+def test_clinical_note_extraction_concurrency_is_configurable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("NTK_PROGRESS_NOTE_EXTRACTION_CONCURRENCY", "5")
+    monkeypatch.setenv("NTK_CLINICAL_NOTE_EXTRACTION_CONCURRENCY", "5")
 
-    assert Settings().progress_note_extraction_concurrency == 5  # noqa: PLR2004
+    assert Settings().clinical_note_extraction_concurrency == 5  # noqa: PLR2004
 
 
 def test_settings_loads_environment_variables(

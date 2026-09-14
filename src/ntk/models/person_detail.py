@@ -16,8 +16,8 @@ from ntk.models.sql import (
     Facility,
     PersonAllergy,
     PersonAppetiteObservation,
-    PersonAssessment,
     PersonClinicalFact,
+    PersonClinicalNote,
     PersonDiagnosis,
     PersonDialysis,
     PersonDiet,
@@ -33,7 +33,6 @@ from ntk.models.sql import (
     PersonNutritionGoal,
     PersonOralFeedingStatus,
     PersonParenteralNutrition,
-    PersonProgressNote,
     PersonSupplement,
     PersonWeight,
     PersonWound,
@@ -141,7 +140,7 @@ class DerivedPersonCalculations(BaseModel):
 
 
 class PersonDetail(BaseModel):
-    """Complete person data used to prepare assessment-generation context."""
+    """Complete person data used to prepare Nutrition Care Process context."""
 
     _SUMMARY_CURRENT_FIELDS: typing.ClassVar[tuple[str, ...]] = (
         "name",
@@ -233,8 +232,7 @@ class PersonDetail(BaseModel):
     gi_observations: list[PersonGIObservation] = Field(default_factory=list)
     wounds: list[PersonWound] = Field(default_factory=list)
     clinical_facts: list[PersonClinicalFact] = Field(default_factory=list)
-    progress_notes: list[PersonProgressNote] = Field(default_factory=list)
-    assessments: list[PersonAssessment] = Field(default_factory=list)
+    clinical_notes: list[PersonClinicalNote] = Field(default_factory=list)
     extracted_facts: list[ExtractedFact] = Field(default_factory=list)
 
     conflicts: list[ClinicalConflict] = Field(default_factory=list)

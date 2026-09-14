@@ -38,7 +38,7 @@ def test_document_ingest_accepts_multiple_uploads(
             assert all(path.is_file() for path in files)
             return PersonTransformationResult(documents=[])
 
-    monkeypatch.setattr(ingest, "ProgressNoteRepo", lambda session: session)
+    monkeypatch.setattr(ingest, "ClinicalNoteRepo", lambda session: session)
     monkeypatch.setattr(ingest, "PersonRepo", lambda session: session)
     monkeypatch.setattr(ingest, "PersonIngestionPipeline", lambda **_: Service())
     controller = DocumentIngestController(session=object())  # ty: ignore[invalid-argument-type]

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .assessment import (
-    DemoAssessmentPipeline,
+from .ncp import (
+    DemoNutritionCareProcessPipeline,
     NoDemoFactsError,
 )
 
 __all__ = [
-    "DemoAssessmentPipeline",
+    "DemoNutritionCareProcessPipeline",
     "NoDemoFactsError",
 ]

@@ -21,7 +21,7 @@ def test_index_exposes_nutrition_care_process_upload_workflow() -> None:
     assert 'name="files" type="file" accept=' in index
     assert "multiple required" in index
     assert "application/pdf,text/csv,text/plain" in index
-    assert "/api/v1/demo/assessment" in index
+    assert "/api/v1/demo/nutrition-care-process" in index
     assert 'data.append("files", file)' in index
     assert 'id="ingest-form"' not in index
     assert "/api/v1/knowledge/ingest" not in index
@@ -87,7 +87,7 @@ def test_index_renders_person_detail_as_clinical_snapshot() -> None:
 def test_index_includes_assessment_evidence_and_real_actions() -> None:
     index = _index()
 
-    assert 'id="assessment-content"' in index
+    assert 'id="ncp-content"' in index
     assert "Assessment & nutrition diagnosis" in index
     assert "Monitoring & evaluation" in index
     assert 'id="evidence-dialog"' in index
@@ -95,7 +95,7 @@ def test_index_includes_assessment_evidence_and_real_actions() -> None:
     assert 'id="details-dialog"' in index
     assert "ContextBudgeter optimization" in index
     assert 'method: "PATCH"' in index
-    assert "/api/v1/assessments/${assessmentId}/finalize" in index
+    assert "/api/v1/nutrition-care-processes/${ncpId}/finalize" in index
     assert 'id="copy-button"' in index
     assert 'id="edit-button"' in index
     assert 'id="regenerate-button"' in index

@@ -6,7 +6,7 @@ import typing
 
 from ntk.models.sql.person import (
     ExtractionStatus,
-    PersonProgressNote,
+    PersonClinicalNote,
 )
 from ntk.utils.misc import require_id
 
@@ -30,8 +30,8 @@ if typing.TYPE_CHECKING:
     import pathlib
 
     from ntk.models.extracted_fact_create import ExtractedFactCreate
+    from ntk.repositories.clinical_note_repo import ClinicalNoteRepo
     from ntk.repositories.person_repo import PersonRepo
-    from ntk.repositories.progress_note_repo import ProgressNoteRepo
     from ntk.services.facility_resolver import FacilityResolver
     from ntk.services.person.person_service import PersonService
 
@@ -109,19 +109,19 @@ class PersonIngestionPipeline:
 
     def __init__(
         self,
-        progress_note_repository: ProgressNoteRepo | None = None,
+        clinical_note_repository: ClinicalNoteRepo | None = None,
         person_service: PersonService | None = None,
         facility_resolver: FacilityResolver | None = None,
     ) -> None:
         """Initialize optional persistence and embedding dependencies."""
-        self.progress_note_repository = progress_note_repository
+        self.clinical_note_repository = clinical_note_repository
         self.person_service = person_service
         self.facility_resolver = facility_resolver
         self.transformer: ExtractedFactTransformer | None = None
         self._extractor_cache: dict[pathlib.Path, PersonExtractor] = {}
-        self._processed_progress_notes: dict[
+        self._processed_clinical_notes: dict[
             pathlib.Path,
-            list[PersonProgressNote],
+            list[PersonClinicalNote],
         ] = {}
 
     @staticmethod
@@ -203,7 +203,7 @@ class PersonIngestionPipeline:
                 active_order_documents,
             )
         if transformed_documents:
-            self._mark_progress_notes_extracted(ingested_files)
+            self._mark_clinical_notes_extracted(ingested_files)
         return PersonTransformationResult(documents=transformed_documents)
 
     @staticmethod
@@ -216,18 +216,18 @@ class PersonIngestionPipeline:
             return facts
         return [fact for fact in facts if fact.payload.type != "diet"]
 
-    def _mark_progress_notes_extracted(self, files: list[pathlib.Path]) -> None:
+    def _mark_clinical_notes_extracted(self, files: list[pathlib.Path]) -> None:
         """Mark successfully processed notes after their facts are persisted."""
-        if self.progress_note_repository is None:
+        if self.clinical_note_repository is None:
             return
         processed_notes = {
             note.note_key: note
             for path in files
-            for note in self._processed_progress_notes.pop(path.resolve(), ())
+            for note in self._processed_clinical_notes.pop(path.resolve(), ())
         }
-        for progress_note in processed_notes.values():
-            self.progress_note_repository.set_extraction_status(
-                progress_note,
+        for clinical_note in processed_notes.values():
+            self.clinical_note_repository.set_extraction_status(
+                clinical_note,
                 ExtractionStatus.EXTRACTED,
             )
 
@@ -268,7 +268,7 @@ class PersonIngestionPipeline:
         logger.debug("Using %s for data extraction", extractor_name)
         if extractor_name == "PccProgressNotesExtractor":
             progress_extractor = typing.cast("PccProgressNotesExtractor", extractor)
-            facts = await self._extract_progress_notes(path, progress_extractor)
+            facts = await self._extract_clinical_notes(path, progress_extractor)
         elif extractor_name == "WoundReportExtractor":
             wound_extractor = typing.cast("WoundReportExtractor", extractor)
             facts = await wound_extractor.extract(
@@ -281,15 +281,15 @@ class PersonIngestionPipeline:
         self._validate_fact_types(extractor_name, facts)
         return facts
 
-    async def _extract_progress_notes(
+    async def _extract_clinical_notes(
         self,
         path: pathlib.Path,
         extractor: PccProgressNotesExtractor,
     ) -> list[ExtractedFactCreate]:
         """Resolve and persist notes before persistence-free fact extraction."""
-        repository = self._progress_note_repository()
+        repository = self._clinical_note_repository()
         prepared: list[PreparedProgressNoteExtraction] = []
-        note_by_key: dict[str, PersonProgressNote] = {}
+        note_by_key: dict[str, PersonClinicalNote] = {}
         selected_notes = extractor.extract_notes()
         selected_identities = {
             (note.source_person_identifier, note.source_person_name)
@@ -301,21 +301,21 @@ class PersonIngestionPipeline:
                 identity_note.source_person_name,
             )
             if identity not in selected_identities:
-                self._person_service().resolve_or_create_progress_note(identity_note)
+                self._person_service().resolve_or_create_clinical_note(identity_note)
         for note_key, note in extractor.deduplicate_notes(selected_notes):
-            progress_note = self._prepare_progress_note(note, note_key)
-            if progress_note is None:
+            clinical_note = self._prepare_clinical_note(note, note_key)
+            if clinical_note is None:
                 continue
-            note_by_key[note_key] = progress_note
+            note_by_key[note_key] = clinical_note
             prepared.append(
                 PreparedProgressNoteExtraction(
                     note=note,
-                    person_id=progress_note.person_id,
-                    progress_note_id=progress_note.id,
+                    person_id=clinical_note.person_id,
+                    clinical_note_id=clinical_note.id,
                 ),
             )
         facts = extractor.extract_header_facts()
-        successful_notes: list[PersonProgressNote] = []
+        successful_notes: list[PersonClinicalNote] = []
         for outcome in await extractor.extract_prepared(prepared):
             note_key = extractor.get_note_key(
                 source_person_identifier=outcome.prepared.note.source_person_identifier,
@@ -324,26 +324,26 @@ class PersonIngestionPipeline:
                 author=outcome.prepared.note.author,
                 note_text=outcome.prepared.note.note_text,
             )
-            progress_note = note_by_key[note_key]
+            clinical_note = note_by_key[note_key]
             if outcome.error is not None:
                 repository.set_extraction_status(
-                    progress_note,
+                    clinical_note,
                     ExtractionStatus.FAILED,
                 )
                 continue
             facts.extend(outcome.facts or ())
-            successful_notes.append(progress_note)
-        self._processed_progress_notes[path.resolve()] = successful_notes  # noqa: ASYNC240
+            successful_notes.append(clinical_note)
+        self._processed_clinical_notes[path.resolve()] = successful_notes  # noqa: ASYNC240
         return facts
 
-    def _prepare_progress_note(
+    def _prepare_clinical_note(
         self,
         note: ParsedProgressNote,
         note_key: str,
-    ) -> PersonProgressNote | None:
-        """Resolve identity and create or prepare one persisted progress note."""
-        repository = self._progress_note_repository()
-        person = self._person_service().resolve_or_create_progress_note(note)
+    ) -> PersonClinicalNote | None:
+        """Resolve identity and create or prepare one persisted clinical note."""
+        repository = self._clinical_note_repository()
+        person = self._person_service().resolve_or_create_clinical_note(note)
         existing = repository.get_by_key(note_key)
         if existing is not None:
             existing = repository.update_identity(
@@ -357,17 +357,17 @@ class PersonIngestionPipeline:
                 ExtractionStatus.SKIPPED,
             }:
                 logger.debug(
-                    "Skipping completed progress note %s with status %s",
+                    "Skipping completed clinical note %s with status %s",
                     note_key,
                     existing.extraction_status,
                 )
                 return None
             return existing
         if note.note_date is None:
-            msg = f"Progress note {note_key} does not have an effective date"
+            msg = f"Clinical note {note_key} does not have an effective date"
             raise ValueError(msg)
         return repository.create(
-            PersonProgressNote(
+            PersonClinicalNote(
                 person_id=require_id(person.id),
                 note_date=note.note_date,
                 note_type=note.note_type,
@@ -386,11 +386,11 @@ class PersonIngestionPipeline:
     def _person_repository(self) -> PersonRepo:
         return self._person_service().repository
 
-    def _progress_note_repository(self) -> ProgressNoteRepo:
-        if self.progress_note_repository is None:
-            msg = "A progress-note repository is required for note ingestion"
+    def _clinical_note_repository(self) -> ClinicalNoteRepo:
+        if self.clinical_note_repository is None:
+            msg = "A clinical-note repository is required for note ingestion"
             raise RuntimeError(msg)
-        return self.progress_note_repository
+        return self.clinical_note_repository
 
     def _person_service(self) -> PersonService:
         if self.person_service is None:

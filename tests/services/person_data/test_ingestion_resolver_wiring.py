@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 
 from ntk.models.extracted_fact_create import DietPayload, ExtractedFactCreate
-from ntk.models.sql.person import ExtractionStatus, PersonProgressNote
+from ntk.models.sql.person import ExtractionStatus, PersonClinicalNote
 from ntk.pipelines.person.ingestion.extract.pcc_progress_notes import (
     ParsedProgressNote,
     PccProgressNotesExtractor,
@@ -20,7 +20,7 @@ from ntk.pipelines.person.ingestion.pipeline import (
 if typing.TYPE_CHECKING:
     import pathlib
 
-    from ntk.repositories.progress_note_repo import ProgressNoteRepo
+    from ntk.repositories.clinical_note_repo import ClinicalNoteRepo
     from ntk.services.person.person_service import PersonService
 
 
@@ -28,7 +28,7 @@ def test_constructor_exposes_only_supported_dependencies() -> None:
     parameters = inspect.signature(PersonIngestionPipeline).parameters
 
     assert list(parameters) == [
-        "progress_note_repository",
+        "clinical_note_repository",
         "person_service",
         "facility_resolver",
     ]
@@ -62,7 +62,7 @@ def test_non_order_extractors_cannot_persist_a_current_diet(
 
 
 @pytest.mark.anyio
-async def test_progress_note_ingestion_keeps_resolution_in_pipeline(
+async def test_clinical_note_ingestion_keeps_resolution_in_pipeline(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -80,7 +80,7 @@ async def test_progress_note_ingestion_keeps_resolution_in_pipeline(
             return None
 
         @staticmethod
-        def create(progress_note: PersonProgressNote) -> PersonProgressNote:
+        def create(progress_note: PersonClinicalNote) -> PersonClinicalNote:
             progress_note.id = 11
             return progress_note
 
@@ -88,23 +88,23 @@ async def test_progress_note_ingestion_keeps_resolution_in_pipeline(
         repository = object()
 
         @staticmethod
-        def resolve_or_create_progress_note(_note: object) -> object:
+        def resolve_or_create_clinical_note(_note: object) -> object:
             return type("ResolvedPerson", (), {"id": 7})()
 
-    progress_note_repository = typing.cast("ProgressNoteRepo", Repository())
+    clinical_note_repository = typing.cast("ClinicalNoteRepo", Repository())
     person_service = typing.cast("PersonService", Resolver())
     extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
 
     async def extract_prepared(prepared: list[object]) -> list[typing.Never]:
         assert len(prepared) == 1
         assert prepared[0].person_id == 7  # noqa: PLR2004  # ty: ignore[unresolved-attribute]
-        assert prepared[0].progress_note_id == 11  # noqa: PLR2004  # ty: ignore[unresolved-attribute]
+        assert prepared[0].clinical_note_id == 11  # noqa: PLR2004  # ty: ignore[unresolved-attribute]
         return []
 
     monkeypatch.setattr(extractor, "extract_notes", lambda: [note])
     monkeypatch.setattr(extractor, "extract_prepared", extract_prepared)
     service = PersonIngestionPipeline(
-        progress_note_repository=progress_note_repository,
+        clinical_note_repository=clinical_note_repository,
         person_service=person_service,
     )
     monkeypatch.setattr(service, "_find_extractor", lambda _path: extractor)
@@ -112,7 +112,7 @@ async def test_progress_note_ingestion_keeps_resolution_in_pipeline(
 
 
 @pytest.mark.anyio
-async def test_filtered_progress_notes_still_update_header_demographics(
+async def test_filtered_clinical_notes_still_update_header_demographics(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -136,7 +136,7 @@ async def test_filtered_progress_notes_still_update_header_demographics(
         repository = Repository()
 
         @staticmethod
-        def resolve_or_create_progress_note(item: ParsedProgressNote) -> object:
+        def resolve_or_create_clinical_note(item: ParsedProgressNote) -> object:
             resolved.append(item)
             return type("ResolvedPerson", (), {"id": 7})()
 
@@ -144,7 +144,7 @@ async def test_filtered_progress_notes_still_update_header_demographics(
     extractor._last_parsed_notes = [note]  # noqa: SLF001
     monkeypatch.setattr(extractor, "extract_notes", list)
     service = PersonIngestionPipeline(
-        progress_note_repository=typing.cast("ProgressNoteRepo", object()),
+        clinical_note_repository=typing.cast("ClinicalNoteRepo", object()),
         person_service=typing.cast("PersonService", Service()),
     )
     monkeypatch.setattr(service, "_find_extractor", lambda _path: extractor)
@@ -154,13 +154,13 @@ async def test_filtered_progress_notes_still_update_header_demographics(
 
 
 @pytest.mark.anyio
-async def test_progress_note_ingestion_requires_service(
+async def test_clinical_note_ingestion_requires_service(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
     service = PersonIngestionPipeline(
-        progress_note_repository=typing.cast("ProgressNoteRepo", object()),
+        clinical_note_repository=typing.cast("ClinicalNoteRepo", object()),
     )
     note = ParsedProgressNote(
         source_person_identifier="R-7",
@@ -176,14 +176,14 @@ async def test_progress_note_ingestion_requires_service(
 
 
 @pytest.mark.anyio
-async def test_progress_note_status_changes_after_fact_persistence(
+async def test_clinical_note_status_changes_after_fact_persistence(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[str] = []
     path = tmp_path / "notes.pdf"
     path.write_bytes(b"progress notes")
-    note = PersonProgressNote(
+    note = PersonClinicalNote(
         id=1,
         person_id=7,
         note_date=datetime(2026, 8, 20, tzinfo=UTC),
@@ -206,25 +206,25 @@ async def test_progress_note_status_changes_after_fact_persistence(
     class Service:
         repository = PersonRepository()
 
-    class ProgressNoteRepository:
+    class ClinicalNoteRepository:
         @staticmethod
         def set_extraction_status(
-            progress_note: PersonProgressNote,
+            progress_note: PersonClinicalNote,
             status: ExtractionStatus,
-        ) -> PersonProgressNote:
+        ) -> PersonClinicalNote:
             assert events == ["facts persisted"]
             progress_note.extraction_status = status
             events.append("note extracted")
             return progress_note
 
     service = PersonIngestionPipeline(
-        progress_note_repository=typing.cast(
-            "ProgressNoteRepo",
-            ProgressNoteRepository(),
+        clinical_note_repository=typing.cast(
+            "ClinicalNoteRepo",
+            ClinicalNoteRepository(),
         ),
         person_service=typing.cast("PersonService", Service()),
     )
-    service._processed_progress_notes[path.resolve()] = [note]  # noqa: SLF001
+    service._processed_clinical_notes[path.resolve()] = [note]  # noqa: SLF001
 
     async def extract_report(_path: pathlib.Path) -> list[typing.Never]:
         return []

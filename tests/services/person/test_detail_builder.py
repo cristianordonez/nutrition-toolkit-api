@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from ntk.models.sql.clinical import ClinicalStatus, PersonMedication, PersonWeight
 from ntk.models.sql.person import Person
-from ntk.repositories.person_repo import PersonAssessmentRecords
+from ntk.repositories.person_repo import PersonClinicalRecords
 from ntk.services.person.detail_builder import PersonDetailBuilder
 
 
@@ -16,7 +16,7 @@ def test_weight_history_exposes_each_prior_weight_compared_to_latest() -> None:
     three_month_date = datetime(2026, 5, 4, tzinfo=UTC)
     detail = PersonDetailBuilder().build(
         Person(id=1, name="Doe, Jane", first_name="Jane", last_name="Doe"),
-        PersonAssessmentRecords(
+        PersonClinicalRecords(
             weights=[
                 PersonWeight(
                     person_id=1,
@@ -84,7 +84,7 @@ def test_same_medication_name_with_distinct_active_regimens_is_not_a_conflict() 
     observed_at = datetime(2026, 9, 9, tzinfo=UTC)
     detail = PersonDetailBuilder().build(
         Person(id=1, name="Doe, Jane", first_name="Jane", last_name="Doe"),
-        PersonAssessmentRecords(
+        PersonClinicalRecords(
             medications=[
                 PersonMedication(
                     id=1,
@@ -130,7 +130,7 @@ def test_repeated_medication_regimen_keeps_the_newest_record() -> None:
     newer = datetime(2026, 9, 9, tzinfo=UTC)
     detail = PersonDetailBuilder().build(
         Person(id=1, name="Doe, Jane", first_name="Jane", last_name="Doe"),
-        PersonAssessmentRecords(
+        PersonClinicalRecords(
             medications=[
                 PersonMedication(
                     id=1,

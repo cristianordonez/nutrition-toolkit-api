@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
 from ntk.models.sql.facility import Facility
-from ntk.models.sql.person import Person, PersonAssessment
+from ntk.models.sql.person import (
+    NutritionCareProcessSource,
+    NutritionCareProcessStatus,
+    Person,
+    PersonClinicalNote,
+)
 from ntk.pipelines.person.ingestion.extract.pcc_progress_notes import ParsedProgressNote
+from ntk.repositories.clinical_note_repo import ClinicalNoteRepo
 from ntk.repositories.facility_repo import FacilityRepo
 from ntk.repositories.person_repo import PersonRepo
 from ntk.services.facility_resolver import FacilityResolver
@@ -233,7 +239,7 @@ def test_unresolved_facility_does_not_replace_current_assignment() -> None:
         assert service.facility_resolver.resolve("Noisy report heading") is None
 
 
-def test_unresolved_progress_note_facility_does_not_block_natural_identity() -> None:
+def test_unresolved_clinical_note_facility_does_not_block_natural_identity() -> None:
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
     birth_date = date(1940, 1, 2)
@@ -253,7 +259,7 @@ def test_unresolved_progress_note_facility_does_not_block_natural_identity() -> 
             source_filename="notes.pdf",
         )
 
-        resolved = service.resolve_progress_note(note)
+        resolved = service.resolve_clinical_note(note)
 
         assert resolved is not None
         assert resolved.id == person.id
@@ -270,13 +276,19 @@ def test_get_person_detail_by_internal_id_includes_assessments() -> None:
             source_person_identifier="R-7",
             source_person_name="Doe, Jane",
         )
-        assessment = service.repository.create_assessment(
-            PersonAssessment(
+        assessment = ClinicalNoteRepo(session).save_ncp(
+            PersonClinicalNote(
                 person_id=person.id,  # ty: ignore[invalid-argument-type]
-                content="Nutrition assessment",
+                note_date=datetime(2026, 9, 7, tzinfo=UTC),
+                note_type="Nutrition/Dietary",
+                note_text="Nutrition assessment",
+                raw_text="Nutrition assessment",
+                note_key="nutrition-assessment",
+                ncp_source=NutritionCareProcessSource.IMPORTED,
                 content_hash="assessment-hash",
-                assessment_date=date(2026, 9, 7),
+                ncp_index=0,
                 created_by="dietitian",
+                status=NutritionCareProcessStatus.FINALIZED,
             ),
         )
 
@@ -284,7 +296,7 @@ def test_get_person_detail_by_internal_id_includes_assessments() -> None:
 
         assert detail.person_id == person.id
         assert detail.person_identifier == "R-7"
-        assert [item.id for item in detail.assessments] == [assessment.id]
+        assert [item.id for item in detail.clinical_notes] == [assessment.id]
         assert "Nutrition assessment" in detail.model_dump_json()
 
 

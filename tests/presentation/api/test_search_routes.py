@@ -4,15 +4,15 @@ import asyncio
 import typing
 from types import SimpleNamespace
 
-from ntk.controllers.assessment.search import (
-    AssessmentSearchOptions,
-)
 from ntk.controllers.knowledge.search import (
     KnowledgeSearchOptions,
     KnowledgeSearchResponse,
 )
+from ntk.controllers.ncp.search import (
+    NCPSearchOptions,
+)
 from ntk.models.rag import RagSearchMatch
-from ntk.presentation.api.routers import assessments, knowledge
+from ntk.presentation.api.routers import knowledge, nutrition_care_processes
 
 if typing.TYPE_CHECKING:
     import pytest
@@ -28,16 +28,16 @@ def test_search_routes_use_matching_application_layers(
         similarity=0.9,
     )
 
-    class AssessmentRepository:
+    class ClinicalNoteRepository:
         def __init__(self, session: object) -> None:
             assert session == "session"
 
-    class AssessmentService:
-        def __init__(self, repository: AssessmentRepository) -> None:
-            assert isinstance(repository, AssessmentRepository)
+    class NutritionCareProcessService:
+        def __init__(self, repository: ClinicalNoteRepository) -> None:
+            assert isinstance(repository, ClinicalNoteRepository)
 
         @staticmethod
-        async def search_assessments_async(
+        async def search_ncps_async(
             text: str,
             top_k: int,
         ) -> list[RagSearchMatch]:
@@ -55,11 +55,15 @@ def test_search_routes_use_matching_application_layers(
             return SimpleNamespace(result=KnowledgeSearchResponse(matches=[match]))
 
     monkeypatch.setattr(
-        assessments,
+        nutrition_care_processes,
         "EmbeddingRepo",
-        AssessmentRepository,
+        ClinicalNoteRepository,
     )
-    monkeypatch.setattr(assessments, "EmbeddingService", AssessmentService)
+    monkeypatch.setattr(
+        nutrition_care_processes,
+        "EmbeddingService",
+        NutritionCareProcessService,
+    )
     monkeypatch.setattr(
         knowledge,
         "KnowledgeVectorSearchController",
@@ -67,8 +71,8 @@ def test_search_routes_use_matching_application_layers(
     )
 
     assert asyncio.run(
-        assessments.search_assessments(
-            AssessmentSearchOptions(text="weight loss"),
+        nutrition_care_processes.search_ncps(
+            NCPSearchOptions(text="weight loss"),
             "session",  # ty: ignore[invalid-argument-type]
         ),
     ) == [match]

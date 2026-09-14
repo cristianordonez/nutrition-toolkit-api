@@ -44,10 +44,10 @@ def test_demo_route_maps_invalid_transient_inputs(
             assert len(options.files) == expected_file_count  # ty: ignore[unresolved-attribute]
             raise exception
 
-    monkeypatch.setattr(demo, "DemoAssessmentController", Controller)
+    monkeypatch.setattr(demo, "DemoNCPController", Controller)
     with pytest.raises(demo.HTTPException) as error:
         asyncio.run(
-            demo.generate_demo_assessment(
+            demo.generate_demo_ncp(
                 typing.cast("list[UploadFile]", [Upload(), Upload()]),
                 "session",  # ty: ignore[invalid-argument-type]
             ),
@@ -71,10 +71,10 @@ def test_demo_route_returns_combined_controller_result(
             assert len(options.files) == expected_file_count  # ty: ignore[unresolved-attribute]
             return SimpleNamespace(result=expected)
 
-    monkeypatch.setattr(demo, "DemoAssessmentController", Controller)
+    monkeypatch.setattr(demo, "DemoNCPController", Controller)
 
     result = asyncio.run(
-        demo.generate_demo_assessment(
+        demo.generate_demo_ncp(
             typing.cast("list[UploadFile]", [Upload(), Upload()]),
             "session",  # ty: ignore[invalid-argument-type]
         ),
@@ -99,11 +99,11 @@ def test_demo_route_maps_ai_connection_errors_to_service_unavailable(
         async def run(_options: object) -> object:
             raise exception
 
-    monkeypatch.setattr(demo, "DemoAssessmentController", lambda _session: Controller())
+    monkeypatch.setattr(demo, "DemoNCPController", lambda _session: Controller())
 
     with pytest.raises(demo.HTTPException) as error:
         asyncio.run(
-            demo.generate_demo_assessment(
+            demo.generate_demo_ncp(
                 typing.cast("list[UploadFile]", [Upload()]),
                 "session",  # ty: ignore[invalid-argument-type]
             ),
@@ -116,4 +116,4 @@ def test_demo_route_maps_ai_connection_errors_to_service_unavailable(
 def test_demo_router_exposes_assessment_endpoint() -> None:
     paths = {route.path for route in demo.router.routes if isinstance(route, APIRoute)}
 
-    assert "/demo/assessment" in paths
+    assert "/demo/nutrition-care-process" in paths

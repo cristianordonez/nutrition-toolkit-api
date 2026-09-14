@@ -93,20 +93,29 @@ alembic upgrade head
 alembic downgrade -1
 ```
 
-For an existing database that already matches the baseline schema:
+For an existing database that still has separate NCP and legacy note tables
+but is not tracked by Alembic:
 
 ```bash
-alembic stamp 0077d9eed5dc
-alembic upgrade head
+alembic stamp 20260912_0002
 ```
 
 `alembic stamp` records the revision without executing the migration.
+Only stamp after verifying that the existing schema matches that revision. An
+existing legacy database with `person_assessment` tables should instead be
+stamped at `20260912_0000` and upgraded normally.
+
+Only a database already verified to match the consolidated clinical-note
+schema may be stamped at `20260913_0003`.
 
 For a new empty database:
 
 ```bash
 alembic upgrade head
 ```
+
+The baseline creates the PostgreSQL `vector` extension before creating vector
+columns. The migration role must therefore be allowed to enable that extension.
 
 ### Rules
 

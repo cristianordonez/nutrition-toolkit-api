@@ -12,17 +12,17 @@ from .knowledge_search_tools import (
 
 
 @dataclass(frozen=True)
-class AssessmentToolDependencies(
+class NCPToolDependencies(
     CalculatorToolDependencies,
     KnowledgeSearchToolDependencies,
 ):
-    """Runtime dependencies shared by every assessment-agent toolset."""
+    """Runtime dependencies shared by every NCP-agent toolset."""
 
 
 __all__ = [
     "CALCULATOR_TOOLSET",
     "KNOWLEDGE_SEARCH_TOOLSET",
-    "AssessmentToolDependencies",
     "CalculatorToolDependencies",
     "KnowledgeSearchToolDependencies",
+    "NCPToolDependencies",
 ]
