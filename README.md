@@ -2,6 +2,31 @@
 
 FastAPI interface for the nutrition toolkit application with CLI tool support.
 
+## Architecture
+
+This repository is a [uv workspace][uv-workspace] (a monorepo of packages sharing one
+lockfile and one virtual environment) rather than a single installable package:
+
+- The root `pyproject.toml` is a **virtual workspace root** — it has no `[project]`
+  table of its own. It only declares the workspace members (`tool.uv.workspace`) and
+  holds configuration shared across every package in the repo: dev `dependency-groups`,
+  and the `tool.ruff`, `tool.ty`, `tool.pytest`, `tool.coverage`, and `tool.codespell`
+  settings.
+- [`packages/ntk-core`](packages/ntk-core) is the shared domain, service, and
+  persistence library — the actual `ntk` Python package (`packages/ntk-core/src/ntk`).
+  It has its own `pyproject.toml`, dependencies, and the `ntk` / `ntk-api` console
+  scripts described below.
+- `apps/` will hold deployable applications that depend on `ntk-core` (a FastAPI
+  service under `apps/api`, a desktop app under `apps/desktop`). These directories are
+  placeholders today; once an app gets its own `pyproject.toml`, add it to the
+  workspace `members` list in the root `pyproject.toml` so it shares the same lockfile
+  and environment.
+
+Because all members resolve into a single `uv.lock`, `uv sync` and `uv run` from the
+repository root install and run against every package at once — see below for
+package-scoped variants of these commands. See [uv workspaces][uv-workspace] for
+further details.
+
 ## Development
 
 - System python is available at /usr/bin/python3
@@ -25,22 +50,16 @@ uv python install <version>
 uv python list
 ```
 
-- Install package locally
-
-```bash
-uv pip install -e .
-```
-
-- Make sure to include optional dependencies to start fastAPI server:
-
-```bash
-uv pip install -e ".[api]"
-```
-
-- Update uv.lock
+- Install the workspace (all packages under `packages/` and `apps/`) locally
 
 ```bash
 uv sync
+```
+
+- Make sure to include optional dependencies to start the FastAPI server:
+
+```bash
+uv sync --extra api
 ```
 
 - Run application
@@ -49,10 +68,11 @@ uv sync
 uv run ntk
 ```
 
-- To add packages to repository, use following command from the root of the repository:
+- To add a dependency to a specific workspace package (e.g. `ntk-core`), run from the
+  root of the repository:
 
 ```bash
-uv add pydantic
+uv add --package ntk-core pydantic
 ```
 
 - Use docker compose to start postgresql and redis containers:
@@ -182,6 +202,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ## References
 
+- [uv workspaces][uv-workspace]
 - [Customizaition][customization]
 - [MCP Server][mcp-server]
 - [Documentation with Readthedocs][readthedocs]
@@ -192,6 +213,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 - [Sphinx][sphinx-rtd]
 - [Logfire][logfire]
 
+[uv-workspace]: https://docs.astral.sh/uv/concepts/projects/workspaces/
 [customization]: https://code.visualstudio.com/docs/copilot/concepts/customization
 [mcp-server]: https://modelcontextprotocol.io/extensions/apps/build#manual-setup
 [readthedocs]: https://app.readthedocs.org/projects/nutrition-toolkit-api/

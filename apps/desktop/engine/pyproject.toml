@@ -1,0 +1,47 @@
+[build-system]
+requires = [
+    "hatchling >= 1.26",
+    "hatch-vcs==0.3.0"
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "engine"
+description = "Desktop engine: on-device document extraction and local persistence"
+dynamic = [ "version" ]
+authors = [
+    {name = "Cristian Ordonez", email = "cristianordonezrd@gmail.com"},
+]
+requires-python = ">= 3.11"
+dependencies = [
+    "ntk-core",
+    "pyyaml>=6.0.3",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.11.0",
+    "pydantic-ai>=2.32.1",
+    "pydantic-ai-slim[openai]>=2.32.1",
+    "openai>=3.3.0",
+    "sqlmodel>=0.0.39",
+    "tiktoken>=0.14.0",
+    "pymupdf>=1.28.2",
+    "httpx>=0.28",
+    "logfire>=4.41.0",
+]
+
+[project.scripts]
+engine = "engine.presentation.cli.app:main"
+
+[tool.uv.sources]
+ntk-core = { workspace = true }
+
+[tool.hatch]
+version.source = "vcs"
+version.raw-options = { root = "../../..", search_parent_directories = true }
+build.hooks.vcs.version-file = "src/engine/_version.py"
+build.dev-mode-dirs = [
+  "src",
+]
+build.targets.sdist.include = [
+    "src",
+]
+build.targets.wheel.packages = [ "src/engine" ]

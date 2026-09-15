@@ -1,1 +1,0 @@
-"""Assessment pipeline tests."""

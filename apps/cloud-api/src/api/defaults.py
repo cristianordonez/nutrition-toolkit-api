@@ -1,0 +1,17 @@
+from __future__ import annotations
+
+ADMIN_PERMISSION = "admin"
+NCP_READ_PERMISSION = "nutrition-care-processes:read"
+NCP_WRITE_PERMISSION = "nutrition-care-processes:write"
+CALCULATE_READ_PERMISSION = "calculate:read"
+KNOWLEDGE_READ_PERMISSION = "knowledge:read"
+KNOWLEDGE_WRITE_PERMISSION = "knowledge:write"
+
+DEFAULT_PERMISSIONS = [
+    ADMIN_PERMISSION,
+    NCP_READ_PERMISSION,
+    NCP_WRITE_PERMISSION,
+    CALCULATE_READ_PERMISSION,
+    KNOWLEDGE_READ_PERMISSION,
+    KNOWLEDGE_WRITE_PERMISSION,
+]

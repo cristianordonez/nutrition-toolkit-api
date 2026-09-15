@@ -1,0 +1,55 @@
+[build-system]
+requires = [
+    "hatchling >= 1.26",
+    "hatch-vcs==0.3.0"
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "api"
+description = "Cloud API: Nutrition Care Process generation via OpenAI + pydantic-ai"
+dynamic = [ "version" ]
+authors = [
+    {name = "Cristian Ordonez", email = "cristianordonezrd@gmail.com"},
+]
+requires-python = ">= 3.11"
+dependencies = [
+    "ntk-core",
+    "pyyaml>=6.0.3",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.11.0",
+    "pydantic-ai>=2.32.1",
+    "pydantic-ai-slim[openai]>=2.32.1",
+    "sentence-transformers>=6.0.0",
+    "openai>=3.3.0",
+    "sqlmodel>=0.0.39",
+    "pgvector>=0.5.0",
+    "psycopg>=3.3.4",
+    "tiktoken>=0.14.0",
+    "pymupdf>=1.28.2",
+    "logfire[system-metrics]>=4.41.0",
+    "fastapi>=0.139.0",
+    "python-multipart>=0.0.22",
+    "uvicorn>=0.51.0",
+    "redis>=8.1.0",
+    "logfire[fastapi]>=4.41.0",
+]
+
+[project.scripts]
+api = "api.presentation.cli.app:main"
+api-server = "api.presentation.api.main:start"
+
+[tool.uv.sources]
+ntk-core = { workspace = true }
+
+[tool.hatch]
+version.source = "vcs"
+version.raw-options = { root = "../..", search_parent_directories = true }
+build.hooks.vcs.version-file = "src/api/_version.py"
+build.dev-mode-dirs = [
+  "src",
+]
+build.targets.sdist.include = [
+    "src",
+]
+build.targets.wheel.packages = [ "src/api" ]
