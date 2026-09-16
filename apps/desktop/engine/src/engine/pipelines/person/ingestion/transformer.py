@@ -47,8 +47,8 @@ if typing.TYPE_CHECKING:
     from sqlmodel import SQLModel
 
     from engine.models.extracted_fact_create import ExtractedFactCreate
-    from ntk.services.facility_resolver import FacilityResolver
-    from ntk.services.person.person_service import PersonService
+    from engine.services.facility_resolver import FacilityResolver
+    from engine.services.person.person_service import PersonService
 logger = logging.getLogger(__name__)
 
 PersonFactModel: typing.TypeAlias = (

@@ -1,6 +1,7 @@
 # Nutrition Toolkit API
 
-FastAPI interface for the nutrition toolkit application with CLI tool support.
+A monorepo split into a cloud API and an on-device desktop engine for
+generating Nutrition Care Process (NCP) notes.
 
 ## Architecture
 
@@ -12,20 +13,43 @@ lockfile and one virtual environment) rather than a single installable package:
   holds configuration shared across every package in the repo: dev `dependency-groups`,
   and the `tool.ruff`, `tool.ty`, `tool.pytest`, `tool.coverage`, and `tool.codespell`
   settings.
-- [`packages/ntk-core`](packages/ntk-core) is the shared domain, service, and
-  persistence library — the actual `ntk` Python package (`packages/ntk-core/src/ntk`).
-  It has its own `pyproject.toml`, dependencies, and the `ntk` / `ntk-api` console
-  scripts described below.
-- `apps/` will hold deployable applications that depend on `ntk-core` (a FastAPI
-  service under `apps/api`, a desktop app under `apps/desktop`). These directories are
-  placeholders today; once an app gets its own `pyproject.toml`, add it to the
-  workspace `members` list in the root `pyproject.toml` so it shares the same lockfile
-  and environment.
+- [`packages/ntk-core`](packages/ntk-core) is a shared, pure-Pydantic library (the
+  `ntk` Python package) — table-less schemas, calculators, and generic infra used by
+  both apps below. It has no console scripts and is never run on its own.
+- [`apps/cloud-api`](apps/cloud-api) is the cloud service (the `api` package) — it
+  generates NCP notes via OpenAI + pydantic-ai and owns Postgres/pgvector.
+- [`apps/desktop`](apps/desktop) is the desktop app. Its Python backend,
+  [`apps/desktop/engine`](apps/desktop/engine) (the `engine` package), runs on the
+  user's device: it extracts structured clinical facts from uploaded documents and
+  owns all person/clinical data locally in SQLite. `apps/desktop/src` /
+  `apps/desktop/src-tauri` hold the (not yet wired up) Tauri frontend.
 
 Because all members resolve into a single `uv.lock`, `uv sync` and `uv run` from the
 repository root install and run against every package at once — see below for
 package-scoped variants of these commands. See [uv workspaces][uv-workspace] for
 further details.
+
+## Running the apps
+
+Each package's own README has full setup/configuration details and every available
+command; this is the quick-reference version, runnable from the repository root.
+
+| Package | README | Run |
+| --- | --- | --- |
+| `apps/cloud-api` (`api`) | [apps/cloud-api/README.md](apps/cloud-api/README.md) | `uv run --package api api --help` (CLI) · `uv run --package api api-server` (server) |
+| `apps/desktop/engine` (`engine`) | [apps/desktop/README.md](apps/desktop/README.md) | `uv run --package engine engine --help` (CLI) |
+| `packages/ntk-core` (`ntk`) | [packages/ntk-core/README.md](packages/ntk-core/README.md) | shared library — nothing to run, see its README for testing/linting |
+
+```bash
+# cloud-api: start the FastAPI server (add --dev for autoreload)
+uv run --package api api-server
+
+# cloud-api: CLI controller groups (ncp, calc, key, knowledge)
+uv run --package api api --help
+
+# desktop engine: CLI controller groups (document, persons, ncp, tubefeed, demo)
+uv run --package engine engine --help
+```
 
 ## Development
 
@@ -56,17 +80,9 @@ uv python list
 uv sync
 ```
 
-- Make sure to include optional dependencies to start the FastAPI server:
-
-```bash
-uv sync --extra api
-```
-
-- Run application
-
-```bash
-uv run ntk
-```
+- Run an app's CLI or server with `uv run --package <name> <command>` from the
+  repository root, or `cd` into the app and drop `--package <name>`. See
+  [Running the apps](#running-the-apps) above.
 
 - To add a dependency to a specific workspace package (e.g. `ntk-core`), run from the
   root of the repository:
@@ -75,77 +91,34 @@ uv run ntk
 uv add --package ntk-core pydantic
 ```
 
-- Use docker compose to start postgresql and redis containers:
+- Use docker compose to start postgresql and redis containers. `docker compose`
+  reads its `.env` from the same directory as `docker-compose.yml` (the repository
+  root), so copy the root `sample.env` there first:
 
 ```bash
+cp sample.env .env   # then fill in the values
 docker compose up -d
 ```
 
 ## Database Migrations
 
-This project uses Alembic to manage PostgreSQL schema migrations.
-
-SQLModel defines the current database schema, while Alembic records how the schema changes over time.
-
-### Workflow
-
-After changing a persisted SQLModel model:
+Alembic manages PostgreSQL schema migrations for `apps/cloud-api` — the only
+package with a shared, persisted database (Postgres/pgvector). It is scoped there,
+not at the repository root: `apps/desktop/engine` persists locally in SQLite with
+no Alembic setup, and `packages/ntk-core` has no database at all.
 
 ```bash
-alembic revision --autogenerate -m "describe the schema change"
+cd apps/cloud-api
+uv run alembic revision --autogenerate -m "describe the schema change"   # after changing a SQLModel table
+uv run alembic upgrade head                                              # apply pending migrations
+uv run alembic current                                                   # check the current revision
+uv run alembic downgrade -1                                              # roll back one migration
 ```
 
-Always review the generated migration before applying it.
-
-Then run:
-
-```bash
-alembic upgrade head
-```
-
-Useful commands:
-
-```bash
-alembic current
-alembic history
-alembic heads
-alembic upgrade head
-alembic downgrade -1
-```
-
-For an existing database that still has separate NCP and legacy note tables
-but is not tracked by Alembic:
-
-```bash
-alembic stamp 20260912_0002
-```
-
-`alembic stamp` records the revision without executing the migration.
-Only stamp after verifying that the existing schema matches that revision. An
-existing legacy database with `person_assessment` tables should instead be
-stamped at `20260912_0000` and upgraded normally.
-
-Only a database already verified to match the consolidated clinical-note
-schema may be stamped at `20260913_0003`.
-
-For a new empty database:
-
-```bash
-alembic upgrade head
-```
-
-The baseline creates the PostgreSQL `vector` extension before creating vector
-columns. The migration role must therefore be allowed to enable that extension.
-
-### Rules
-
-- Any SQLModel change that alters the persisted schema must include an Alembic migration.
-- Always review autogenerated migrations.
-- Do not use `SQLModel.metadata.create_all()` as a replacement for migrations in deployed environments.
-- Do not manually change a deployed database schema without a corresponding migration.
-- Database credentials must come from configuration or environment variables.
-
-See [`alembic/README.md`](alembic/README.md) for migration conventions and additional details.
+See [`apps/cloud-api/alembic/README.md`](apps/cloud-api/alembic/README.md) for
+full conventions (migration rules, destructive-change handling, deployment
+workflow) and what to do with a pre-split database that still has `person`/
+clinical tables.
 
 ## Pre-Commit
 
@@ -175,12 +148,33 @@ uv tool install tox --with tox-uv
 pre-commit run <hook-id>
 ```
 
-## Deployment
-
-- Use the ntk-api command to run uvicorn on FastAPI app
+- Each package's test suite must run in its own `pytest` invocation (see the
+  `tool.pytest` comment in this file's `pyproject.toml` for why — their
+  command-group registries are process-global and can't share a process):
 
 ```bash
-uv run ntk-api
+uv run pytest packages/ntk-core/tests
+uv run pytest apps/cloud-api/tests
+uv run pytest apps/desktop/engine/tests
+```
+
+- Lint and type-check the whole workspace directly (outside of tox/pre-commit).
+  `ty` lives in its own `type` dependency group (kept separate from `dev` — see
+  [Known Issues](#known-issues)), so pass `--group type` to reach it:
+
+```bash
+uv run ruff check .
+uv run ruff format .
+uv run --group type ty check
+```
+
+## Deployment
+
+- Use the `api-server` command to run uvicorn on the cloud-api FastAPI app (see
+  [`apps/cloud-api/README.md`](apps/cloud-api/README.md) for details):
+
+```bash
+uv run --package api api-server
 ```
 
 - containerize the REST API using Docker:
@@ -190,7 +184,10 @@ docker build -t ntk-api-image .
 docker run -d --env database_host=host.docker.internal --add-host=host.docker.internal:host-gateway -p 3000:3000 --name ntk-api ntk-api-image
 ```
 
-- Install the pgvector extension on PostgreSQL database if not installed with the following command:
+- `apps/cloud-api`'s initial Alembic migration already enables the pgvector
+  extension (`CREATE EXTENSION IF NOT EXISTS vector`) as part of `alembic upgrade
+  head`, provided the migration role can create extensions. If it can't, an admin
+  needs to run this once manually before migrating:
 
 ```PostgreSQL
 CREATE EXTENSION IF NOT EXISTS vector;

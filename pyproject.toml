@@ -88,7 +88,9 @@ src.include = [
     "packages/ntk-core/src",
     "apps/cloud-api/src",
     "apps/desktop/engine/src",
-    "tests",
+    "packages/ntk-core/tests",
+    "apps/cloud-api/tests",
+    "apps/desktop/engine/tests",
 ]
 
 [tool.codespell]
@@ -101,12 +103,13 @@ ignore-words-list = "abl,abd,gir,practioner,selectin,tge"
 # `uv run pytest apps/cloud-api/tests`) and run one package's suite per
 # pytest process. cloud-api's and engine's command-group registries are
 # process-global (ntk.controllers.registry.COMMAND_REGISTRY), so their two
-# suites can never share a process. packages/ntk-core/tests is import-safe
-# with either app on its own, but combining it with an app's suite in one
-# process has been observed to deadlock ntk-core's multiprocessing
-# ("process" mode) test after the app's heavier native-library imports
-# (pydantic-ai/sentence-transformers/logfire) load before the fork -- keep
-# every package's tests in their own `pytest` invocation.
+# suites can never share a process -- importing both raises a real
+# `ValueError` at collection time. Separately (and unrelated to that),
+# packages/ntk-core/tests/test_parallel.py's "process" mode test spawns a
+# real multiprocessing.Pool and has been observed to hang unpredictably in
+# this environment even completely on its own -- `tox -e tests` deselects it
+# (`-k "not process"`) for automated runs; run it manually only when you
+# specifically need to exercise that code path.
 ini_options.addopts = "--import-mode=importlib"
 ini_options.filterwarnings = [
     "ignore:unclosed database in <sqlite3.Connection object at:ResourceWarning",

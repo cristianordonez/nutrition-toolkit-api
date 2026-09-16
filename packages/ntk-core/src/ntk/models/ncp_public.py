@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class NutritionCareProcessPublic(BaseModel):
     """One Nutrition Care Process record as returned over HTTP."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     person_identifier: str

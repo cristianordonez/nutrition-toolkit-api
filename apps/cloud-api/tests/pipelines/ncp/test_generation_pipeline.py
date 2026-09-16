@@ -7,13 +7,15 @@ from datetime import date
 import pytest
 
 from api.agents.ncp_agent import NCP_MODEL
+from api.models.rag import RagSearchMatch
 from api.models.sql.ncp import (
     NutritionCareProcess,
     NutritionCareProcessSource,
     NutritionCareProcessStatus,
+    NutritionClinicalNoteType,
 )
-from api.models.rag import RagSearchMatch
 from api.pipelines.ncp.create import pipeline as generation_pipeline
+from api.pipelines.ncp.create.pipeline import FinalizedNCPError
 from ntk.models.derived_calculations import (
     AnthropometricCalculations,
     DerivedPersonCalculations,
@@ -187,3 +189,212 @@ def test_sync_ncps_is_deferred() -> None:
 
     with pytest.raises(NotImplementedError, match="deferred"):
         asyncio.run(pipeline.sync_ncps())
+
+
+def _ncp(
+    *,
+    status: NutritionCareProcessStatus = NutritionCareProcessStatus.DRAFT,
+) -> NutritionCareProcess:
+    return NutritionCareProcess(
+        id=1,
+        person_identifier="R1",
+        note_text="Original",
+        content_hash="old-hash",
+        created_by="model",
+        status=status,
+    )
+
+
+def test_finalize_creates_an_embedding_for_the_finalized_ncp() -> None:
+    ncp = _ncp(status=NutritionCareProcessStatus.FINALIZED)
+
+    class Repository:
+        updated: typing.ClassVar[list[NutritionCareProcess]] = []
+
+        @staticmethod
+        def finalize_ncp(
+            ncp_id: int,
+            person_identifier: str,
+        ) -> NutritionCareProcess | None:
+            assert person_identifier == "R1"
+            return ncp if ncp_id == ncp.id else None
+
+        @staticmethod
+        def get_embedding(_ncp_id: int) -> None:
+            return None
+
+        @classmethod
+        def update_ncp(
+            cls,
+            value: NutritionCareProcess,
+            *,
+            embedding: list[float],
+            embedding_type: NutritionClinicalNoteType,
+            model_name: str,
+        ) -> NutritionCareProcess:
+            assert embedding == [0.1]
+            assert embedding_type is NutritionClinicalNoteType.NUTRITION_DIETARY
+            assert model_name == "embedding-model"
+            cls.updated.append(value)
+            return value
+
+    class Embeddings:
+        embedding_model = "embedding-model"
+
+        @staticmethod
+        async def get_embedding_async(content: str) -> list[float]:
+            assert content == ncp.note_text
+            return [0.1]
+
+    result = asyncio.run(
+        generation_pipeline.NutritionCareProcessPipeline(
+            Repository(),  # ty: ignore[invalid-argument-type]
+            embedding_service=Embeddings(),  # ty: ignore[invalid-argument-type]
+        ).finalize(1, "R1"),
+    )
+
+    assert result is ncp
+    assert Repository.updated == [ncp]
+
+
+class _UpdateRepository:
+    def __init__(self, ncp: NutritionCareProcess | None) -> None:
+        self.ncp = ncp
+        self.updated: list[
+            tuple[
+                NutritionCareProcess,
+                list[float] | None,
+                NutritionClinicalNoteType | None,
+                str | None,
+            ]
+        ] = []
+
+    def get_ncp(
+        self,
+        _ncp_id: int,
+        _person_identifier: str,
+    ) -> NutritionCareProcess | None:
+        return self.ncp
+
+    def update_ncp(
+        self,
+        ncp: NutritionCareProcess,
+        *,
+        embedding: list[float] | None,
+        embedding_type: NutritionClinicalNoteType | None,
+        model_name: str | None,
+    ) -> NutritionCareProcess:
+        self.updated.append((ncp, embedding, embedding_type, model_name))
+        return ncp
+
+
+def test_update_changes_fields_and_refreshes_embedding() -> None:
+    ncp = _ncp()
+    repository = _UpdateRepository(ncp)
+
+    class Embeddings:
+        embedding_model = "embedding-model"
+
+        @staticmethod
+        async def get_embedding_async(text: str) -> list[float]:
+            assert text == "Updated   assessment"
+            return [0.1, 0.2]
+
+    result = asyncio.run(
+        generation_pipeline.NutritionCareProcessPipeline(
+            repository,  # ty: ignore[invalid-argument-type]
+            embedding_service=Embeddings(),  # ty: ignore[invalid-argument-type]
+        ).update(
+            1,
+            "R1",
+            note_text="  Updated   assessment  ",
+            created_by="  dietitian  ",
+            status=NutritionCareProcessStatus.FINALIZED,
+        ),
+    )
+
+    assert result is ncp
+    assert ncp.note_text == "Updated   assessment"
+    assert ncp.created_by == "dietitian"
+    assert ncp.status is NutritionCareProcessStatus.FINALIZED
+    assert ncp.finalized_at is not None
+    assert repository.updated == [
+        (
+            ncp,
+            [0.1, 0.2],
+            NutritionClinicalNoteType.NUTRITION_DIETARY,
+            "embedding-model",
+        ),
+    ]
+
+
+def test_update_handles_missing_draft_and_invalid_values() -> None:
+    missing = generation_pipeline.NutritionCareProcessPipeline(
+        _UpdateRepository(None),  # ty: ignore[invalid-argument-type]
+    ).update(999, "R1")
+    assert asyncio.run(missing) is None
+
+    ncp = _ncp()
+    repository = _UpdateRepository(ncp)
+
+    with pytest.raises(ValueError, match="content cannot be empty"):
+        asyncio.run(
+            generation_pipeline.NutritionCareProcessPipeline(
+                repository,  # ty: ignore[invalid-argument-type]
+            ).update(1, "R1", note_text="  "),
+        )
+    with pytest.raises(ValueError, match="creator cannot be empty"):
+        asyncio.run(
+            generation_pipeline.NutritionCareProcessPipeline(
+                repository,  # ty: ignore[invalid-argument-type]
+            ).update(1, "R1", created_by="  "),
+        )
+
+
+def test_editing_finalized_ncp_fails_without_mutating_it() -> None:
+    ncp = _ncp(status=NutritionCareProcessStatus.FINALIZED)
+    original_content = ncp.note_text
+    original_hash = ncp.content_hash
+    repository = _UpdateRepository(ncp)
+
+    with pytest.raises(FinalizedNCPError, match="finalized and cannot be edited"):
+        asyncio.run(
+            generation_pipeline.NutritionCareProcessPipeline(
+                repository,  # ty: ignore[invalid-argument-type]
+            ).update(1, "R1", note_text="Replacement content"),
+        )
+
+    assert ncp.note_text == original_content
+    assert ncp.content_hash == original_hash
+    assert ncp.status is NutritionCareProcessStatus.FINALIZED
+    assert repository.updated == []
+
+
+def test_finalized_ncp_cannot_transition_back_to_draft() -> None:
+    ncp = _ncp(status=NutritionCareProcessStatus.FINALIZED)
+    repository = _UpdateRepository(ncp)
+
+    with pytest.raises(FinalizedNCPError, match="finalized and cannot be edited"):
+        asyncio.run(
+            generation_pipeline.NutritionCareProcessPipeline(
+                repository,  # ty: ignore[invalid-argument-type]
+            ).update(1, "R1", status=NutritionCareProcessStatus.DRAFT),
+        )
+
+    assert ncp.status is NutritionCareProcessStatus.FINALIZED
+    assert repository.updated == []
+
+
+def test_updating_draft_content_does_not_create_embedding() -> None:
+    ncp = _ncp()
+    repository = _UpdateRepository(ncp)
+
+    result = asyncio.run(
+        generation_pipeline.NutritionCareProcessPipeline(
+            repository,  # ty: ignore[invalid-argument-type]
+        ).update(1, "R1", note_text="Updated draft"),
+    )
+
+    assert result is ncp
+    assert ncp.status is NutritionCareProcessStatus.DRAFT
+    assert repository.updated == [(ncp, None, None, None)]

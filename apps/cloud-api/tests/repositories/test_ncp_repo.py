@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 
+import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from api.models.sql.ncp import (
@@ -47,13 +48,8 @@ def test_create_generated_draft_rejects_non_draft_ncps() -> None:
         ncp = _generated_draft("Finalized content")
         ncp.status = NutritionCareProcessStatus.FINALIZED
 
-        try:
+        with pytest.raises(ValueError, match="draft regeneration"):
             repository.create_generated_draft(ncp)
-        except ValueError as error:
-            assert "draft regeneration" in str(error)
-        else:
-            message = "expected ValueError"
-            raise AssertionError(message)
 
 
 def test_finalize_and_embed_ncp() -> None:
@@ -61,7 +57,9 @@ def test_finalize_and_embed_ncp() -> None:
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         repository = NCPRepo(session)
-        ncp = repository.create_generated_draft(_generated_draft("Nutrition assessment"))
+        ncp = repository.create_generated_draft(
+            _generated_draft("Nutrition assessment"),
+        )
         finalized = repository.finalize_ncp(ncp.id, "R1")
         assert finalized is ncp
         assert finalized.status is NutritionCareProcessStatus.FINALIZED
@@ -81,7 +79,9 @@ def test_finalize_ncp_is_scoped_to_the_owning_person() -> None:
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         repository = NCPRepo(session)
-        ncp = repository.create_generated_draft(_generated_draft("Nutrition assessment"))
+        ncp = repository.create_generated_draft(
+            _generated_draft("Nutrition assessment"),
+        )
 
         assert repository.finalize_ncp(ncp.id, "someone-else") is None
 

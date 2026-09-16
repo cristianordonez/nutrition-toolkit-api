@@ -38,9 +38,9 @@ from .registry import register_extractor
 if typing.TYPE_CHECKING:
     import pathlib
 
+    from engine.models.ai_extraction import AIExtractedFact
     from engine.models.extracted_fact_create import PersonFactPayload
     from engine.models.sql.person import PersonClinicalNote
-    from ntk.models.ai_extraction import AIExtractedFact
 
 
 logger = logging.getLogger(__name__)

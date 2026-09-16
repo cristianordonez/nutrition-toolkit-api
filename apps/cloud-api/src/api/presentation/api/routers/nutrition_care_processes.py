@@ -26,7 +26,6 @@ from api.defaults import (
     NCP_WRITE_PERMISSION,
 )
 from api.models.rag import RagSearchMatch
-from api.models.sql.ncp import NutritionCareProcess
 from api.pipelines.ncp import FinalizedNCPError, NutritionCareProcessPipeline
 from api.presentation.api.middleware import rate_limit, require_any_permission
 from api.repositories.embedding_repo import EmbeddingRepo
@@ -34,6 +33,10 @@ from api.repositories.ncp_repo import NCPRepo
 from api.services.embedding_service import EmbeddingService
 from api.services.ncp_service import NutritionCareProcessService
 from ntk.models.ncp_context import NCPGenerationRequest  # noqa: TC001
+from ntk.models.ncp_public import NutritionCareProcessPublic
+
+if typing.TYPE_CHECKING:
+    from api.models.sql.ncp import NutritionCareProcess
 
 router = APIRouter()
 
@@ -51,7 +54,7 @@ def _require_ncp(
 
 @router.get(
     "/nutrition-care-processes",
-    response_model=list[NutritionCareProcess],
+    response_model=list[NutritionCareProcessPublic],
     dependencies=[
         Depends(
             require_any_permission(
@@ -64,14 +67,15 @@ def _require_ncp(
 async def list_ncps(
     person_identifier: str,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> list[NutritionCareProcess]:
+) -> list[NutritionCareProcessPublic]:
     """Return all Nutrition Care Processes for one person."""
-    return NutritionCareProcessService(NCPRepo(session)).list_ncps(person_identifier)
+    ncps = NutritionCareProcessService(NCPRepo(session)).list_ncps(person_identifier)
+    return [NutritionCareProcessPublic.model_validate(ncp) for ncp in ncps]
 
 
 @router.get(
     "/nutrition-care-processes/{ncp_id}",
-    response_model=NutritionCareProcess,
+    response_model=NutritionCareProcessPublic,
     dependencies=[
         Depends(
             require_any_permission(
@@ -85,7 +89,7 @@ async def get_ncp(
     ncp_id: int,
     person_identifier: str,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> NutritionCareProcess:
+) -> NutritionCareProcessPublic:
     """Return one Nutrition Care Process by ID, scoped to its person."""
     try:
         ncp = _require_ncp(
@@ -100,12 +104,12 @@ async def get_ncp(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
         ) from error
-    return ncp
+    return NutritionCareProcessPublic.model_validate(ncp)
 
 
 @router.patch(
     "/nutrition-care-processes/{ncp_id}",
-    response_model=NutritionCareProcess,
+    response_model=NutritionCareProcessPublic,
     dependencies=[
         Depends(
             require_any_permission(
@@ -120,7 +124,7 @@ async def update_ncp(
     person_identifier: str,
     request: NCPUpdateRequest,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> NutritionCareProcess:
+) -> NutritionCareProcessPublic:
     """Update editable fields on one Nutrition Care Process."""
     try:
         ncp = _require_ncp(
@@ -148,12 +152,12 @@ async def update_ncp(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
         ) from error
-    return ncp
+    return NutritionCareProcessPublic.model_validate(ncp)
 
 
 @router.post(
     "/nutrition-care-processes/{ncp_id}/finalize",
-    response_model=NutritionCareProcess,
+    response_model=NutritionCareProcessPublic,
     dependencies=[
         Depends(
             require_any_permission(
@@ -167,7 +171,7 @@ async def finalize_ncp(
     ncp_id: int,
     person_identifier: str,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> NutritionCareProcess:
+) -> NutritionCareProcessPublic:
     """Mark one Nutrition Care Process as finalized."""
     try:
         ncp = _require_ncp(
@@ -181,7 +185,7 @@ async def finalize_ncp(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
         ) from error
-    return ncp
+    return NutritionCareProcessPublic.model_validate(ncp)
 
 
 @router.post(
@@ -214,7 +218,7 @@ async def sync_ncps(
 
 @router.post(
     "/nutrition-care-processes/generate",
-    response_model=NutritionCareProcess,
+    response_model=NutritionCareProcessPublic,
     dependencies=[
         Depends(
             require_any_permission(
@@ -227,7 +231,7 @@ async def sync_ncps(
 async def generate_ncp(
     request: NCPGenerationRequest,
     session: typing.Annotated[Session, Depends(get_session)],
-) -> NutritionCareProcess:
+) -> NutritionCareProcessPublic:
     """Generate and persist one Nutrition Care Process from a device-built context.
 
     The desktop engine assembles ``request`` entirely from data stored
@@ -235,7 +239,7 @@ async def generate_ncp(
     records, only the already-budgeted context and the generated result.
     """
     try:
-        return await NutritionCareProcessPipeline(
+        ncp = await NutritionCareProcessPipeline(
             NCPRepo(session),
             embedding_repository=EmbeddingRepo(session),
         ).generate(request)
@@ -244,6 +248,7 @@ async def generate_ncp(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=str(error),
         ) from error
+    return NutritionCareProcessPublic.model_validate(ncp)
 
 
 @router.post(

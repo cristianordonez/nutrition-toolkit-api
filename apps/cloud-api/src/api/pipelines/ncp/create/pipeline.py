@@ -19,10 +19,10 @@ from api.services.embedding_service import EmbeddingService
 from ntk.utils.tokens import truncate_to_tokens
 
 if typing.TYPE_CHECKING:
+    from api.models.rag import RagSearchMatch
     from api.repositories.embedding_repo import EmbeddingRepo
     from api.repositories.ncp_repo import NCPRepo
     from ntk.models.ncp_context import NCPGenerationRequest
-    from ntk.models.rag import RagSearchMatch
 
 
 _NCP_MATCH_LIMIT = 5

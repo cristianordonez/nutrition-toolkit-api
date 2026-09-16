@@ -15,7 +15,7 @@ if typing.TYPE_CHECKING:
     import pathlib
 
     from api.models.sql.knowledge import Knowledge
-    from ntk.repositories.knowledge_repo import KnowledgeRepo
+    from api.repositories.knowledge_repo import KnowledgeRepo
 
     from .extractors.base import KnowledgeExtractor
 

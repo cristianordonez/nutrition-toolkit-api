@@ -20,7 +20,7 @@ from .base import PersonExtractor
 if typing.TYPE_CHECKING:
     import pathlib
 
-    from ntk.models.ai_extraction import AIUnknownDocumentFact
+    from engine.models.ai_extraction import AIUnknownDocumentFact
 
 
 _SUPPORTED_SUFFIXES = {".pdf"}
