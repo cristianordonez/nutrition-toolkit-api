@@ -8,7 +8,7 @@ else in this module (prompt, agent wiring, output schema) can stay as-is.
 from __future__ import annotations
 
 import pathlib
-from datetime import datetime  # noqa: TC003
+from datetime import date, datetime  # noqa: TC003
 
 import logfire
 from pydantic import BaseModel, Field
@@ -38,6 +38,8 @@ class ExtractionInput(BaseModel):
     text: str
     document_filename: str | None = None
     note_date: datetime | None = None
+    known_person_name: str | None = None
+    known_date_of_birth: date | None = None
 
 
 class ExtractedClinicalFacts(BaseModel):

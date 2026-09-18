@@ -165,6 +165,8 @@ def test_run_serializes_all_extraction_input_metadata() -> None:
         "text": extraction_input.text,
         "document_filename": "progress-notes.pdf",
         "note_date": note_date.isoformat().replace("+00:00", "Z"),
+        "known_person_name": None,
+        "known_date_of_birth": None,
     }
 
 

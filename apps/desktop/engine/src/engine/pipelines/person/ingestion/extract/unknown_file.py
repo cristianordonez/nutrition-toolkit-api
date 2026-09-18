@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import re
 import typing
+from datetime import UTC, datetime, time
 
 import pymupdf
 
@@ -19,6 +23,7 @@ from .base import PersonExtractor
 
 if typing.TYPE_CHECKING:
     import pathlib
+    from datetime import date
 
     from engine.models.ai_extraction import AIUnknownDocumentFact
 
@@ -26,6 +31,19 @@ if typing.TYPE_CHECKING:
 _SUPPORTED_SUFFIXES = {".pdf"}
 _UNKNOWN_DOCUMENT_CHUNK_TOKENS = 600
 _MAX_UNKNOWN_FILE_SIZE_BYTES = 10 * 1024 * 1024
+
+# Matches common EHR date-of-record labels so an otherwise-undated chunk can
+# still receive a best-guess `note_date` for the extraction agent to use as
+# `observed_at`. The first match on a page wins.
+_NOTE_DATE_PATTERN = re.compile(
+    r"(?:date of service|filed|result date|service date|visit date|"
+    r"date/time of service|admission date/?time)\s*:?\s*"
+    r"(\d{1,2}/\d{1,2}/\d{2,4})(?:\s+(\d{1,2}:\d{2}))?",
+    re.IGNORECASE,
+)
+_NOTE_DATE_FORMATS = ("%m/%d/%Y", "%m/%d/%y")
+
+logger = logging.getLogger(__name__)
 
 
 class UnknownFileTooLargeError(ValueError):
@@ -61,10 +79,27 @@ class UnknownFileExtractor(PersonExtractor):
         self._validate_file_type()
         return True
 
-    async def extract(self) -> list[ExtractedFactCreate]:
-        """Parse unstructured text using an extraction agent."""
+    async def extract(
+        self,
+        *,
+        person_id: int | None = None,
+        known_person_name: str | None = None,
+        known_date_of_birth: date | None = None,
+    ) -> list[ExtractedFactCreate]:
+        """Parse unstructured text using an extraction agent.
+
+        `person_id`, `known_person_name`, and `known_date_of_birth` are supplied
+        by a caller that already knows which resident this document belongs to
+        (for example, a person-scoped upload). They resolve identity ambiguity
+        that the document text alone cannot: `known_person_name`/
+        `known_date_of_birth` help the agent decide which passages of a
+        multi-person document belong to that resident, and `person_id`, when
+        given, is stamped directly onto every resulting fact so downstream
+        persistence skips name/DOB matching entirely.
+        """
         facts: list[ExtractedFactCreate] = []
         for source_page, page_text in self._get_document_pages():
+            note_date = self._detect_note_date(page_text)
             for chunk in sliding_window(
                 page_text,
                 chunk_size=_UNKNOWN_DOCUMENT_CHUNK_TOKENS,
@@ -72,14 +107,32 @@ class UnknownFileExtractor(PersonExtractor):
             ):
                 if not chunk.strip():
                     continue
-                extracted_facts = await self._run_data_extraction_agent(
-                    ExtractionInput(
-                        text=chunk,
-                        document_filename=self.file.name,
-                    ),
-                )
+                try:
+                    extracted_facts = await self._run_data_extraction_agent(
+                        ExtractionInput(
+                            text=chunk,
+                            document_filename=self.file.name,
+                            note_date=note_date,
+                            known_person_name=known_person_name,
+                            known_date_of_birth=known_date_of_birth,
+                        ),
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # isolate one chunk's failure
+                    logger.exception(
+                        "Unknown-document AI extraction failed for %s page %s; "
+                        "skipping this chunk",
+                        self.file.name,
+                        source_page,
+                    )
+                    continue
                 facts.extend(
-                    self._build_extracted_fact_create(fact, source_page)
+                    self._build_extracted_fact_create(
+                        fact,
+                        source_page,
+                        person_id=person_id,
+                    )
                     for fact in extracted_facts
                 )
         return facts
@@ -115,6 +168,8 @@ class UnknownFileExtractor(PersonExtractor):
         self,
         extracted: AIUnknownDocumentFact,
         source_page: int | None,
+        *,
+        person_id: int | None = None,
     ) -> ExtractedFactCreate:
         """Convert an AI fact while preserving its unresolved identity clues."""
         identity = extracted.identity
@@ -126,10 +181,41 @@ class UnknownFileExtractor(PersonExtractor):
             extraction_method=ExtractionMethod.AI,
             source_person_identifier=identity.source_person_identifier,
             source_person_name=identity.source_person_name,
+            date_of_birth=identity.date_of_birth,
             facility_name=identity.facility_name,
             facility_identifier=identity.facility_identifier,
             source_page=source_page,
+            person_id=person_id,
         )
+
+    @staticmethod
+    def _detect_note_date(text: str) -> datetime | None:
+        """Return a best-guess document date from a common EHR date label.
+
+        Used as the extraction agent's `note_date` fallback so a chunk that
+        never states its own date can still receive an `observed_at` value.
+        """
+        match = _NOTE_DATE_PATTERN.search(text)
+        if match is None:
+            return None
+        date_text, time_text = match.group(1), match.group(2)
+        parsed_date = None
+        for date_format in _NOTE_DATE_FORMATS:
+            try:
+                parsed_date = datetime.strptime(date_text, date_format).date()  # noqa: DTZ007
+            except ValueError:
+                continue
+            else:
+                break
+        if parsed_date is None:
+            return None
+        parsed_time = time.min
+        if time_text:
+            try:
+                parsed_time = datetime.strptime(time_text, "%H:%M").time()  # noqa: DTZ007
+            except ValueError:
+                parsed_time = time.min
+        return datetime.combine(parsed_date, parsed_time, tzinfo=UTC)
 
     def _get_document_contents(self) -> str:
         """Return all readable text, retained for callers needing plain text."""

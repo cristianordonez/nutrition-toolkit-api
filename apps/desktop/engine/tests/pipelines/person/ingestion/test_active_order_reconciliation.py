@@ -401,7 +401,10 @@ def test_parser_failure_before_reconciliation_leaves_repository_untouched(
         person_service=typing.cast("PersonService", Service(repository)),
     )
 
-    async def extract(path: pathlib.Path) -> list[ExtractedFactCreate]:
+    async def extract(
+        path: pathlib.Path,
+        **_kwargs: object,
+    ) -> list[ExtractedFactCreate]:
         if path == paths[1]:
             msg = "parser failed"
             raise ValueError(msg)

@@ -14,10 +14,11 @@ Rules:
 - Use `clinical_fact` only for an observation or event without a dedicated domain, such as feeding tolerance, supplement refusal, hospitalization, family concern, or another nutrition-relevant event. Use a concise snake_case `observation_type`.
 - Always preserve an explicitly documented resident death or pronouncement as a `clinical_fact` event with `observation_type="resident_death"`, including equivalent documentation such as postmortem/postmortal care or funeral-home arrangements. This critical event remains relevant even when the note contains no nutrition terminology. Do not infer death from symptoms or unresponsiveness alone.
 - For facts related to food/fluid intake, edema, or wounds, always use their dedicated structured tables (intake, edema, wound) rather than clinical_fact. Do not use those structured tables for any other fact types.
+- `intake` and `edema` facts require a valid `observed_at` date; that field cannot be left empty. Extract an `intake` or `edema` fact only when note_date or the source text supplies a usable date for it. If no date is available for that specific observation, do not extract it as `intake`/`edema` at all (a `clinical_fact` is still wrong for these domains, so simply omit the observation) rather than emitting one with a missing, null, or invented date.
 - Do not extract routine negative template findings, denials of standard symptoms, or the absence of standard services (such as "no dialysis", "no nausea or vomiting", or "no change in appetite") unless they represent a significant clinical change or the resolution of a previously active condition.
 - Preserve dates and timestamps when explicitly available.
 - If only a date is known, do not invent a time.
-- When note_date is provided with clinical-note text, use it as observed_at for facts documented by that note unless the text explicitly provides a different date.
+- When note_date is provided with clinical-note text, use it as observed_at for facts documented by that note unless the text explicitly provides a different date. For an unknown/unstructured document, note_date is the best available document or section date (e.g. a filed date, date of service, or result date found near this text); apply the same fallback rule so every extracted fact receives an observed_at value whenever note_date or an explicit in-text date is available. For fact types where observed_at is optional, leave it unset when neither note_date nor the source text supplies any usable date. For `intake` and `edema`, where observed_at is required, do not extract the fact at all in that case (see above).
 - `observed_at` is when the source says the fact was documented or known; `effective_at` is when an order/state explicitly took effect; `discontinued_at` is when it explicitly ended. Never copy an ingestion timestamp into these fields.
 - Use `active` only when the source clearly establishes current state, `inactive` only when it explicitly ended, `historical` for clearly prior use/state, and `unknown` when currentness is unsupported. A narrative mention alone does not establish `active`.
 - Unknown or historical documents must not turn medications, diets, enteral feeding, parenteral nutrition, supplements, dialysis, fluid plans, oral-feeding status, food preferences, or nutrition goals into active state without explicit current-language support. Do not mark an old allergy inactive merely because the source is old.
@@ -51,11 +52,12 @@ Semantic examples:
 
 Identification:
 
-- For unknown documents, extract source_person_name, facility_name, source_person_identifier, and facility_identifier when they are explicitly present.
+- For unknown documents, extract source_person_name, date_of_birth, facility_name, source_person_identifier, and facility_identifier when they are explicitly present in the text near the fact. Always populate these identity clues from what the source document itself states, never from known_person_name/known_date_of_birth.
 - source_person_identifier is the external chart identifier printed by the source; it is not the person database ID.
 - facility_identifier is an external facility identifier printed by the source; do not derive it from the facility name.
 - Never invent the database unique ID.
 - Do not guess which person a fact belongs to.
+- When known_person_name and/or known_date_of_birth are supplied, the document may name several people (family members, other contacts, roommates, other patients on a shared page). Use the known name/DOB only to decide whether a given passage documents the known resident before extracting a fact from it; extract a fact only when the passage's own subject is that resident or the passage is unattributed narrative clearly continuing that resident's record (e.g. an unlabeled clinical-note body under a header naming the resident). Skip passages that explicitly document a different named person (e.g. a contact, family member, or another patient). Do not use known_person_name/known_date_of_birth to overwrite or invent a different identity found explicitly in the text.
 
 Confidence:
 

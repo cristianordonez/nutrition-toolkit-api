@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date  # noqa: TC003
+
 from pydantic import BaseModel, Field
 
 from engine.models.extracted_fact_create import AIExtractedFactPayload  # noqa: TC001
@@ -10,6 +12,7 @@ class AIExtractedIdentity(BaseModel):
 
     source_person_name: str | None = None
     source_person_identifier: str | None = None
+    date_of_birth: date | None = None
     facility_name: str | None = None
     facility_identifier: str | None = None
 

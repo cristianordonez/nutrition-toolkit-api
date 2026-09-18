@@ -28,6 +28,7 @@ from .transformer import (
 
 if typing.TYPE_CHECKING:
     import pathlib
+    from datetime import date
 
     from engine.models.extracted_fact_create import ExtractedFactCreate
     from engine.repositories.clinical_note_repo import ClinicalNoteRepo
@@ -143,8 +144,18 @@ class PersonIngestionPipeline:
     async def ingest(
         self,
         files: list[pathlib.Path],
+        *,
+        person_id: int | None = None,
+        source_person_name: str | None = None,
+        date_of_birth: date | None = None,
     ) -> PersonTransformationResult:
-        """Extract and transform every person document."""
+        """Extract and transform every person document.
+
+        `person_id`, `source_person_name`, and `date_of_birth` pin an unknown
+        (non-deterministically-recognized) document to an already-identified
+        resident, such as a person-scoped upload; they are ignored by
+        extractors that resolve identity from structured source data.
+        """
         transformed_documents: list[TransformedDocument] = []
         active_order_documents: list[TransformedDocument] = []
         incremental_documents: list[TransformedDocument] = []
@@ -160,7 +171,12 @@ class PersonIngestionPipeline:
                 continue
             request_checksums.add(checksum)
             extractor = self._find_extractor(path)
-            extracted_facts = await self._extract_report(path)
+            extracted_facts = await self._extract_report(
+                path,
+                person_id=person_id,
+                source_person_name=source_person_name,
+                date_of_birth=date_of_birth,
+            )
             extracted_facts = self._filter_source_owned_facts(
                 extractor,
                 extracted_facts,
@@ -261,6 +277,9 @@ class PersonIngestionPipeline:
         path: pathlib.Path,
         *,
         source_person_identifier: str | None = None,
+        person_id: int | None = None,
+        source_person_name: str | None = None,
+        date_of_birth: date | None = None,
     ) -> list[ExtractedFactCreate]:
         """Extract normalized facts with a recognized person extractor."""
         extractor = self._find_extractor(path)
@@ -275,7 +294,12 @@ class PersonIngestionPipeline:
                 source_person_identifier=source_person_identifier,
             )
         elif extractor_name == "UnknownFileExtractor":
-            facts = await extractor.extract()
+            unknown_extractor = typing.cast("UnknownFileExtractor", extractor)
+            facts = await unknown_extractor.extract(
+                person_id=person_id,
+                known_person_name=source_person_name,
+                known_date_of_birth=date_of_birth,
+            )
         else:
             facts = await extractor.extract()
         self._validate_fact_types(extractor_name, facts)

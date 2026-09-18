@@ -31,6 +31,7 @@ from ntk.utils.parallel import ParallelPoolHandler
 if typing.TYPE_CHECKING:
     import pathlib
     from collections.abc import Sequence
+    from datetime import date
 
     from sqlmodel import Session
 
@@ -55,6 +56,10 @@ class DocumentIngestOptions(BaseModel):
     """Documents supplied to the ingestion workflow."""
 
     files: list[typing.Any]
+    # Pins an unknown (non-deterministically-recognized) document to an
+    # already-identified resident, e.g. a person-scoped upload where the
+    # document alone may not unambiguously identify who it belongs to.
+    person_id: int | None = None
 
 
 class DocumentIngestController(BaseController):
@@ -89,19 +94,39 @@ class DocumentIngestController(BaseController):
                     for path in uploads.paths
                 }.values(),
             )
-            if self.session is not None or len(paths) == 1:
+            if (
+                self.session is not None
+                or len(paths) == 1
+                or options.person_id is not None
+            ):
                 with controller_session(self.session) as session:
                     facility_resolver = FacilityResolver(FacilityRepo(session))
                     person_service = PersonService(
                         PersonRepo(session),
                         facility_resolver,
                     )
+                    known_person_name: str | None = None
+                    known_date_of_birth: date | None = None
+                    if options.person_id is not None:
+                        person = person_service.repository.get_by_id(
+                            options.person_id,
+                        )
+                        if person is None:
+                            msg = f"Person {options.person_id} was not found"
+                            raise LookupError(msg)
+                        known_person_name = person.name
+                        known_date_of_birth = person.date_of_birth
                     service = PersonIngestionPipeline(
                         clinical_note_repository=ClinicalNoteRepo(session),
                         person_service=person_service,
                         facility_resolver=facility_resolver,
                     )
-                    result = await service.ingest(files=paths)
+                    result = await service.ingest(
+                        files=paths,
+                        person_id=options.person_id,
+                        source_person_name=known_person_name,
+                        date_of_birth=known_date_of_birth,
+                    )
             else:
                 handler = ParallelPoolHandler(
                     mode=SETTINGS.document_ingestion_pool_mode,

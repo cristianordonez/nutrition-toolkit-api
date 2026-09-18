@@ -226,7 +226,10 @@ async def test_clinical_note_status_changes_after_fact_persistence(
     )
     service._processed_clinical_notes[path.resolve()] = [note]  # noqa: SLF001
 
-    async def extract_report(_path: pathlib.Path) -> list[typing.Never]:
+    async def extract_report(
+        _path: pathlib.Path,
+        **_kwargs: object,
+    ) -> list[typing.Never]:
         return []
 
     monkeypatch.setattr(service, "_extract_report", extract_report)
@@ -263,7 +266,10 @@ async def test_existing_document_is_skipped_before_extraction(
         person_service=typing.cast("PersonService", Service()),
     )
 
-    async def extract_report(_path: pathlib.Path) -> list[typing.Never]:
+    async def extract_report(
+        _path: pathlib.Path,
+        **_kwargs: object,
+    ) -> list[typing.Never]:
         message = "existing documents must not be extracted"
         raise AssertionError(message)
 
@@ -302,7 +308,10 @@ async def test_duplicate_content_is_extracted_once_per_request(
         person_service=typing.cast("PersonService", Service()),
     )
 
-    async def extract_report(path: pathlib.Path) -> list[typing.Never]:
+    async def extract_report(
+        path: pathlib.Path,
+        **_kwargs: object,
+    ) -> list[typing.Never]:
         extraction_calls.append(path)
         return []
 
@@ -325,8 +334,16 @@ async def test_unknown_document_ingestion_keeps_extractor_persistence_free(
     path.write_bytes(b"unknown")
     extractor = UnknownFileExtractor(path)
 
-    async def extract() -> list[typing.Never]:
+    async def extract(
+        *,
+        person_id: int | None = None,
+        known_person_name: str | None = None,
+        known_date_of_birth: object | None = None,
+    ) -> list[typing.Never]:
         assert not hasattr(extractor, "person_service")
+        assert person_id is None
+        assert known_person_name is None
+        assert known_date_of_birth is None
         return []
 
     monkeypatch.setattr(extractor, "extract", extract)
