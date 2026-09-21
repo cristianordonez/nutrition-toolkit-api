@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import typing
 
 import pytest
@@ -9,8 +10,14 @@ from engine.controllers.documents import ingest
 from engine.controllers.documents.ingest import (
     DocumentIngestController,
     DocumentIngestOptions,
+    DocumentIngestResult,
 )
-from engine.pipelines.person.ingestion.transformer import PersonTransformationResult
+from engine.models.sql.document import Document
+from engine.models.sql.extracted_fact import ExtractedFact
+from engine.pipelines.person.ingestion.transformer import (
+    PersonTransformationResult,
+    TransformedDocument,
+)
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -60,7 +67,7 @@ def test_document_ingest_accepts_multiple_uploads(
         "document-2.txt",
     ]
     assert output.controller == "ingest"
-    assert output.result.documents == []
+    assert output.result.documents == 0
     assert all(not path.exists() for path in observed_paths)
 
 
@@ -104,7 +111,7 @@ def test_document_ingest_uses_configured_parallel_pool(
             ingest.SETTINGS.document_ingestion_workers,
         ),
     ]
-    assert output.result.documents == []
+    assert output.result.documents == 0
 
 
 def test_document_ingest_with_person_id_forwards_known_identity(
@@ -145,10 +152,40 @@ def test_document_ingest_with_person_id_forwards_known_identity(
         ),
     )
 
-    assert output.result.documents == []
+    assert output.result.documents == 0
     assert observed_kwargs["person_id"] == 7  # noqa: PLR2004
     assert observed_kwargs["source_person_name"] == "Jane Doe"
     assert observed_kwargs["date_of_birth"] == "1950-01-01"
+
+
+def test_ingest_result_summarizes_documents_facts_and_person_ids() -> None:
+    def _document(person_ids: list[int | None]) -> TransformedDocument:
+        return TransformedDocument(
+            document=Document(
+                filename="report.pdf",
+                file_type="pdf",
+                checksum=f"checksum-{person_ids}",
+                storage_uri="file:///report.pdf",
+                document_type="unknown",
+            ),
+            document_sources=[],
+            extracted_facts=[
+                ExtractedFact(person_id=person_id, fact_type="weight")
+                for person_id in person_ids
+            ],
+            related_models=[],
+        )
+
+    summary = DocumentIngestResult.from_transformation(
+        PersonTransformationResult(
+            documents=[_document([7, 7, None]), _document([3])],
+        ),
+    )
+
+    assert summary.documents == 2  # noqa: PLR2004
+    assert summary.facts == 4  # noqa: PLR2004
+    assert summary.person_ids == [3, 7]
+    assert json.loads(summary.to_console())["person_ids"] == [3, 7]
 
 
 def test_document_ingest_with_unknown_person_id_raises_lookup_error(

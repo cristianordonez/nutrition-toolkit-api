@@ -10,6 +10,7 @@ from engine.controllers.session import controller_session
 from engine.models.sql.person import Person  # noqa: TC001
 from engine.repositories.person_repo import PersonRepo
 from ntk.controllers.base import BaseController
+from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
@@ -20,10 +21,14 @@ class PersonListOptions(BaseModel):
     """Options for listing persons."""
 
 
-class PersonListResult(BaseModel):
+class PersonListResult(ConsoleRenderableModel):
     """Persisted persons."""
 
     persons: list[Person]
+
+    def to_console(self) -> str:
+        """Render the persons as formatted JSON."""
+        return self.model_dump_json(indent=2)
 
 
 class PersonListController(BaseController):

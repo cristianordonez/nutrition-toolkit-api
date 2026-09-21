@@ -1,18 +1,23 @@
 """Local SQLite database engine for the desktop app.
 
-This deliberately does not yet wire up the two separate SQLite databases
-described in the split refactor plan (facts vs. settings) -- ``SETTINGS``
-already declares both paths, but bootstrapping/migrations for them are
-future work. For now this provides one inert, importable engine so the rest
-of the app (repositories, controllers) can be exercised.
+``facts.db`` is the device's system of record for every person and clinical
+record ingested here. ``SETTINGS`` also declares ``settings_database_path``
+for app settings/preferences, but no tables are assigned to it yet, so only
+the facts database is wired up.
+
+Schema is bootstrapped with ``create_all``, which adds missing tables but
+never alters existing ones. That is enough for a fresh install; changing a
+model on an already-populated device needs migration tooling engine does not
+have yet.
 """
 
 from __future__ import annotations
 
 import typing
 
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine
 
+from engine.models import sql  # noqa: F401 - registers every table on the metadata
 from engine.models.settings import SETTINGS
 from engine.repositories.facility_repo import FacilityRepo
 
@@ -36,10 +41,11 @@ def get_session() -> Generator[Session, None, None]:
 
 
 def initialize_database() -> None:
-    """Seed built-in data after schema creation.
+    """Create any missing tables, then seed built-in data.
 
-    This function intentionally does not create or alter tables -- real
-    dual-database bootstrapping/migrations are future work.
+    Safe to call on every startup: ``create_all`` skips tables that already
+    exist and seeding is idempotent.
     """
+    SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         FacilityRepo(session).seed_defaults()

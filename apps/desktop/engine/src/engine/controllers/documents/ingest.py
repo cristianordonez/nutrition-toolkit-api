@@ -25,6 +25,7 @@ from ntk.controllers.uploads import (
     UploadRequirements,
     materialize_uploads,
 )
+from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
 from ntk.utils.parallel import ParallelPoolHandler
 
@@ -62,6 +63,42 @@ class DocumentIngestOptions(BaseModel):
     person_id: int | None = None
 
 
+class DocumentIngestResult(ConsoleRenderableModel):
+    """What one ingestion run persisted.
+
+    A summary rather than the raw ``PersonTransformationResult``: callers need
+    to know how much landed and who it was attributed to, and the full
+    transformation tree is both large and internal.
+    """
+
+    documents: int
+    facts: int
+    person_ids: list[int]
+
+    @classmethod
+    def from_transformation(
+        cls,
+        result: PersonTransformationResult,
+    ) -> DocumentIngestResult:
+        """Summarize a completed transformation."""
+        return cls(
+            documents=len(result.documents),
+            facts=sum(len(document.extracted_facts) for document in result.documents),
+            person_ids=sorted(
+                {
+                    fact.person_id
+                    for document in result.documents
+                    for fact in document.extracted_facts
+                    if fact.person_id is not None
+                },
+            ),
+        )
+
+    def to_console(self) -> str:
+        """Render the ingestion summary as JSON."""
+        return self.model_dump_json(indent=2)
+
+
 class DocumentIngestController(BaseController):
     """Validate and persist uploaded documents."""
 
@@ -76,7 +113,7 @@ class DocumentIngestController(BaseController):
     async def run(
         self,
         options: DocumentIngestOptions,
-    ) -> Output[PersonTransformationResult]:
+    ) -> Output[DocumentIngestResult]:
         """Materialize uploads and run the document ETL pipeline."""
         async with materialize_uploads(
             typing.cast("Sequence[ReadableUpload]", options.files),
@@ -147,7 +184,15 @@ class DocumentIngestController(BaseController):
                         for document in worker_result.documents
                     ],
                 )
-        return Output(result=result, controller=self.name, exit_code=0)
+        return Output(
+            result=DocumentIngestResult.from_transformation(result),
+            controller=self.name,
+            exit_code=0,
+        )
 
 
-__all__ = ["DocumentIngestController", "DocumentIngestOptions"]
+__all__ = [
+    "DocumentIngestController",
+    "DocumentIngestOptions",
+    "DocumentIngestResult",
+]

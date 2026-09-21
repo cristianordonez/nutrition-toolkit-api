@@ -27,7 +27,26 @@ class Settings(CustomBaseSettings):
         description="Path to a downloaded on-device model (seam for a future "
         "llama.cpp-backed extraction agent; unused while extraction runs on OpenAI).",
     )
-    open_ai_api_key: str = Field(description="API key to access the OpenAI API")
+    use_local_extraction: bool = Field(
+        default=False,
+        description="Run document extraction on-device via Ollama instead of "
+        "OpenAI. Opt-in until local extraction quality is measured against the "
+        "hosted model.",
+    )
+    ollama_host: str = Field(
+        default="http://localhost:11434",
+        description="Base URL of the local Ollama daemon.",
+    )
+    ollama_model: str | None = Field(
+        default=None,
+        description="Override the on-device model. Leave unset to let the app "
+        "pick one sized for this machine's memory.",
+    )
+    open_ai_api_key: str = Field(
+        default="",
+        description="API key to access the OpenAI API. Optional only when "
+        "extraction runs on-device; the hosted path fails at first use without it.",
+    )
     debug: bool = Field(description="Enable debug logging.", default=False)
     document_ingestion_pool_mode: PoolMode = Field(default=PoolMode.THREAD)
     document_ingestion_workers: int = Field(default=3, ge=1)

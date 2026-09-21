@@ -62,14 +62,21 @@ class UnknownFileExtractor(PersonExtractor):
         file: pathlib.Path,
         *,
         max_file_size_bytes: int = _MAX_UNKNOWN_FILE_SIZE_BYTES,
+        extraction_agent: DataExtractionAgent | None = None,
     ) -> None:
-        """Store the document to read."""
+        """Store the document to read.
+
+        ``extraction_agent`` lets a caller supply an agent bound to a specific
+        provider, which is how the same document can be run through more than
+        one model for comparison.
+        """
         super().__init__(file)
         if max_file_size_bytes <= 0:
             msg = "Unknown file size limit must be greater than zero"
             raise ValueError(msg)
         self.file = file
         self.max_file_size_bytes = max_file_size_bytes
+        self._extraction_agent = extraction_agent
         self._validate_file_size()
         self._validate_file_type()
 
@@ -161,8 +168,8 @@ class UnknownFileExtractor(PersonExtractor):
         extraction_input: ExtractionInput,
     ) -> list[AIUnknownDocumentFact]:
         """Run the agent and enforce its transient-fact result contract."""
-        data_extraction_agent = DataExtractionAgent()
-        return await data_extraction_agent.run_unknown_document(extraction_input)
+        agent = self._extraction_agent or DataExtractionAgent()
+        return await agent.run_unknown_document(extraction_input)
 
     def _build_extracted_fact_create(
         self,
@@ -203,7 +210,7 @@ class UnknownFileExtractor(PersonExtractor):
         for date_format in _NOTE_DATE_FORMATS:
             try:
                 parsed_date = datetime.strptime(date_text, date_format).date()  # noqa: DTZ007
-            except ValueError:
+            except ValueError:  # noqa: PERF203 - trying each format is the point
                 continue
             else:
                 break

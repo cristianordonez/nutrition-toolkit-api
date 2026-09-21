@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import typing
 
+from engine.controllers.persons.list import PersonListController
 from engine.controllers.persons.ncps import PersonNCPsController
 from engine.controllers.persons.weights import PersonWeightsController
 from ntk.controllers.base import BaseControllerGroup
@@ -20,6 +21,7 @@ class PersonControllerGroup(BaseControllerGroup):
     def __init__(self) -> None:
         """Initialize the person subcommands."""
         self._subcommands = [
+            PersonListController(),
             PersonNCPsController(),
             PersonWeightsController(),
         ]

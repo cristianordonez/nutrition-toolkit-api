@@ -13,6 +13,8 @@ import logfire
 
 from engine import __version__
 from engine.controllers import load_command_groups
+from engine.database.db import initialize_database
+from engine.database.settings_db import initialize_settings_database
 from ntk.controllers.registry import COMMAND_REGISTRY
 from ntk.logger import setup_logging
 
@@ -35,12 +37,7 @@ async def _resolve_output(output: typing.Awaitable[Output]) -> Output:
 
 
 def main(args: list[str] | None = None) -> None:
-    """Run CLI portion of application.
-
-    Unlike cloud-api, this does not call ``initialize_database()`` yet --
-    engine has no migration story for its local SQLite databases yet (see
-    the split refactor plan: dual-database bootstrapping is future work).
-    """
+    """Run CLI portion of application."""
     if args is None:
         args = sys.argv[1:]
     root = create_root_parser()
@@ -60,6 +57,8 @@ def main(args: list[str] | None = None) -> None:
     logger.debug("Controllers: %s", controllers)
     logger.debug("Options: %s", parsed)
     logger.debug("args: %s", args)
+    initialize_database()
+    initialize_settings_database()
     options = parsed.options_model.model_validate(vars(parsed))
     result = parsed.func(options)
     if inspect.isawaitable(result):
