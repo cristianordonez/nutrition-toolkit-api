@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 
 from api.agents.ncp_agent import NCP_MODEL, NutritionCareProcessAgent
-from api.models.ncp_context import BudgetedNCPContext
+from api.models.ncp_context import BudgetedNCPContext, PreviousNCPNote
 from api.models.sql.ncp import (
     NutritionCareProcess,
     NutritionCareProcessSource,
@@ -27,6 +27,7 @@ if typing.TYPE_CHECKING:
 
 _NCP_MATCH_LIMIT = 5
 _NCP_CHUNK_TOKENS = 1_200
+_PREVIOUS_NCP_TOKENS = 1_500
 logger = logging.getLogger(__name__)
 
 
@@ -54,12 +55,13 @@ class NutritionCareProcessPipeline:
         request: NCPGenerationRequest,
     ) -> NutritionCareProcess:
         """Look up relevant past NCPs, generate, and persist a draft NCP."""
-        relevant_ncps = await self._search_relevant_ncps(
-            request.summary_text,
-            request.person_identifier,
+        relevant_ncps = await self._search_relevant_ncps(request.summary_text)
+        previous_ncp = self._previous_ncp_note(
+            self.ncp_repository.get_latest_ncp_for_person(request.person_identifier),
         )
         context = BudgetedNCPContext(
             person=request.person,
+            previous_ncp=previous_ncp,
             relevant_ncps=relevant_ncps,
             additional_context=request.additional_context,
         )
@@ -82,12 +84,10 @@ class NutritionCareProcessPipeline:
     async def _search_relevant_ncps(
         self,
         summary_text: str,
-        person_identifier: str,
     ) -> list[RagSearchMatch]:
-        """Retrieve and bound similar past NCPs for one person."""
+        """Retrieve and bound similar past NCPs across all residents."""
         matches = await self._embedding_service().search_ncps_async(
             summary_text,
-            person_identifier,
             top_k=_NCP_MATCH_LIMIT,
         )
         return [
@@ -243,6 +243,17 @@ class NutritionCareProcessPipeline:
     @staticmethod
     def _content_hash(content: str) -> str:
         return sha256(" ".join(content.split()).encode()).hexdigest()
+
+    @staticmethod
+    def _previous_ncp_note(
+        previous: NutritionCareProcess | None,
+    ) -> PreviousNCPNote | None:
+        if previous is None:
+            return None
+        return PreviousNCPNote(
+            note_date=previous.created_at.date(),
+            note_text=truncate_to_tokens(previous.note_text, _PREVIOUS_NCP_TOKENS),
+        )
 
     def _embedding_service(self) -> EmbeddingService:
         if self.embedding_service is None:

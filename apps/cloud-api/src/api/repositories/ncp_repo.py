@@ -57,6 +57,23 @@ class NCPRepo:
             ).all(),
         )
 
+    def get_latest_ncp_for_person(
+        self,
+        person_identifier: str,
+    ) -> NutritionCareProcess | None:
+        """Return this person's own most recent finalized Nutrition Care Process."""
+        return self.session.exec(
+            select(NutritionCareProcess)
+            .where(
+                NutritionCareProcess.person_identifier == person_identifier,
+                NutritionCareProcess.status == NutritionCareProcessStatus.FINALIZED,
+            )
+            .order_by(
+                col(NutritionCareProcess.created_at).desc(),
+                col(NutritionCareProcess.id).desc(),
+            ),
+        ).first()
+
     def get_embedding(
         self,
         ncp_id: int,

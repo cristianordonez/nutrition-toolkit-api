@@ -18,7 +18,8 @@ _NCP_SEARCH_SQL = """
            1 - (e.embedding_vector <=> CAST(:vector AS vector)) AS similarity
     FROM nutrition_care_process_embeddings e
     JOIN nutrition_care_process n ON n.id = e.nutrition_care_process_id
-    WHERE n.status = :finalized_status AND n.person_identifier = :person_identifier
+    WHERE n.status = :finalized_status
+      AND (:person_identifier IS NULL OR n.person_identifier = :person_identifier)
     ORDER BY e.embedding_vector <=> CAST(:vector AS vector)
     LIMIT :top_k
 """
@@ -54,9 +55,14 @@ class EmbeddingRepo:
         self,
         vector: str,
         top_k: int,
-        person_identifier: str,
+        person_identifier: str | None = None,
     ) -> list[RagSearchMatch]:
-        """Return one person's NCP rows nearest to the query vector."""
+        """Return finalized NCP rows nearest the vector.
+
+        Searches across all residents by default, to surface a clinically
+        similar case regardless of who it belongs to. Pass ``person_identifier``
+        to scope the search to one resident's own notes instead.
+        """
         rows = self.session.exec(  # ty: ignore[no-matching-overload]
             text(_NCP_SEARCH_SQL),
             params={

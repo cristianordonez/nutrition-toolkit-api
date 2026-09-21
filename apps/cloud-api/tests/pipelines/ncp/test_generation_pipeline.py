@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import typing
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -72,12 +72,10 @@ def test_generate_looks_up_relevant_ncps_and_persists_a_draft(
         @staticmethod
         async def search_ncps_async(
             text: str,
-            person_identifier: str,
             *,
             top_k: int,
         ) -> list[RagSearchMatch]:
             assert text == request.summary_text
-            assert person_identifier == "R1"
             assert top_k == 5  # noqa: PLR2004
             return [
                 RagSearchMatch(
@@ -96,6 +94,13 @@ def test_generate_looks_up_relevant_ncps_and_persists_a_draft(
             ncp.id = 31
             return ncp
 
+        @staticmethod
+        def get_latest_ncp_for_person(
+            person_identifier: str,
+        ) -> NutritionCareProcess | None:
+            assert person_identifier == "R1"
+            return None
+
     monkeypatch.setattr(generation_pipeline, "NutritionCareProcessAgent", Agent)
     embedding_service = Embeddings(object())
     pipeline = generation_pipeline.NutritionCareProcessPipeline(
@@ -107,6 +112,7 @@ def test_generate_looks_up_relevant_ncps_and_persists_a_draft(
 
     assert len(captured) == 1
     assert captured[0].person.name == request.person.name
+    assert captured[0].previous_ncp is None
     assert captured[0].relevant_ncps[0].document_id == 12  # noqa: PLR2004
     assert captured[0].additional_context == "wound review"
     assert result.id == 31  # noqa: PLR2004
@@ -118,6 +124,73 @@ def test_generate_looks_up_relevant_ncps_and_persists_a_draft(
     assert result.status is NutritionCareProcessStatus.DRAFT
 
 
+def test_generate_includes_persons_own_latest_ncp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _request()
+    captured: list[BudgetedNCPContext] = []
+    prior_ncp = NutritionCareProcess(
+        id=99,
+        person_identifier="R1",
+        note_text="Prior NCP note text",
+        content_hash="prior-hash",
+        created_by="model",
+        status=NutritionCareProcessStatus.FINALIZED,
+        created_at=datetime(2026, 9, 15, tzinfo=UTC),
+    )
+
+    class Agent:
+        def __init__(self, **kwargs: object) -> None:
+            assert kwargs == {"embedding_service": embedding_service}
+
+        @staticmethod
+        async def run(context: BudgetedNCPContext) -> str:
+            captured.append(context)
+            return "Generated assessment"
+
+    class Embeddings:
+        def __init__(self, _repository: object) -> None:
+            pass
+
+        @staticmethod
+        async def search_ncps_async(
+            _text: str,
+            *,
+            top_k: int,
+        ) -> list[RagSearchMatch]:
+            assert top_k == 5  # noqa: PLR2004
+            return []
+
+    class Repository:
+        @staticmethod
+        def create_generated_draft(
+            ncp: NutritionCareProcess,
+        ) -> NutritionCareProcess:
+            ncp.id = 31
+            return ncp
+
+        @staticmethod
+        def get_latest_ncp_for_person(
+            person_identifier: str,
+        ) -> NutritionCareProcess | None:
+            assert person_identifier == "R1"
+            return prior_ncp
+
+    monkeypatch.setattr(generation_pipeline, "NutritionCareProcessAgent", Agent)
+    embedding_service = Embeddings(object())
+    pipeline = generation_pipeline.NutritionCareProcessPipeline(
+        Repository(),  # ty: ignore[invalid-argument-type]
+        embedding_service=embedding_service,  # ty: ignore[invalid-argument-type]
+    )
+
+    asyncio.run(pipeline.generate(request))
+
+    assert len(captured) == 1
+    assert captured[0].previous_ncp is not None
+    assert captured[0].previous_ncp.note_date == date(2026, 9, 15)
+    assert captured[0].previous_ncp.note_text == "Prior NCP note text"
+
+
 def test_generate_propagates_retrieval_failure() -> None:
     class Embeddings:
         def __init__(self, _repository: object) -> None:
@@ -126,7 +199,6 @@ def test_generate_propagates_retrieval_failure() -> None:
         @staticmethod
         async def search_ncps_async(
             _text: str,
-            _person_identifier: str,
             *,
             top_k: int,
         ) -> list[RagSearchMatch]:
@@ -151,7 +223,6 @@ def test_search_relevant_ncps_limits_matches_and_truncates_chunk_text() -> None:
         @staticmethod
         async def search_ncps_async(
             _text: str,
-            _person_identifier: str,
             *,
             top_k: int,
         ) -> list[RagSearchMatch]:
@@ -172,10 +243,7 @@ def test_search_relevant_ncps_limits_matches_and_truncates_chunk_text() -> None:
     )
 
     matches = asyncio.run(
-        pipeline._search_relevant_ncps(  # noqa: SLF001
-            "summary text",
-            "R1",
-        ),
+        pipeline._search_relevant_ncps("summary text"),  # noqa: SLF001
     )
 
     assert len(matches) == 5  # noqa: PLR2004

@@ -58,10 +58,15 @@ class EmbeddingService:
     def search_ncps(
         self,
         text: str,
-        person_identifier: str,
+        person_identifier: str | None = None,
         top_k: int = 5,
     ) -> list[RagSearchMatch]:
-        """Return one person's Nutrition Care Processes nearest to the text."""
+        """Return Nutrition Care Processes nearest the text.
+
+        Searches across all residents by default, to surface a clinically
+        similar case regardless of who it belongs to. Pass ``person_identifier``
+        to scope the search to one resident's own notes instead.
+        """
         self._validate_top_k(top_k)
         vector = self._embed_query(text)
         return self._repository().search_ncps(vector, top_k, person_identifier)
@@ -69,7 +74,7 @@ class EmbeddingService:
     async def search_ncps_async(
         self,
         text: str,
-        person_identifier: str,
+        person_identifier: str | None = None,
         top_k: int = 5,
     ) -> list[RagSearchMatch]:
         """Return similar NCPs without blocking or nesting an event loop."""

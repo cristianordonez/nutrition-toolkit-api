@@ -123,6 +123,15 @@ def test_search_ncps_uses_query_embedding_scoped_to_one_person() -> None:
     assert matches[0].filename == "ncp.pdf"
 
 
+def test_search_ncps_defaults_to_all_residents() -> None:
+    service, embedder, repository = _service()
+
+    service.search_ncps("weight loss", top_k=3)
+
+    assert embedder.queries == ["weight loss"]
+    assert repository.ncp_args == ("[0.1,0.2]", 3, None)
+
+
 def test_search_ncps_inside_running_event_loop() -> None:
     service, embedder, repository = _service()
 

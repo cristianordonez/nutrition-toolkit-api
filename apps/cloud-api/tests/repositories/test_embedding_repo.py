@@ -42,6 +42,19 @@ def test_ncp_search_only_uses_finalized_ncps_scoped_to_one_person() -> None:
     assert session.params["person_identifier"] == "R1"
 
 
+def test_ncp_search_defaults_to_all_residents() -> None:
+    session = _Session()
+
+    matches = EmbeddingRepo(
+        typing.cast("typing.Any", session),
+    ).search_ncps("[0.1]", 5)
+
+    assert matches == []
+    assert "WHERE n.status = :finalized_status" in session.sql
+    assert session.params["finalized_status"] == "finalized"
+    assert session.params["person_identifier"] is None
+
+
 def test_diet_manual_search_limits_knowledge_type() -> None:
     session = _Session()
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from hashlib import sha256
 
 import pytest
@@ -95,6 +96,43 @@ def test_list_ncps_orders_newest_first() -> None:
         second = repository.create_generated_draft(_generated_draft("Second"))
 
         assert repository.list_ncps("R1") == [second, first]
+
+
+def test_get_latest_ncp_for_person_returns_most_recent_finalized() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        repository = NCPRepo(session)
+        older = _generated_draft("Older note")
+        older.status = NutritionCareProcessStatus.FINALIZED
+        older.created_at = datetime(2026, 8, 1, tzinfo=UTC)
+        repository.save_ncp(older)
+        newest = _generated_draft("Newest note")
+        newest.status = NutritionCareProcessStatus.FINALIZED
+        newest.created_at = datetime(2026, 9, 15, tzinfo=UTC)
+        repository.save_ncp(newest)
+        other_person = _generated_draft("Other person's note")
+        other_person.person_identifier = "R2"
+        other_person.status = NutritionCareProcessStatus.FINALIZED
+        other_person.created_at = datetime(2026, 9, 20, tzinfo=UTC)
+        repository.save_ncp(other_person)
+
+        latest = repository.get_latest_ncp_for_person("R1")
+
+        assert latest is not None
+        assert latest.id == newest.id
+        assert latest.note_text == "Newest note"
+
+
+def test_get_latest_ncp_for_person_ignores_drafts_and_missing_history() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        repository = NCPRepo(session)
+        repository.create_generated_draft(_generated_draft("Draft note"))
+
+        assert repository.get_latest_ncp_for_person("R1") is None
+        assert repository.get_latest_ncp_for_person("missing") is None
 
 
 def test_count_ncps_counts_imported_records_for_one_source_file() -> None:
