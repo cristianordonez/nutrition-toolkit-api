@@ -18,17 +18,17 @@ RUN uv python install 3.14
 # Install git so that SCM tag can be detected when package is built
 RUN apt-get update && apt-get install -y git
 
-# Install dependencies from pyproject.toml and uv.lock first, but not package
-# This is so docker does not reinstall all deps unless pyproject.toml or uv.lock changes
+# This is a uv workspace, so resolving `--package api` needs every member's
+# pyproject.toml present. Copy the tree first, then sync only cloud-api and its
+# workspace dependencies -- the desktop engine is not part of this image.
 WORKDIR /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --extra api
 COPY . /app
 COPY .git ./.git/
+# `--group migrations` is explicit because UV_NO_DEV=1 drops dev groups, and
+# the migrate service needs alembic, which lives in that group rather than in
+# cloud-api's own dependencies.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --extra api
+    uv sync --locked --package api --group migrations
 
 
 # PRODUCTION
@@ -58,5 +58,6 @@ USER nonroot
 # Use `/app` as the working directory
 WORKDIR /app
 
-# Run the FastAPI application by default
-CMD ["ntk-api", "--port", "3000"]
+# Run the FastAPI application by default. 0.0.0.0 so the port is reachable
+# from outside the container.
+CMD ["api-server", "--host", "0.0.0.0", "--port", "8000"]

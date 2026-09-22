@@ -111,3 +111,39 @@ change_dir = "apps/cloud-api"
 commands = [
   ["uv", "run", "python", "../../scripts/create_migration.py", "{posargs}"],
 ]
+
+[env.up]
+description = "start the cloud stack (Postgres, Redis, migrations, cloud-api)"
+skip_install = true
+allowlist_externals = [ "docker" ]
+commands = [
+  ["docker", "compose", "up", "--build", "-d", "--wait"],
+  ["docker", "compose", "ps"],
+]
+
+[env.down]
+description = "stop the cloud stack; pass -- -v to also drop its data volumes"
+skip_install = true
+allowlist_externals = [ "docker" ]
+commands = [
+  ["docker", "compose", "down", "{posargs}"],
+]
+
+[env.logs]
+description = "follow cloud-api logs"
+skip_install = true
+allowlist_externals = [ "docker" ]
+commands = [
+  ["docker", "compose", "logs", "-f", "{posargs:cloud-api}"],
+]
+
+[env.api-key]
+description = "mint an API key for the desktop engine to call cloud-api"
+skip_install = true
+allowlist_externals = [ "docker" ]
+commands = [
+  ["docker", "compose", "exec", "cloud-api", "api", "key", "create",
+   "--name", "{posargs:desktop-engine}",
+   "--permissions", "nutrition-care-processes:read",
+   "nutrition-care-processes:write"],
+]

@@ -1,1 +1,30 @@
+# The image builds cloud-api only. Everything here is either rebuilt inside the
+# container, belongs to the desktop app, or is a local secret.
 __pycache__
+*.pyc
+
+# Virtualenvs and tool caches
+.venv
+.tox
+.ruff_cache
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Desktop app: the Rust target directory alone is gigabytes
+apps/desktop/node_modules
+apps/desktop/dist
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+
+# Local configuration and credentials
+.env
+*.env
+!*/sample.env
+.logfire
+
+# Editor and OS noise
+.vscode
+.idea
+.DS_Store

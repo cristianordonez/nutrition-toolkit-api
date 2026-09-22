@@ -31,6 +31,30 @@ further details.
 
 ## Running the apps
 
+### The whole stack at once
+
+```bash
+tox -e up          # Postgres + Redis + migrations + cloud-api, in dependency order
+tox -e api-key     # mint a key for the desktop engine, then put it in .env
+cd apps/desktop && npm run tauri dev   # the desktop window
+```
+
+`tox -e up` waits for each service to pass its healthcheck and applies migrations
+before cloud-api starts, so the API is ready to serve when the command returns.
+`tox -e logs` follows cloud-api, `tox -e down` stops everything (`tox -e down -- -v`
+also drops the data volumes).
+
+The desktop app is not containerized on purpose: it is a native window that owns
+local SQLite databases on your machine, so it runs on the host.
+
+Two settings connect the halves. Put the key from `tox -e api-key` in
+`NTK_CLOUD_API_KEY`, and leave `NTK_USE_LOCAL_GENERATION=false` so notes are
+generated cloud-side. Setting it to `true` generates them in the engine instead —
+useful offline, but it skips the diet and nutrition-care manual lookups, which
+search a knowledge base that only exists cloud-side.
+
+### Individual packages
+
 Each package's own README has full setup/configuration details and every available
 command; this is the quick-reference version, runnable from the repository root.
 
