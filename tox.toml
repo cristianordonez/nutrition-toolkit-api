@@ -144,6 +144,5 @@ allowlist_externals = [ "docker" ]
 commands = [
   ["docker", "compose", "exec", "cloud-api", "api", "key", "create",
    "--name", "{posargs:desktop-engine}",
-   "--permissions", "nutrition-care-processes:read",
-   "nutrition-care-processes:write"],
+   "--permissions", "ncp:read", "ncp:write"],
 ]
