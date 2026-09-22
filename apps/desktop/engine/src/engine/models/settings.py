@@ -55,6 +55,18 @@ class Settings(CustomBaseSettings):
         default=HttpUrl("http://localhost:8000"),
         description="Base URL of the cloud-api instance used for NCP generation.",
     )
+    cloud_api_key: str = Field(
+        default="",
+        description="API key sent as a bearer token to cloud-api. Required for "
+        "note generation unless use_local_generation is set.",
+    )
+    use_local_generation: bool = Field(
+        default=False,
+        description="Generate notes in this process instead of calling "
+        "cloud-api. A development and offline escape hatch: generation belongs "
+        "cloud-side in production, and running it here loses the diet and "
+        "nutrition-care manual lookups, which search a cloud-only knowledge base.",
+    )
 
 
 SETTINGS = Settings()
