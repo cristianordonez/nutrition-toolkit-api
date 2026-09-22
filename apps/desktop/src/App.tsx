@@ -43,6 +43,8 @@ function App() {
   // shared note would put the wrong steer on every other resident.
   const [contexts, setContexts] = useState<Record<number, string>>({});
 
+  const [elapsed, setElapsed] = useState(0);
+
   const [dragging, setDragging] = useState(false);
   // The drop handler runs outside React's render, so it reads the latest
   // uploading state through a ref rather than a stale closure.
@@ -67,6 +69,20 @@ function App() {
         setEngine({ status: "unavailable", detail: error.message }),
       );
   }, [refreshPersons]);
+
+  // Ingestion returns only when every document is done, so there is no real
+  // progress to report -- elapsed time is the honest signal that work is
+  // still happening.
+  useEffect(() => {
+    if (!uploading) return undefined;
+    setElapsed(0);
+    const started = Date.now();
+    const timer = window.setInterval(
+      () => setElapsed(Math.round((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [uploading]);
 
   /**
    * Tauri intercepts native drag-and-drop, so HTML5 drop events never fire in
@@ -227,6 +243,7 @@ function App() {
               type="submit"
               className="btn btn--primary"
               disabled={files.length === 0 || uploading}
+              aria-busy={uploading}
             >
               {uploading
                 ? "Ingesting…"
@@ -235,9 +252,14 @@ function App() {
           </form>
 
           {uploading && (
-            <p className="hint">
-              Extraction runs per document and can take a while.
-            </p>
+            <div className="progress" role="status" aria-live="polite">
+              <span className="spinner" aria-hidden="true" />
+              <span className="progress__text">
+                Extracting {files.length} document
+                {files.length === 1 ? "" : "s"}…
+                <span className="progress__elapsed">{formatElapsed(elapsed)}</span>
+              </span>
+            </div>
           )}
           {uploadResult && (
             <p className="notice notice--ok">
@@ -360,6 +382,11 @@ function App() {
       </div>
     </main>
   );
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
 function EngineBadge({ engine }: { engine: EngineState }) {
