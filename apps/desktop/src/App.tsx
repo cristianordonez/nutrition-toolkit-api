@@ -21,10 +21,11 @@ type EngineState =
   | { status: "unavailable"; detail: string };
 
 /** One resident's generation outcome, kept so a failure does not hide others. */
-type NoteResult =
-  | { person: Person; status: "pending" }
-  | { person: Person; status: "done"; note: GeneratedNCP }
-  | { person: Person; status: "failed"; detail: string };
+type NoteResult = { person: Person; context?: string } & (
+  | { status: "pending" }
+  | { status: "done"; note: GeneratedNCP }
+  | { status: "failed"; detail: string }
+);
 
 function App() {
   const [engine, setEngine] = useState<EngineState>({ status: "checking" });
@@ -38,7 +39,9 @@ function App() {
 
   const [results, setResults] = useState<NoteResult[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [context, setContext] = useState("");
+  // Context is per resident: a batch usually mixes review reasons, and one
+  // shared note would put the wrong steer on every other resident.
+  const [contexts, setContexts] = useState<Record<number, string>>({});
 
   const [dragging, setDragging] = useState(false);
   // The drop handler runs outside React's render, so it reads the latest
@@ -148,15 +151,21 @@ function App() {
     const chosen = persons.filter((person) => selected.has(person.id));
     if (chosen.length === 0 || generating) return;
     setGenerating(true);
-    setResults(chosen.map((person) => ({ person, status: "pending" })));
+    setResults(
+      chosen.map((person) => ({
+        person,
+        context: contexts[person.id]?.trim() || undefined,
+        status: "pending",
+      })),
+    );
 
     for (const person of chosen) {
       try {
-        const note = await generateNcp(person.id, context);
+        const note = await generateNcp(person.id, contexts[person.id]);
         setResults((current) =>
           current.map((entry) =>
             entry.person.id === person.id
-              ? { person, status: "done", note }
+              ? { ...entry, status: "done", note }
               : entry,
           ),
         );
@@ -165,7 +174,7 @@ function App() {
         setResults((current) =>
           current.map((entry) =>
             entry.person.id === person.id
-              ? { person, status: "failed", detail }
+              ? { ...entry, status: "failed", detail }
               : entry,
           ),
         );
@@ -273,22 +282,26 @@ function App() {
                       </span>
                     )}
                   </label>
+                  {selected.has(person.id) && (
+                    <input
+                      type="text"
+                      className="resident__context"
+                      value={contexts[person.id] ?? ""}
+                      onChange={(event) =>
+                        setContexts((current) => ({
+                          ...current,
+                          [person.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Context for this note (optional)"
+                      aria-label={`Context for ${person.name}`}
+                      disabled={generating}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
           )}
-
-          <label className="field">
-            <span className="field__label">Context for these notes</span>
-            <textarea
-              className="field__input"
-              rows={2}
-              value={context}
-              onChange={(event) => setContext(event.target.value)}
-              placeholder="e.g. quarterly review, focus on recent weight loss"
-              disabled={generating}
-            />
-          </label>
 
           <button
             type="button"
@@ -328,6 +341,9 @@ function App() {
                     </span>
                   )}
                 </h3>
+                {entry.context && (
+                  <p className="noteblock__context">Context: {entry.context}</p>
+                )}
                 {entry.status === "pending" && (
                   <p className="hint">Waiting…</p>
                 )}

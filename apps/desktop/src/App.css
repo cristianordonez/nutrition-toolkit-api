@@ -389,3 +389,32 @@ body {
   outline: none;
   border-color: var(--text-muted);
 }
+
+.resident__context {
+  width: 100%;
+  margin: -1px 0 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 0 0 7px 7px;
+  border-top: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.resident__context:focus-visible {
+  outline: none;
+  border-color: var(--text-muted);
+}
+
+.resident__context::placeholder {
+  color: var(--text-muted);
+}
+
+.noteblock__context {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
