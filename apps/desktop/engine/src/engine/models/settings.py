@@ -1,3 +1,6 @@
+# Pydantic resolves these annotation types at runtime when building schemas.
+# ruff: noqa: TC003
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,6 +8,7 @@ from pathlib import Path
 from pydantic import Field, HttpUrl
 
 from ntk.models.base import CustomBaseSettings
+from ntk.paths import data_dir, log_dir
 from ntk.utils.parallel import PoolMode
 
 
@@ -15,12 +19,17 @@ class Settings(CustomBaseSettings):
     """
 
     facts_database_path: Path = Field(
-        default=Path("~/.nutrition-toolkit/facts.db"),
+        default_factory=lambda: data_dir() / "facts.db",
         description="Local SQLite database holding extracted person/clinical data.",
     )
     settings_database_path: Path = Field(
-        default=Path("~/.nutrition-toolkit/settings.db"),
+        default_factory=lambda: data_dir() / "settings.db",
         description="Local SQLite database holding app settings/preferences.",
+    )
+    log_file: Path | None = Field(
+        default_factory=lambda: log_dir() / "engine.log",
+        description="Where the engine writes its log. Set empty to log only to "
+        "the console.",
     )
     local_model_path: Path | None = Field(
         default=None,

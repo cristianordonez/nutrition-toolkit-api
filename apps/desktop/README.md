@@ -78,6 +78,33 @@ Output lands in `src-tauri/target/release/bundle/`. Note the dev-only sidecar
 caveat below — a bundle built today still shells out to `uv` and will not run on
 a machine without this checkout.
 
+### Where the app keeps its files
+
+Standard per-platform application directories, so nothing lives in a dotfile
+in `$HOME`:
+
+| | macOS |
+| --- | --- |
+| Databases | `~/Library/Application Support/NutritionToolkit/` |
+| Logs | `~/Library/Logs/NutritionToolkit/engine.log` |
+
+Linux uses `~/.local/share` and `~/.local/state`; Windows uses `%LOCALAPPDATA%`.
+`NTK_FACTS_DATABASE_PATH`, `NTK_SETTINGS_DATABASE_PATH`, and `NTK_LOG_FILE`
+override any of them.
+
+Installs that predate this used `~/.nutrition-toolkit`. Those files are moved
+into the data directory on the next run, and the old directory is removed once
+it is empty. A file is never moved over one that already exists.
+
+To watch the log while using the app:
+
+```bash
+tail -f ~/Library/Logs/NutritionToolkit/engine.log
+```
+
+Note the engine logs at INFO by default, so routine commands are quiet; the
+desktop app does not pass `--debug` today.
+
 ### If the app shows "Engine unavailable"
 
 The badge in the header is the engine probe. Hover it for the underlying error.

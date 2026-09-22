@@ -15,8 +15,10 @@ from engine import __version__
 from engine.controllers import load_command_groups
 from engine.database.db import initialize_database
 from engine.database.settings_db import initialize_settings_database
+from engine.models.settings import SETTINGS
 from ntk.controllers.registry import COMMAND_REGISTRY
 from ntk.logger import setup_logging
+from ntk.paths import ensure_dir, migrate_legacy_data
 
 if typing.TYPE_CHECKING:
     from ntk.models.output import Output
@@ -36,6 +38,24 @@ async def _resolve_output(output: typing.Awaitable[Output]) -> Output:
     return await output
 
 
+def _prepare_log_file(explicit: pathlib.Path | None) -> pathlib.Path | None:
+    """Return the log file to write to, creating it when it is our default.
+
+    ``setup_logging`` refuses a path that does not exist, which is the right
+    guard for a mistyped ``--log-file`` but would make the default location
+    fail on a first run. So the default is created here; an explicit path is
+    passed through untouched and still has to exist.
+    """
+    if explicit is not None:
+        return explicit
+    default = SETTINGS.log_file
+    if default is None:
+        return None
+    ensure_dir(default.parent)
+    default.touch(exist_ok=True)
+    return default
+
+
 def main(args: list[str] | None = None) -> None:
     """Run CLI portion of application."""
     if args is None:
@@ -49,7 +69,7 @@ def main(args: list[str] | None = None) -> None:
         cmd_instance.register(subparser)
     parsed = root.parse_args(args)
     logger = setup_logging(
-        parsed.log_file,
+        _prepare_log_file(parsed.log_file),
         parsed.log_file_interval,
         parsed.log_file_backup_count,
         debug=parsed.debug,
@@ -57,6 +77,8 @@ def main(args: list[str] | None = None) -> None:
     logger.debug("Controllers: %s", controllers)
     logger.debug("Options: %s", parsed)
     logger.debug("args: %s", args)
+    for name in migrate_legacy_data():
+        logger.info("Moved %s into the application data directory", name)
     initialize_database()
     initialize_settings_database()
     options = parsed.options_model.model_validate(vars(parsed))
