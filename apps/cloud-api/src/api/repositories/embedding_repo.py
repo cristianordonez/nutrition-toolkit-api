@@ -19,7 +19,15 @@ _NCP_SEARCH_SQL = """
     FROM nutrition_care_process_embeddings e
     JOIN nutrition_care_process n ON n.id = e.nutrition_care_process_id
     WHERE n.status = :finalized_status
-      AND (:person_identifier IS NULL OR n.person_identifier = :person_identifier)
+      -- Cast required: the parameter appears only in an IS NULL test and a
+      -- comparison, so Postgres cannot infer its type and rejects the whole
+      -- statement with "could not determine data type" when it is NULL --
+      -- which is the normal case, since a search across every resident's
+      -- notes passes no identifier.
+      AND (
+        CAST(:person_identifier AS text) IS NULL
+        OR n.person_identifier = CAST(:person_identifier AS text)
+      )
     ORDER BY e.embedding_vector <=> CAST(:vector AS vector)
     LIMIT :top_k
 """

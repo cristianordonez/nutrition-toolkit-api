@@ -351,44 +351,47 @@ class NutritionGoalPayload(_StatefulFactPayload):
 
 
 # Extraction capability contracts
-# AI extractors receive only this curated narrative-clinical subset. Structured
-# report facts such as weights, labs, orders, and nutrition support are excluded
-# so the model cannot duplicate or replace deterministic report extraction.
+# Structured measurements and orders used to be withheld from AI extractors so
+# a model could not duplicate deterministic report parsing. An unknown document
+# is often the only place a weight, lab, or order appears, though, so excluding
+# them lost the fact entirely rather than protecting anything.
+#
+# They are extractable now, and two other rules keep the earlier concern
+# addressed: every fact must carry a date, so records merge on person and date
+# rather than piling up, and PersonRepo keeps a deterministic weight or lab in
+# preference to an AI one for the same date (DETERMINISTIC_FIRST_MODELS).
 AIExtractedFactPayload = (
     AllergyPayload
     | AppetitePayload
     | ClinicalFactPayload
     | DiagnosisPayload
+    | DietPayload
     | DialysisPayload
     | EdemaPayload
+    | EnteralFeedingPayload
+    | FluidPlanPayload
     | FoodPreferencePayload
     | GIObservationPayload
+    | LabPayload
     | MealIntakePayload
+    | MedicationPayload
+    | MiscOrderPayload
     | NutritionGoalPayload
     | OralFeedingStatusPayload
+    | ParenteralNutritionPayload
+    | SupplementPayload
+    | WeightPayload
     | WoundPayload
 )
 
-# These payloads must come from dedicated deterministic extractors. They contain
-# structured measurements, active orders, nutrition support, or fluid plans for
-# which model inference would be less reliable than source-specific parsing.
-DeterministicOnlyFactPayload = (
-    WeightPayload
-    | LabPayload
-    | MedicationPayload
-    | DietPayload
-    | EnteralFeedingPayload
-    | ParenteralNutritionPayload
-    | SupplementPayload
-    | FluidPlanPayload
-    | MiscOrderPayload
-)
+# Kept as the name for the measurement types a source-specific parser reads
+# most reliably; see DETERMINISTIC_FIRST_MODELS for how that preference is
+# enforced at persistence time.
+DeterministicOnlyFactPayload = WeightPayload | LabPayload
 
-# Common person-ingestion and persistence boundary. Deterministic extractors may
-# create any supported person fact; AI extractors remain constrained by the
-# narrower AIExtractedFactPayload contract above.
+# Common person-ingestion and persistence boundary.
 PersonFactPayload = typing.Annotated[
-    AIExtractedFactPayload | DeterministicOnlyFactPayload,
+    AIExtractedFactPayload,
     Field(discriminator="type"),
 ]
 

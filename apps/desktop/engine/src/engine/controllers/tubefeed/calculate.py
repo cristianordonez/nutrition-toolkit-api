@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+import typing
 
 from pydantic import BaseModel, Field
 
+from engine.controllers.session import controller_session
 from engine.data.enteral_formulas import LocalFormulaCatalog
+from engine.repositories.enteral_formula_repo import EnteralFormulaRepo
 from engine.services.calculators.tubefeed_calculator import (
     BolusFeedingSchedule,
     ContinuousFeedingSchedule,
@@ -15,6 +18,9 @@ from engine.services.calculators.tubefeed_calculator import (
 from ntk.controllers.base import BaseController
 from ntk.models.base import ConsoleRenderableModel
 from ntk.models.output import Output
+
+if typing.TYPE_CHECKING:
+    from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +108,19 @@ class CalculateTubefeedController(BaseController):
     help = "Calculate tubefeed recommendations"
     options_model = CalculateTubefeedOptions
 
-    def __init__(self, formula_catalog: LocalFormulaCatalog | None = None) -> None:
-        """Store the local, non-PHI enteral-formula reference catalog."""
-        self.formula_catalog = formula_catalog or LocalFormulaCatalog()
+    def __init__(
+        self,
+        formula_catalog: LocalFormulaCatalog | None = None,
+        session: Session | None = None,
+    ) -> None:
+        """Store an optional injected catalog and database session.
+
+        With neither supplied the catalog is read from the device's persisted
+        reference tables, so the products offered in the UI and the products
+        this controller will resolve are always the same set.
+        """
+        self.formula_catalog = formula_catalog
+        self.session = session
 
     def run(self, options: CalculateTubefeedOptions) -> Output:
         """Run tubefeed workflow.
@@ -116,7 +132,7 @@ class CalculateTubefeedController(BaseController):
         try:
             logger.debug("Options: %s", options)
             schedule = self._schedule(options)
-            tubefeed_results = TubeFeedCalculator(self.formula_catalog).calculate(
+            tubefeed_results = TubeFeedCalculator(self._catalog()).calculate(
                 energy_needs=options.energy_needs,
                 formula=options.formula,
                 package_volume_ml=options.package_volume_ml,
@@ -132,6 +148,13 @@ class CalculateTubefeedController(BaseController):
             exit_code=ec,
             result=output,
         )
+
+    def _catalog(self) -> LocalFormulaCatalog:
+        """Return the injected catalog, or the one persisted on this device."""
+        if self.formula_catalog is not None:
+            return self.formula_catalog
+        with controller_session(self.session) as session:
+            return LocalFormulaCatalog(EnteralFormulaRepo(session).get_catalog())
 
     @staticmethod
     def _schedule(

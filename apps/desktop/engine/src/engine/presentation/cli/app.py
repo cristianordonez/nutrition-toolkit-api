@@ -30,7 +30,12 @@ if typing.TYPE_CHECKING:
             """Return the CLI representation."""
 
 
-logfire.configure()
+# Controller results are this CLI's machine-readable contract on stdout, so
+# every other stream has to stay off it. Logfire's console exporter defaults to
+# stdout, which silently corrupts that contract the moment a command runs an
+# agent -- span lines land ahead of the JSON and the desktop app fails to parse
+# it. Tracing is still worth having, so it moves to stderr rather than off.
+logfire.configure(console=logfire.ConsoleOptions(output=sys.stderr))
 
 
 async def _resolve_output(output: typing.Awaitable[Output]) -> Output:

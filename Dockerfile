@@ -35,6 +35,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Then, use a final image without uv
 FROM debian:trixie-slim
 
+# Two things debian:trixie-slim omits that this image needs:
+#
+# libpq5 -- psycopg is installed without the `binary` or `c` extra, so it uses
+# its pure Python implementation, which still loads libpq at import time from
+# the system. Without it every command that touches Postgres, including
+# `alembic upgrade`, fails on import with "no pq wrapper available".
+#
+# ca-certificates -- the slim image carries no CA bundle, so DNS and TCP
+# succeed but every TLS handshake fails with CERTIFICATE_VERIFY_FAILED. That
+# breaks downloading the sentence-transformers embedding model from Hugging
+# Face on first use, and would break any outbound HTTPS call.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # Setup a non-root user
 RUN groupadd --system --gid 999 nonroot \
     && useradd --system --gid 999 --uid 999 --create-home nonroot

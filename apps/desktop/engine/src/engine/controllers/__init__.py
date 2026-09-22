@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 
 _COMMAND_GROUP_MODULES = (
+    "engine.controllers.calculate.app",
     "engine.controllers.demo.app",
     "engine.controllers.documents.app",
     "engine.controllers.eval.app",

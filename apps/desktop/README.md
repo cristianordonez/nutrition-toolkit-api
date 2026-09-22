@@ -10,9 +10,11 @@ The desktop application. Two pieces live here:
   person/clinical data locally in SQLite, and calls the
   [cloud API](../cloud-api/README.md) over HTTP to generate Nutrition Care Process
   notes from that local data.
-- `src` / `src-tauri` — the Tauri 2 desktop shell (React + TypeScript + Vite). Today
-  it is an empty frame: it opens a window and probes the engine to prove the
-  desktop → engine seam works. See [Running the desktop app](#running-the-desktop-app).
+- `src` / `src-tauri` — the Tauri 2 desktop shell (React + TypeScript + Vite). Three
+  tabs: **Notes** (drag in documents, ingest them, pick residents, generate a note
+  per resident with optional per-resident context), **Energy** (calorie, protein and
+  fluid needs from typed-in measurements) and **Tube feeding** (a formula picker and
+  a paste-ready feeding order). See [Running the desktop app](#running-the-desktop-app).
 
 Depends on the shared [`packages/ntk-core`](../../packages/ntk-core/README.md)
 library (wire DTOs, calculators, generic infra) via the uv workspace.
@@ -26,13 +28,29 @@ uv sync
 cp apps/desktop/engine/sample.env apps/desktop/engine/.env   # then fill in the values
 ```
 
-See `apps/desktop/engine/sample.env` for every setting (`NTK_OPEN_AI_API_KEY`,
-`NTK_CLOUD_API_BASE_URL` — where `engine` calls `apps/cloud-api`,
-`NTK_DOCUMENT_INGESTION_POOL_MODE`, `NTK_DOCUMENT_INGESTION_WORKERS`,
-`NTK_CLINICAL_NOTE_EXTRACTION_CONCURRENCY`, `NTK_FACTS_DATABASE_PATH`,
-`NTK_SETTINGS_DATABASE_PATH`, `NTK_LOCAL_MODEL_PATH` — unused seam for a future
-on-device model). `NTK_CONFIG_FILE` (or running from
-`apps/desktop/engine`) controls where `.env` is loaded from.
+`apps/desktop/engine/sample.env` documents every setting with its default. The
+ones that matter on a first run:
+
+| Setting | Required? | Why |
+| --- | --- | --- |
+| `NTK_OPEN_AI_API_KEY` | Yes | Document extraction. Must be non-empty (see below). |
+| `NTK_CLOUD_API_BASE_URL` | Defaults to `http://localhost:8000` | Where cloud-api is reachable. |
+| `NTK_CLOUD_API_KEY` | Yes, to generate notes | Bearer token for cloud-api. Mint with `tox -e api-key`. |
+| `NTK_USE_LOCAL_EXTRACTION` | No, defaults `false` | Extract via Ollama instead of OpenAI. |
+| `NTK_FACTS_DATABASE_PATH` | No | Overrides the platform data directory. |
+
+**Where this file is read from.** `ntk.models.base.get_env_file()` resolves
+`$NTK_CONFIG_FILE`, and otherwise falls back to `<cwd>/.env`. The Tauri shell
+sets `NTK_CONFIG_FILE` to `apps/desktop/engine/.env` when that file exists, so
+creating it keeps the desktop app's settings separate from the compose stack's.
+Without it, a command run from the repository root reads the root `.env`
+instead — which works, but means one file serves both.
+
+**Note generation needs cloud-api running.** It happens there and nowhere else,
+because the diet and nutrition-care manual lookups search a pgvector knowledge
+base that only exists cloud-side. There is deliberately no on-device note
+agent, so generation fails with a clear error rather than quietly producing a
+note without those lookups. Start it with `tox -e up` from the repository root.
 
 ## Running the desktop app
 
@@ -122,13 +140,39 @@ uv run --package engine engine --version   # from the repository root
 
 ### How the shell reaches the engine
 
-The window is intentionally empty apart from a badge showing the engine's
-version, which exists to prove the seam end to end rather than assume it.
+The frontend never shells out itself. It calls a Tauri command — `invoke("…")` —
+and [`src-tauri/src/engine.rs`](src-tauri/src/engine.rs) runs the Python CLI on
+its behalf. Keeping that boundary in one Rust file means the frontend contract
+does not change when the packaging does.
 
-The frontend never shells out itself. It calls a Tauri command
-(`invoke("engine_version")`), and [`src-tauri/src/engine.rs`](src-tauri/src/engine.rs)
-runs the Python CLI on its behalf. Keeping that boundary in one Rust file means
-the frontend contract does not change when the packaging does.
+| Tauri command | Engine CLI |
+| --- | --- |
+| `engine_version` | `engine --version` |
+| `ingest_documents` | `document ingest --files …` |
+| `list_persons` | `persons list` |
+| `generate_ncp` | `ncp generate --person-id …` |
+| `calculate_energy` | `calculate energy …` |
+| `calculate_tubefeed` | `tubefeed calculate …` |
+| `list_formulas` | `tubefeed formulas` |
+| `local_model_status` / `local_model_ensure` | `localmodel status` / `ensure` |
+
+Every one of these is declared `#[tauri::command(async)]`. A bare
+`#[tauri::command]` runs on the main thread, and each of these blocks on a
+Python subprocess — macOS composites the webview's frames on that same thread,
+so a blocking command freezes the window and no spinner ever paints.
+
+Two contracts hold this together, and breaking either is silent:
+
+- **The engine's stdout is JSON and nothing else.** Controller results print
+  there; logs, the Logfire banner and Logfire's span output all go to stderr.
+  Logfire's console exporter defaults to *stdout*, so the CLI configures it
+  onto stderr explicitly — otherwise any command that runs an agent emits span
+  lines ahead of the JSON and the shell fails to parse it.
+- **A formula is resolved by its exact catalog name.** Several products share a
+  brand and strength, so a partial name matches more than one and the engine
+  refuses it. The picker is populated from `list_formulas` for that reason, and
+  filters by package type: ready-to-hang for a continuous order, cartons for a
+  bolus one, matching what the calculator looks for.
 
 Today that file runs `uv run --package engine engine …` from the workspace root.
 It runs from the root on purpose: `logfire.configure()` looks for `.logfire/`

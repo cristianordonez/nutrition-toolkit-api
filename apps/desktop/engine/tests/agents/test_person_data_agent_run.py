@@ -96,28 +96,34 @@ def test_run_returns_empty_facts_without_calling_model_for_blank_text() -> None:
 def test_agent_output_schema_uses_semantic_clinical_payloads() -> None:
     definitions = ExtractedClinicalFacts.model_json_schema()["$defs"]
 
-    assert "WeightPayload" not in definitions
-    assert "LabPayload" not in definitions
+    # Knowledge chunks are not clinical facts and stay out of the contract.
     assert "KnowledgeChunkPayload" not in definitions
-    assert "MedicationPayload" not in definitions
-    assert "DietPayload" not in definitions
-    assert "EnteralFeedingPayload" not in definitions
     assert "DialysisPayload" in definitions
     assert "OralFeedingStatusPayload" in definitions
     assert "FoodPreferencePayload" in definitions
     assert "NutritionGoalPayload" in definitions
 
 
-def test_unknown_document_schema_uses_restricted_clinical_payloads() -> None:
+def test_unknown_document_schema_covers_every_clinical_payload() -> None:
+    """An unknown document is often the only source of a measurement.
+
+    Withholding weights, labs, and orders from the model lost those facts
+    rather than protecting anything; duplication is handled by dating every
+    fact and by preferring a deterministic weight/lab at persistence time.
+    """
     definitions = UnknownDocumentExtractionResult.model_json_schema()["$defs"]
 
-    assert "WeightPayload" not in definitions
-    assert "LabPayload" not in definitions
-    assert "MedicationPayload" not in definitions
-    assert "DietPayload" not in definitions
-    assert "EnteralFeedingPayload" not in definitions
-    assert "MealIntakePayload" in definitions
-    assert "ClinicalFactPayload" in definitions
+    for payload in (
+        "WeightPayload",
+        "LabPayload",
+        "MedicationPayload",
+        "DietPayload",
+        "EnteralFeedingPayload",
+        "MealIntakePayload",
+        "ClinicalFactPayload",
+        "WoundPayload",
+    ):
+        assert payload in definitions
 
 
 def test_dialysis_is_returned_as_a_semantic_domain_fact() -> None:

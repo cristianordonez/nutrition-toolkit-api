@@ -9,6 +9,9 @@ pub fn run() {
             engine::ingest_documents,
             engine::list_persons,
             engine::generate_ncp,
+            engine::calculate_energy,
+            engine::calculate_tubefeed,
+            engine::list_formulas,
             engine::local_model_status,
             engine::local_model_ensure,
         ])

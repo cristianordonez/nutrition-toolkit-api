@@ -19,6 +19,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from engine.models import sql  # noqa: F401 - registers every table on the metadata
 from engine.models.settings import SETTINGS
+from engine.repositories.enteral_formula_repo import EnteralFormulaRepo
 from engine.repositories.facility_repo import FacilityRepo
 
 if typing.TYPE_CHECKING:
@@ -49,3 +50,4 @@ def initialize_database() -> None:
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         FacilityRepo(session).seed_defaults()
+        EnteralFormulaRepo(session).seed_defaults()

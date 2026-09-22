@@ -67,14 +67,7 @@ class Settings(CustomBaseSettings):
     cloud_api_key: str = Field(
         default="",
         description="API key sent as a bearer token to cloud-api. Required for "
-        "note generation unless use_local_generation is set.",
-    )
-    use_local_generation: bool = Field(
-        default=False,
-        description="Generate notes in this process instead of calling "
-        "cloud-api. A development and offline escape hatch: generation belongs "
-        "cloud-side in production, and running it here loses the diet and "
-        "nutrition-care manual lookups, which search a cloud-only knowledge base.",
+        "note generation, which only cloud-api performs.",
     )
 
 

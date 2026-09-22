@@ -80,3 +80,68 @@ export const localModelEnsure = () =>
   call<{ model: string; downloaded: boolean; already_present: boolean }>(
     "local_model_ensure",
   );
+
+/** Daily nutrition needs from the shared calculator. */
+export type EnergyNeeds = {
+  bmi: number;
+  bmi_category: string | null;
+  current_weight_lb: number;
+  ideal_weight_lb: number;
+  adjusted_weight_lb: number;
+  calculation_weight_lb: number;
+  calculation_weight_kg: number;
+  weight_basis: string;
+  calorie_factor: { low: number; high: number };
+  protein_factor: { low: number; high: number };
+  fluid_factor: { low: number; high: number };
+  calories_kcal_day: { low: number; high: number };
+  protein_g_day: { low: number; high: number };
+  fluids_ml_day: { low: number; high: number };
+  mifflin_kcal_day: number;
+};
+
+export type EnergyArgs = {
+  weight: number;
+  height: number;
+  age: number;
+  gender: string;
+  goal: string;
+  activityLevel: number;
+  dialysis: boolean;
+  amputation?: number;
+};
+
+export const calculateEnergy = (args: EnergyArgs) =>
+  call<{ needs: EnergyNeeds }>("calculate_energy", { ...args }).then(
+    (result) => result.needs,
+  );
+
+/** One selectable enteral formula from the device's reference catalog. */
+export type Formula = {
+  name: string;
+  brand: string;
+  /** `ready_to_hang` | `carton` | `bottle` | `can`. */
+  package_type: string;
+  serving_size: number;
+  serving_unit: string;
+  kcal_per_ml: number | null;
+};
+
+export const listFormulas = () =>
+  call<{ formulas: Formula[] }>("list_formulas").then(
+    (result) => result.formulas,
+  );
+
+export type TubefeedArgs = {
+  kcalLow: number;
+  kcalHigh: number;
+  formula: string;
+  hours?: number;
+  bolus: boolean;
+  bolusFeeds?: number;
+  feedingRoute?: string;
+};
+
+/** Returns the recommendation text, ready to paste into a note. */
+export const calculateTubefeed = (args: TubefeedArgs) =>
+  call<string>("calculate_tubefeed", { ...args });

@@ -12,4 +12,4 @@ def test_current_controller_groups_expose_their_commands() -> None:
 
     assert len(documents.subcommands) == 1
     assert len(ncp.subcommands) == 2  # noqa: PLR2004 - generate + import
-    assert len(tubefeed.subcommands) == 1
+    assert len(tubefeed.subcommands) == 2  # noqa: PLR2004 - calculate + formulas

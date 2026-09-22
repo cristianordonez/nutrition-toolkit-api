@@ -22,7 +22,8 @@ lockfile and one virtual environment) rather than a single installable package:
   [`apps/desktop/engine`](apps/desktop/engine) (the `engine` package), runs on the
   user's device: it extracts structured clinical facts from uploaded documents and
   owns all person/clinical data locally in SQLite. `apps/desktop/src` /
-  `apps/desktop/src-tauri` hold the (not yet wired up) Tauri frontend.
+  `apps/desktop/src-tauri` hold the Tauri 2 frontend, which reaches the engine
+  through `invoke()` rather than shelling out itself.
 
 Because all members resolve into a single `uv.lock`, `uv sync` and `uv run` from the
 repository root install and run against every package at once — see below for
@@ -34,10 +35,21 @@ further details.
 ### The whole stack at once
 
 ```bash
-tox -e up          # Postgres + Redis + migrations + cloud-api, in dependency order
-tox -e api-key     # mint a key for the desktop engine, then put it in .env
+cp sample.env .env  # first run only, then fill in the values
+tox -e up           # Postgres + Redis + migrations + cloud-api, in dependency order
+tox -e api-key      # mint a key for the desktop engine, then put it in .env
 cd apps/desktop && npm run tauri dev   # the desktop window
 ```
+
+The root `.env` does double duty, which is worth knowing before you edit it:
+docker compose reads it for the `${...}` references in `docker-compose.yml`
+(`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `NTK_OPEN_AI_API_KEY`),
+*and* any engine or cloud-api process you run from the repository root picks it
+up as its settings file — `ntk.models.base.get_env_file()` resolves
+`$NTK_CONFIG_FILE`, or falls back to `<cwd>/.env`. To keep an app's settings
+separate, copy its own `sample.env` and point `NTK_CONFIG_FILE` at the result.
+See [`sample.env`](sample.env), [`apps/cloud-api/sample.env`](apps/cloud-api/sample.env)
+and [`apps/desktop/engine/sample.env`](apps/desktop/engine/sample.env).
 
 `tox -e up` waits for each service to pass its healthcheck and applies migrations
 before cloud-api starts, so the API is ready to serve when the command returns.
@@ -47,11 +59,12 @@ also drops the data volumes).
 The desktop app is not containerized on purpose: it is a native window that owns
 local SQLite databases on your machine, so it runs on the host.
 
-Two settings connect the halves. Put the key from `tox -e api-key` in
-`NTK_CLOUD_API_KEY`, and leave `NTK_USE_LOCAL_GENERATION=false` so notes are
-generated cloud-side. Setting it to `true` generates them in the engine instead —
-useful offline, but it skips the diet and nutrition-care manual lookups, which
-search a knowledge base that only exists cloud-side.
+One setting connects the halves: put the key from `tox -e api-key` in
+`NTK_CLOUD_API_KEY`. Note generation runs cloud-side only, because the diet and
+nutrition-care manual lookups search a knowledge base that exists nowhere else.
+There is deliberately no on-device note agent, so cloud-api must be running to
+generate a note — the desktop app reports that plainly rather than falling back
+to a note that would be silently missing those lookups.
 
 ### Individual packages
 

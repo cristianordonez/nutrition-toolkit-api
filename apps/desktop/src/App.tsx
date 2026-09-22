@@ -12,8 +12,17 @@ import {
   listPersons,
   supportedPaths,
 } from "./engine";
+import { EnergyPage, TubefeedPage } from "./Calculators";
 import { LocalModelPanel } from "./LocalModelPanel";
 import "./App.css";
+
+const TABS = [
+  { id: "notes", label: "Notes" },
+  { id: "energy", label: "Energy" },
+  { id: "tubefeed", label: "Tube feeding" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
 
 type EngineState =
   | { status: "checking" }
@@ -28,6 +37,7 @@ type NoteResult = { person: Person; context?: string } & (
 );
 
 function App() {
+  const [tab, setTab] = useState<TabId>("notes");
   const [engine, setEngine] = useState<EngineState>({ status: "checking" });
   const [persons, setPersons] = useState<Person[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -205,9 +215,25 @@ function App() {
     <main className="app">
       <header className="app__header">
         <h1 className="app__title">Nutrition Toolkit</h1>
+        <nav className="tabs">
+          {TABS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={`tab${tab === entry.id ? " tab--active" : ""}`}
+              onClick={() => setTab(entry.id)}
+              aria-current={tab === entry.id}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </nav>
         <EngineBadge engine={engine} />
       </header>
 
+      {tab === "energy" && <EnergyPage />}
+      {tab === "tubefeed" && <TubefeedPage />}
+      {tab === "notes" && (
       <div className="app__columns">
         <section className="panel">
           <h2 className="panel__title">Upload documents</h2>
@@ -380,6 +406,7 @@ function App() {
           )}
         </section>
       </div>
+      )}
     </main>
   );
 }

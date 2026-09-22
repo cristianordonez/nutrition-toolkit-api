@@ -23,7 +23,7 @@ _CARTON_CALORIES = 285
 
 
 def test_tubefeed_run_returns_success_output() -> None:
-    controller = CalculateTubefeedController()
+    controller = CalculateTubefeedController(LocalFormulaCatalog())
     options = CalculateTubefeedOptions(
         energy_needs=(1800, 2000),
         formula="jevity 1.5",
@@ -54,7 +54,7 @@ def test_tubefeed_run_returns_success_output() -> None:
 
 
 def test_continuous_output_places_goal_rate_before_optional_titration() -> None:
-    output = CalculateTubefeedController().run(
+    output = CalculateTubefeedController(LocalFormulaCatalog()).run(
         CalculateTubefeedOptions(
             energy_needs=(1800, 2000),
             formula="jevity 1.5",
@@ -72,7 +72,7 @@ def test_continuous_output_places_goal_rate_before_optional_titration() -> None:
 
 
 def test_continuous_titration_requires_start_and_increase() -> None:
-    output = CalculateTubefeedController().run(
+    output = CalculateTubefeedController(LocalFormulaCatalog()).run(
         CalculateTubefeedOptions(
             energy_needs=(1800, 2000),
             formula="jevity 1.5",
@@ -86,7 +86,7 @@ def test_continuous_titration_requires_start_and_increase() -> None:
 
 
 def test_tubefeed_run_calculates_bolus_feeding() -> None:
-    output = CalculateTubefeedController().run(
+    output = CalculateTubefeedController(LocalFormulaCatalog()).run(
         CalculateTubefeedOptions(
             energy_needs=(1800, 2000),
             formula="jevity 1.5",
@@ -117,7 +117,7 @@ def test_tubefeed_run_calculates_bolus_feeding() -> None:
 
 
 def test_tubefeed_output_includes_protein_supplement_totals() -> None:
-    output = CalculateTubefeedController().run(
+    output = CalculateTubefeedController(LocalFormulaCatalog()).run(
         CalculateTubefeedOptions(
             energy_needs=(1800, 2000),
             formula="jevity 1.5",
@@ -133,7 +133,7 @@ def test_tubefeed_output_includes_protein_supplement_totals() -> None:
 
 
 def test_tubefeed_run_requires_number_of_bolus_feeds() -> None:
-    output = CalculateTubefeedController().run(
+    output = CalculateTubefeedController(LocalFormulaCatalog()).run(
         CalculateTubefeedOptions(
             energy_needs=(1800, 2000),
             formula="jevity 1.5",

@@ -4,6 +4,7 @@ import argparse
 
 from engine.controllers.tubefeed.app import TubefeedControllerGroup
 from engine.controllers.tubefeed.calculate import CalculateTubefeedController
+from engine.controllers.tubefeed.formulas import FormulaListController
 from ntk.controllers.registry import COMMAND_REGISTRY
 
 
@@ -17,8 +18,9 @@ def test_tubefeed_controller_group_subcommands() -> None:
 
     assert [type(command) for command in group.subcommands] == [
         CalculateTubefeedController,
+        FormulaListController,
     ]
-    assert [command.name for command in group.subcommands] == ["calculate"]
+    assert [command.name for command in group.subcommands] == ["calculate", "formulas"]
 
 
 def test_tubefeed_controller_group_registers_subparsers() -> None:

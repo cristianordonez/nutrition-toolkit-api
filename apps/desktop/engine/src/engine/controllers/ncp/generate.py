@@ -1,14 +1,13 @@
 """Generate a Nutrition Care Process for an already-ingested person.
 
-Generation belongs cloud-side: cloud-api owns the note record and the diet and
-nutrition-care manual lookups, which search a knowledge base that only exists
-there. So this posts the request to cloud-api by default.
+Generation belongs cloud-side, and this posts the request there. cloud-api owns
+the note record and the diet and nutrition-care manual lookups, whose tools
+search a pgvector knowledge base that exists only there -- so it is the one
+agent that can produce a complete note. There is deliberately no on-device
+fallback: a second agent here would quietly generate notes missing those
+lookups, with nothing in the note to say so.
 
-``use_local_generation`` runs the note agent in this process instead. That is a
-development and offline escape hatch, not the production path -- it needs no
-server, database, or API key, but produces notes without the manual lookups.
-
-Either way the request itself is built here from persisted data, and unlike
+The request itself is built here from persisted data, and unlike
 ``demo build-context`` no files are re-ingested.
 """
 
@@ -18,7 +17,6 @@ import typing
 
 from pydantic import BaseModel, Field
 
-from engine.agents.ncp_agent import LocalNCPAgent
 from engine.clients.cloud_api_client import CloudAPIClient
 from engine.controllers.session import controller_session
 from engine.models.settings import SETTINGS
@@ -72,12 +70,10 @@ class NCPGenerateController(BaseController):
         self,
         session: Session | None = None,
         client: CloudAPIClient | None = None,
-        agent: LocalNCPAgent | None = None,
     ) -> None:
-        """Store the session and both generation backends."""
+        """Store the session and the cloud-api client."""
         self.session = session
         self.client = client
-        self.agent = agent
 
     async def run(
         self,
@@ -110,10 +106,7 @@ class NCPGenerateController(BaseController):
         )
 
     async def _generate(self, request: NCPGenerationRequest) -> tuple[str, str]:
-        """Generate the note, reporting which backend produced it."""
-        if self.agent is not None or SETTINGS.use_local_generation:
-            agent = self.agent or LocalNCPAgent()
-            return await agent.run(request), "local"
+        """Post the request to cloud-api, reporting which backend answered."""
         client = self.client or CloudAPIClient(
             str(SETTINGS.cloud_api_base_url),
             api_key=SETTINGS.cloud_api_key,

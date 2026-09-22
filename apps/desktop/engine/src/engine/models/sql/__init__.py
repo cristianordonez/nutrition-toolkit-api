@@ -45,6 +45,7 @@ from .clinical import (
     WeightContext,
 )
 from .document import Document, DocumentSource, DocumentSourceType, SourceAuthority
+from .enteral_formula import EnteralFormula, EnteralFormulaNutrient
 from .extracted_fact import ExtractedFact, ExtractionMethod, build_fact_key
 from .facility import Facility
 from .person import (
@@ -65,6 +66,8 @@ __all__ = [
     "Document",
     "DocumentSource",
     "DocumentSourceType",
+    "EnteralFormula",
+    "EnteralFormulaNutrient",
     "ExtractedFact",
     "ExtractionMethod",
     "ExtractionStatus",

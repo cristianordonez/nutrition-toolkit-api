@@ -6,6 +6,7 @@ import logging
 import typing
 
 from engine.controllers.tubefeed.calculate import CalculateTubefeedController
+from engine.controllers.tubefeed.formulas import FormulaListController
 from ntk.controllers.base import BaseControllerGroup
 from ntk.controllers.registry import register_command_group
 
@@ -21,7 +22,10 @@ class TubefeedControllerGroup(BaseControllerGroup):
 
     def __init__(self) -> None:
         """Initialize class."""
-        self._subcommands = [CalculateTubefeedController()]
+        self._subcommands = [
+            CalculateTubefeedController(),
+            FormulaListController(),
+        ]
 
     @property
     def subcommands(self) -> list[typing.Any]:

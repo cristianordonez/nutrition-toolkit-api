@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import SQLModel, col, select
 
 from engine.models.sql.clinical import (
+    DETERMINISTIC_FIRST_MODELS,
     ClinicalStatus,
     ParenteralNutritionStatus,
     PersonAllergy,
@@ -35,7 +36,7 @@ from engine.models.sql.clinical import (
     PersonWound,
 )
 from engine.models.sql.document import Document, DocumentSource
-from engine.models.sql.extracted_fact import ExtractedFact
+from engine.models.sql.extracted_fact import ExtractedFact, ExtractionMethod
 from engine.models.sql.person import (
     Person,
     PersonClinicalNote,
@@ -689,7 +690,13 @@ class PersonRepo:
                             )
                         if existing_record is not None:
                             relationship_name = self._fact_relationship_name(record)
-                            if self._incoming_state_is_older(existing_record, record):
+                            if self._incoming_state_is_older(
+                                existing_record,
+                                record,
+                            ) or self._deterministic_record_wins(
+                                existing_record,
+                                record,
+                            ):
                                 relationship = getattr(
                                     record.extracted_fact,
                                     relationship_name,
@@ -1184,6 +1191,31 @@ class PersonRepo:
             existing.extracted_fact = incoming.extracted_fact
         elif incoming.extracted_fact_id is not None:
             existing.extracted_fact_id = incoming.extracted_fact_id
+
+    @staticmethod
+    def _deterministic_record_wins(
+        existing: _ConstrainedRecord,
+        incoming: _ConstrainedRecord,
+    ) -> bool:
+        """Return whether a stored deterministic value outranks an AI one.
+
+        Weights and labs are measurements a source-specific parser reads
+        directly off the document. A model can now extract them too, which
+        matters when an unknown document is the only place a value appears --
+        but where both saw the same measurement, the parsed value is the one
+        to keep. Without this an AI misread would overwrite it, because these
+        records merge on person and date.
+        """
+        if not isinstance(existing, DETERMINISTIC_FIRST_MODELS):
+            return False
+        existing_fact = getattr(existing, "extracted_fact", None)
+        incoming_fact = getattr(incoming, "extracted_fact", None)
+        if existing_fact is None or incoming_fact is None:
+            return False
+        return (
+            existing_fact.extraction_method is not ExtractionMethod.AI
+            and incoming_fact.extraction_method is ExtractionMethod.AI
+        )
 
     @staticmethod
     def _incoming_state_is_older(

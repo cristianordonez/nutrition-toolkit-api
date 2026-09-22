@@ -11,6 +11,16 @@
 //! `tauri.conf.json`, and swap the `Command` below for the shell plugin's
 //! sidecar API. The frontend calls `invoke()` either way, so that swap stays
 //! contained in this file.
+//!
+//! Every command here is declared `#[tauri::command(async)]`. A bare
+//! `#[tauri::command]` runs the function *on the main thread*, and each of
+//! these blocks on `Command::output()` until a Python subprocess exits --
+//! seconds for a calculation, minutes for an ingest or a note. macOS renders
+//! the webview out of process but still composites its frames on the host's
+//! main thread, so a blocking command freezes the window: React mounts its
+//! spinner, no frame is ever presented, and the busy state is gone again
+//! before the UI repaints. `(async)` moves the call onto the multi-threaded
+//! async runtime, which keeps the window painting while the engine works.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -78,8 +88,11 @@ fn run(args: &[&str]) -> Result<EngineOutput, String> {
 
 /// Run the engine and parse its stdout as JSON.
 ///
-/// Controller results print as JSON on stdout; logging and the Logfire banner
-/// go to stderr, so stdout parses cleanly on its own.
+/// Controller results print as JSON on stdout, and every other stream -- logs,
+/// the Logfire banner, and Logfire's span output -- is kept on stderr so stdout
+/// parses cleanly. Anything that writes to stdout on the Python side breaks
+/// this, so a parse failure quotes what actually arrived rather than only
+/// naming the offset.
 fn run_json(args: &[&str]) -> Result<serde_json::Value, String> {
     let output = run(args)?;
     if output.exit_code != 0 {
@@ -92,8 +105,27 @@ fn run_json(args: &[&str]) -> Result<serde_json::Value, String> {
         };
         return Err(format!("engine failed ({}): {detail}", output.exit_code));
     }
-    serde_json::from_str(&output.stdout)
-        .map_err(|error| format!("could not parse engine output as JSON ({error})"))
+    serde_json::from_str(&output.stdout).map_err(|error| {
+        format!(
+            "could not parse engine output as JSON ({error}). stdout began: {}",
+            preview(&output.stdout)
+        )
+    })
+}
+
+/// The opening of a stream, for error messages, capped so a whole note or a
+/// long traceback cannot flood the UI. Truncates on a character boundary.
+fn preview(text: &str) -> String {
+    const LIMIT: usize = 200;
+    if text.is_empty() {
+        return "(nothing)".to_string();
+    }
+    let head: String = text.chars().take(LIMIT).collect();
+    if head.len() < text.len() {
+        format!("{head}…")
+    } else {
+        head
+    }
 }
 
 /// The last non-empty, non-indented line, which for a Python traceback is the
@@ -109,7 +141,7 @@ fn last_meaningful_line(stderr: &str) -> String {
 }
 
 /// Report the engine's version, proving the desktop shell can reach it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn engine_version() -> Result<String, String> {
     let output = run(&["--version"])?;
     if output.exit_code != 0 {
@@ -122,7 +154,7 @@ pub fn engine_version() -> Result<String, String> {
 }
 
 /// Ingest documents from disk, returning what landed.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ingest_documents(paths: Vec<String>) -> Result<serde_json::Value, String> {
     if paths.is_empty() {
         return Err("Choose at least one file to upload.".to_string());
@@ -133,7 +165,7 @@ pub fn ingest_documents(paths: Vec<String>) -> Result<serde_json::Value, String>
 }
 
 /// List every resident persisted in the local facts database.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_persons() -> Result<serde_json::Value, String> {
     run_json(&["persons", "list"])
 }
@@ -144,7 +176,7 @@ pub fn list_persons() -> Result<serde_json::Value, String> {
 /// for the review or something to emphasise. Blank input is dropped rather
 /// than passed as an empty flag, which the prompt would treat as a real but
 /// contentless instruction.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn generate_ncp(
     person_id: i64,
     additional_context: Option<String>,
@@ -160,8 +192,111 @@ pub fn generate_ncp(
     run_json(&args)
 }
 
+/// Calculate daily nutrition needs from typed-in measurements.
+#[tauri::command(async)]
+pub fn calculate_energy(
+    weight: f64,
+    height: f64,
+    age: i64,
+    gender: String,
+    goal: String,
+    activity_level: f64,
+    dialysis: bool,
+    amputation: Option<f64>,
+) -> Result<serde_json::Value, String> {
+    let (weight, height, age) = (weight.to_string(), height.to_string(), age.to_string());
+    let activity = activity_level.to_string();
+    let mut args = vec![
+        "calculate",
+        "energy",
+        "--weight",
+        &weight,
+        "--height",
+        &height,
+        "--age",
+        &age,
+        "--gender",
+        &gender,
+        "--goal",
+        &goal,
+        "--activity-level",
+        &activity,
+    ];
+    if dialysis {
+        args.push("--dialysis");
+    }
+    let amputation = amputation.map(|value| value.to_string());
+    if let Some(value) = amputation.as_deref() {
+        args.extend(["--amputation", value]);
+    }
+    run_json(&args)
+}
+
+/// List the enteral formulas this device can order.
+///
+/// Backs the formula picker. The engine resolves a formula by its exact
+/// catalog name, so the UI must offer these names rather than let a reviewer
+/// type one: several products share a brand and strength, and a partial name
+/// matches more than one.
+#[tauri::command(async)]
+pub fn list_formulas() -> Result<serde_json::Value, String> {
+    run_json(&["tubefeed", "formulas"])
+}
+
+/// Build a tube-feeding recommendation.
+///
+/// Returns the recommendation as text rather than JSON: the engine renders a
+/// sentence meant to be pasted straight into a note, and reformatting it here
+/// would only risk changing clinical wording.
+#[tauri::command(async)]
+pub fn calculate_tubefeed(
+    kcal_low: i64,
+    kcal_high: i64,
+    formula: String,
+    hours: Option<i64>,
+    bolus: bool,
+    bolus_feeds: Option<i64>,
+    feeding_route: Option<String>,
+) -> Result<String, String> {
+    let (low, high) = (kcal_low.to_string(), kcal_high.to_string());
+    let mut args = vec![
+        "tubefeed",
+        "calculate",
+        "--energy-needs",
+        &low,
+        &high,
+        "--formula",
+        &formula,
+    ];
+    let hours = hours.map(|value| value.to_string());
+    if let Some(value) = hours.as_deref() {
+        args.extend(["--n-hours", value]);
+    }
+    if bolus {
+        args.push("--bolus");
+    }
+    let feeds = bolus_feeds.map(|value| value.to_string());
+    if let Some(value) = feeds.as_deref() {
+        args.extend(["--n-bolus-feeds", value]);
+    }
+    if let Some(route) = feeding_route.as_deref().filter(|r| !r.is_empty()) {
+        args.extend(["--feeding-route", route]);
+    }
+
+    let output = run(&args)?;
+    if output.exit_code != 0 {
+        let detail = if output.stderr.is_empty() {
+            output.stdout.clone()
+        } else {
+            last_meaningful_line(&output.stderr)
+        };
+        return Err(format!("engine failed ({}): {detail}", output.exit_code));
+    }
+    Ok(output.stdout)
+}
+
 /// Report whether on-device extraction is ready on this machine.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn local_model_status() -> Result<serde_json::Value, String> {
     run_json(&["localmodel", "status"])
 }
@@ -172,7 +307,7 @@ pub fn local_model_status() -> Result<serde_json::Value, String> {
 /// model. Progress currently goes to the engine's stderr rather than back to
 /// the UI; streaming it would mean emitting Tauri events from a spawned child
 /// instead of capturing output in one shot.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn local_model_ensure() -> Result<serde_json::Value, String> {
     run_json(&["localmodel", "ensure"])
 }

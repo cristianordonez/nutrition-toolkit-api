@@ -37,7 +37,7 @@ def test_ncp_search_only_uses_finalized_ncps_scoped_to_one_person() -> None:
 
     assert matches == []
     assert "WHERE n.status = :finalized_status" in session.sql
-    assert "n.person_identifier = :person_identifier" in session.sql
+    assert "n.person_identifier = CAST(:person_identifier AS text)" in session.sql
     assert session.params["finalized_status"] == "finalized"
     assert session.params["person_identifier"] == "R1"
 
