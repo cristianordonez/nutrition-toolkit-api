@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import pathlib
 import typing
 from datetime import date
 from types import SimpleNamespace
@@ -18,6 +17,7 @@ from api.agents.ncp_agent import (
 from api.agents.tools import NCPToolDependencies
 from api.models.ncp_context import BudgetedNCPContext
 from api.models.rag import RagSearchMatch
+from ntk.agents import ncp_instructions
 from ntk.models.derived_calculations import (
     AnthropometricCalculations,
     DerivedPersonCalculations,
@@ -166,10 +166,8 @@ def test_ncp_agent_requires_tool_dependencies() -> None:
 
 
 def test_assessment_prompt_defines_budgeted_context_contract() -> None:
-    prompt = (
-        pathlib.Path(__file__).parents[2]
-        / "src/api/agents/prompts/ncp_prompt.md"
-    ).read_text(encoding="utf-8")
+    # The prompt is shared with the desktop engine, so it lives in ntk-core.
+    prompt = ncp_instructions()
 
     assert "## Inputs and evidence" in prompt
     assert "`person`" in prompt

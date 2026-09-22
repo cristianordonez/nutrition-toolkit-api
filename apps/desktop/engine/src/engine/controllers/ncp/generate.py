@@ -1,10 +1,9 @@
 """Generate a Nutrition Care Process for an already-ingested person.
 
-Composes the pieces that already exist: the person's persisted detail, the
-deterministic context budgeter that builds the wire request, and the HTTP
-client that posts it to cloud-api. Unlike ``demo build-context`` this does not
-re-ingest any files -- it works from what is already in the local database and
-returns the generated note.
+Composes the person's persisted detail, the deterministic context budgeter
+that builds the request, and the on-device note agent. Generation runs in this
+process against OpenAI, so no cloud-api server, database, or API key is
+involved. Unlike ``demo build-context`` this does not re-ingest any files.
 """
 
 from __future__ import annotations
@@ -13,9 +12,8 @@ import typing
 
 from pydantic import BaseModel, Field
 
-from engine.clients.cloud_api_client import CloudAPIClient
+from engine.agents.ncp_agent import LocalNCPAgent
 from engine.controllers.session import controller_session
-from engine.models.settings import SETTINGS
 from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
 from engine.repositories.facility_repo import FacilityRepo
 from engine.repositories.person_repo import PersonRepo
@@ -23,7 +21,6 @@ from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
 from ntk.controllers.base import BaseController
 from ntk.models.base import ConsoleRenderableModel
-from ntk.models.ncp_public import NutritionCareProcessPublic  # noqa: TC001
 from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
@@ -41,9 +38,12 @@ class NCPGenerateOptions(BaseModel):
 
 
 class NCPGenerateResult(ConsoleRenderableModel):
-    """The Nutrition Care Process cloud-api generated."""
+    """The generated Nutrition Care Process note."""
 
-    ncp: NutritionCareProcessPublic
+    person_id: int
+    person_name: str
+    person_identifier: str
+    note_text: str
 
     def to_console(self) -> str:
         """Render the generated note as formatted JSON."""
@@ -54,23 +54,23 @@ class NCPGenerateController(BaseController):
     """Generate a Nutrition Care Process for one persisted person."""
 
     name = "generate"
-    help = "Generate a Nutrition Care Process for a person via cloud-api"
+    help = "Generate a Nutrition Care Process note for a person"
     options_model = NCPGenerateOptions
 
     def __init__(
         self,
         session: Session | None = None,
-        client: CloudAPIClient | None = None,
+        agent: LocalNCPAgent | None = None,
     ) -> None:
-        """Store the optional session and the cloud-api client."""
+        """Store the optional session and the on-device note agent."""
         self.session = session
-        self.client = client or CloudAPIClient(str(SETTINGS.cloud_api_base_url))
+        self.agent = agent or LocalNCPAgent()
 
     async def run(
         self,
         options: NCPGenerateOptions,
     ) -> Output[NCPGenerateResult]:
-        """Build this person's generation request and send it to cloud-api."""
+        """Build this person's generation request and generate the note."""
         with controller_session(self.session) as session:
             person_service = PersonService(
                 PersonRepo(session),
@@ -82,9 +82,14 @@ class NCPGenerateController(BaseController):
                 .budget(detail, additional_context=options.additional_context)
                 .request
             )
-        ncp = await self.client.generate_ncp(request)
+        note_text = await self.agent.run(request)
         return Output(
-            result=NCPGenerateResult(ncp=ncp),
+            result=NCPGenerateResult(
+                person_id=options.person_id,
+                person_name=request.person.name,
+                person_identifier=request.person_identifier,
+                note_text=note_text,
+            ),
             controller=self.name,
             exit_code=0,
         )

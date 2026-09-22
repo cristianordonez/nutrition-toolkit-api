@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .calculator_tools import CALCULATOR_TOOLSET, CalculatorToolDependencies
+from ntk.agents import CALCULATOR_TOOLSET, CalculatorToolDependencies
+
 from .knowledge_search_tools import (
     KNOWLEDGE_SEARCH_TOOLSET,
     KnowledgeSearchToolDependencies,

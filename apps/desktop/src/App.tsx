@@ -17,19 +17,24 @@ type EngineState =
   | { status: "ready"; version: string }
   | { status: "unavailable"; detail: string };
 
+/** One resident's generation outcome, kept so a failure does not hide others. */
+type NoteResult =
+  | { person: Person; status: "pending" }
+  | { person: Person; status: "done"; note: GeneratedNCP }
+  | { person: Person; status: "failed"; detail: string };
+
 function App() {
   const [engine, setEngine] = useState<EngineState>({ status: "checking" });
   const [persons, setPersons] = useState<Person[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const [files, setFiles] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<IngestSummary | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const [note, setNote] = useState<GeneratedNCP | null>(null);
+  const [results, setResults] = useState<NoteResult[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [noteError, setNoteError] = useState<string | null>(null);
 
   const refreshPersons = useCallback(async () => {
     try {
@@ -49,6 +54,22 @@ function App() {
         setEngine({ status: "unavailable", detail: error.message }),
       );
   }, [refreshPersons]);
+
+  function toggle(personId: number) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(personId)) next.add(personId);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((current) =>
+      current.size === persons.length
+        ? new Set()
+        : new Set(persons.map((person) => person.id)),
+    );
+  }
 
   async function chooseFiles() {
     const chosen = await open({
@@ -79,19 +100,42 @@ function App() {
     }
   }
 
-  async function generate(personId: number) {
-    setSelectedId(personId);
+  /**
+   * Generate one resident at a time. Notes are long model calls, and running
+   * them together would make a failure hard to attribute and hammer the API;
+   * each result lands as it finishes so a bad one never hides the rest.
+   */
+  async function generateSelected() {
+    const chosen = persons.filter((person) => selected.has(person.id));
+    if (chosen.length === 0 || generating) return;
     setGenerating(true);
-    setNote(null);
-    setNoteError(null);
-    try {
-      setNote(await generateNcp(personId));
-    } catch (error) {
-      setNoteError((error as Error).message);
-    } finally {
-      setGenerating(false);
+    setResults(chosen.map((person) => ({ person, status: "pending" })));
+
+    for (const person of chosen) {
+      try {
+        const note = await generateNcp(person.id);
+        setResults((current) =>
+          current.map((entry) =>
+            entry.person.id === person.id
+              ? { person, status: "done", note }
+              : entry,
+          ),
+        );
+      } catch (error) {
+        const detail = (error as Error).message;
+        setResults((current) =>
+          current.map((entry) =>
+            entry.person.id === person.id
+              ? { person, status: "failed", detail }
+              : entry,
+          ),
+        );
+      }
     }
+    setGenerating(false);
   }
+
+  const done = results.filter((entry) => entry.status !== "pending").length;
 
   return (
     <main className="app">
@@ -123,7 +167,9 @@ function App() {
               className="btn btn--primary"
               disabled={files.length === 0 || uploading}
             >
-              {uploading ? "Ingesting…" : `Ingest ${files.length || ""}`.trim()}
+              {uploading
+                ? "Ingesting…"
+                : `Ingest${files.length ? ` ${files.length}` : ""}`}
             </button>
           </form>
 
@@ -144,49 +190,92 @@ function App() {
           )}
           {uploadError && <p className="notice notice--bad">{uploadError}</p>}
 
-          <h2 className="panel__title panel__title--spaced">
-            On-device extraction
-          </h2>
-          <LocalModelPanel />
+          <div className="panel__heading panel__title--spaced">
+            <h2 className="panel__title">
+              Residents{persons.length > 0 && ` (${persons.length})`}
+            </h2>
+            {persons.length > 0 && (
+              <button type="button" className="linkbtn" onClick={toggleAll}>
+                {selected.size === persons.length ? "Clear" : "Select all"}
+              </button>
+            )}
+          </div>
 
-          <h2 className="panel__title panel__title--spaced">
-            Residents{persons.length > 0 && ` (${persons.length})`}
-          </h2>
           {persons.length === 0 ? (
             <p className="hint">No residents yet — ingest a document first.</p>
           ) : (
             <ul className="residents">
               {persons.map((person) => (
                 <li key={person.id}>
-                  <button
-                    type="button"
-                    className={`resident${
-                      selectedId === person.id ? " resident--active" : ""
-                    }`}
-                    onClick={() => generate(person.id)}
-                    disabled={generating}
-                  >
+                  <label className="resident">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(person.id)}
+                      onChange={() => toggle(person.id)}
+                      disabled={generating}
+                    />
                     <span className="resident__name">{person.name}</span>
                     {person.person_identifier && (
                       <span className="resident__id">
                         {person.person_identifier}
                       </span>
                     )}
-                  </button>
+                  </label>
                 </li>
               ))}
             </ul>
           )}
+
+          <button
+            type="button"
+            className="btn btn--primary btn--block"
+            onClick={generateSelected}
+            disabled={selected.size === 0 || generating}
+          >
+            {generating
+              ? `Generating ${done + 1} of ${results.length}…`
+              : `Generate ${selected.size || ""} note${
+                  selected.size === 1 ? "" : "s"
+                }`.replace("  ", " ")}
+          </button>
+
+          <h2 className="panel__title panel__title--spaced">
+            On-device extraction
+          </h2>
+          <LocalModelPanel />
         </section>
 
         <section className="panel panel--note">
-          <h2 className="panel__title">Nutrition Care Process note</h2>
-          {generating && <p className="hint">Generating…</p>}
-          {noteError && <p className="notice notice--bad">{noteError}</p>}
-          {!generating && !noteError && !note && (
-            <p className="hint">Select a resident to generate a note.</p>
+          <h2 className="panel__title">
+            Notes{results.length > 0 && ` (${done}/${results.length})`}
+          </h2>
+          {results.length === 0 ? (
+            <p className="hint">
+              Select one or more residents, then generate.
+            </p>
+          ) : (
+            results.map((entry) => (
+              <article key={entry.person.id} className="noteblock">
+                <h3 className="noteblock__name">
+                  {entry.person.name}
+                  {entry.person.person_identifier && (
+                    <span className="resident__id">
+                      {entry.person.person_identifier}
+                    </span>
+                  )}
+                </h3>
+                {entry.status === "pending" && (
+                  <p className="hint">Waiting…</p>
+                )}
+                {entry.status === "failed" && (
+                  <p className="notice notice--bad">{entry.detail}</p>
+                )}
+                {entry.status === "done" && (
+                  <pre className="note">{entry.note.note_text}</pre>
+                )}
+              </article>
+            ))
           )}
-          {note && <pre className="note">{note.note_text}</pre>}
         </section>
       </div>
     </main>

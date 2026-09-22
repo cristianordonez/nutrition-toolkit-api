@@ -7,7 +7,7 @@ import typing
 from pydantic_ai import Agent, FunctionToolset
 from pydantic_ai.models.test import TestModel
 
-from api.agents.tools.calculator_tools import (
+from ntk.agents.calculator_tools import (
     CALCULATOR_TOOLSET,
     CalculatorToolDependencies,
 )

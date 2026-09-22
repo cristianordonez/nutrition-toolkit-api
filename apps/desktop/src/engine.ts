@@ -18,11 +18,10 @@ export type IngestSummary = {
 
 /** A generated Nutrition Care Process note. */
 export type GeneratedNCP = {
-  id: number;
+  person_id: number;
+  person_name: string;
   person_identifier: string;
   note_text: string;
-  status: string;
-  created_at: string;
 };
 
 /**
@@ -46,9 +45,7 @@ export const listPersons = () =>
   call<{ persons: Person[] }>("list_persons").then((result) => result.persons);
 
 export const generateNcp = (personId: number) =>
-  call<{ ncp: GeneratedNCP }>("generate_ncp", { personId }).then(
-    (result) => result.ncp,
-  );
+  call<GeneratedNCP>("generate_ncp", { personId });
 
 /** On-device extraction readiness for this machine. */
 export type LocalModelStatus = {

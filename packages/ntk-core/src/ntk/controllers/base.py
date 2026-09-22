@@ -57,7 +57,11 @@ class BaseController(ABC, typing.Generic[T]):
                     kwargs["choices"] = typing.get_args(annotation)
                 elif origin is list:
                     kwargs["nargs"] = "+"
-                    kwargs["type"] = default_args[0]
+                    # argparse calls `type` as a converter, and `typing.Any` is
+                    # not callable. A list[Any] field takes whatever the shell
+                    # gives us, so leave the values as strings.
+                    if default_args[0] is not typing.Any:
+                        kwargs["type"] = default_args[0]
                 elif origin is tuple:
                     kwargs["nargs"] = len(default_args)
                     kwargs["type"] = default_args[0]

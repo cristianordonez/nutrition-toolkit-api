@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import pathlib
 import typing
 
 import logfire
@@ -17,6 +16,7 @@ from api.agents.tools import (
     NCPToolDependencies,
 )
 from api.models.settings import SETTINGS
+from ntk.agents import ncp_instructions
 
 if typing.TYPE_CHECKING:
     from api.models.ncp_context import BudgetedNCPContext
@@ -28,14 +28,13 @@ logfire.instrument_pydantic_ai()
 NCP_MODEL = "gpt-5.6-terra"
 
 _NCP_GENERATION_TIMEOUT_SECONDS = 180
-_PROMPT_PATH = pathlib.Path(__file__).parent / "prompts" / "ncp_prompt.md"
 _provider = OpenAIProvider(api_key=SETTINGS.open_ai_api_key)
 _model = OpenAIResponsesModel(NCP_MODEL, provider=_provider)
 ncp_agent = Agent(
     _model,
     output_type=str,
     deps_type=NCPToolDependencies,
-    instructions=_PROMPT_PATH.read_text(encoding="utf-8"),
+    instructions=ncp_instructions(),
     toolsets=[CALCULATOR_TOOLSET, KNOWLEDGE_SEARCH_TOOLSET],
 )
 

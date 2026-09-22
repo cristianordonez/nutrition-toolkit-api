@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import pathlib
 import typing
 
 from pydantic import BaseModel
@@ -30,7 +32,6 @@ from ntk.models.output import Output
 from ntk.utils.parallel import ParallelPoolHandler
 
 if typing.TYPE_CHECKING:
-    import pathlib
     from collections.abc import Sequence
     from datetime import date
 
@@ -51,6 +52,37 @@ def _ingest_document(path: pathlib.Path) -> PersonTransformationResult:
             facility_resolver=facility_resolver,
         )
         return asyncio.run(service.ingest(files=[path]))
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class LocalFileUpload:
+    """Adapt a file on disk to the upload protocol the pipeline expects.
+
+    The CLI (and the desktop app behind it) supplies paths, while the upload
+    machinery was written for request uploads. Wrapping here keeps one
+    ingestion path for both.
+    """
+
+    path: pathlib.Path
+
+    @property
+    def filename(self) -> str:
+        """Return the file's name."""
+        return self.path.name
+
+    async def read(self) -> bytes:
+        """Return the file's contents."""
+        return self.path.read_bytes()
+
+
+def _as_uploads(files: Sequence[typing.Any]) -> list[typing.Any]:
+    """Wrap any plain path in `files`, leaving real uploads untouched."""
+    return [
+        LocalFileUpload(pathlib.Path(file))
+        if isinstance(file, (str, pathlib.Path))
+        else file
+        for file in files
+    ]
 
 
 class DocumentIngestOptions(BaseModel):
@@ -116,7 +148,7 @@ class DocumentIngestController(BaseController):
     ) -> Output[DocumentIngestResult]:
         """Materialize uploads and run the document ETL pipeline."""
         async with materialize_uploads(
-            typing.cast("Sequence[ReadableUpload]", options.files),
+            typing.cast("Sequence[ReadableUpload]", _as_uploads(options.files)),
             UploadRequirements(
                 allowed_suffixes=frozenset({".csv", ".pdf", ".txt"}),
                 file_description="PDF, CSV, or text file",

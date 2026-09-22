@@ -268,3 +268,59 @@ body {
 .local__label {
   color: var(--text-muted);
 }
+
+.panel__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.linkbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.btn--block {
+  width: 100%;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.resident {
+  cursor: pointer;
+}
+
+.resident input {
+  margin: 0 2px 0 0;
+  flex: 0 0 auto;
+}
+
+.resident__name {
+  flex: 1;
+}
+
+.noteblock {
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.noteblock:last-child {
+  border-bottom: 0;
+}
+
+.noteblock__name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
