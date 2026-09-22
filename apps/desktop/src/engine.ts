@@ -44,8 +44,22 @@ export const ingestDocuments = (paths: string[]) =>
 export const listPersons = () =>
   call<{ persons: Person[] }>("list_persons").then((result) => result.persons);
 
-export const generateNcp = (personId: number) =>
-  call<GeneratedNCP>("generate_ncp", { personId });
+export const generateNcp = (personId: number, additionalContext?: string) =>
+  call<GeneratedNCP>("generate_ncp", { personId, additionalContext });
+
+/** File types the document extractors accept. */
+export const SUPPORTED_EXTENSIONS = ["pdf", "csv", "txt"] as const;
+
+/** Keep only paths the extractors can actually read. */
+export function supportedPaths(paths: string[]): string[] {
+  return paths.filter((path) => {
+    const extension = path.split(".").pop()?.toLowerCase();
+    return (
+      extension !== undefined &&
+      (SUPPORTED_EXTENSIONS as readonly string[]).includes(extension)
+    );
+  });
+}
 
 /** On-device extraction readiness for this machine. */
 export type LocalModelStatus = {

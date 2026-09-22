@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   type GeneratedNCP,
   type IngestSummary,
   type Person,
+  SUPPORTED_EXTENSIONS,
   engineVersion,
   generateNcp,
   ingestDocuments,
   listPersons,
+  supportedPaths,
 } from "./engine";
 import { LocalModelPanel } from "./LocalModelPanel";
 import "./App.css";
@@ -35,6 +38,13 @@ function App() {
 
   const [results, setResults] = useState<NoteResult[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [context, setContext] = useState("");
+
+  const [dragging, setDragging] = useState(false);
+  // The drop handler runs outside React's render, so it reads the latest
+  // uploading state through a ref rather than a stale closure.
+  const uploadingRef = useRef(false);
+  uploadingRef.current = uploading;
 
   const refreshPersons = useCallback(async () => {
     try {
@@ -54,6 +64,35 @@ function App() {
         setEngine({ status: "unavailable", detail: error.message }),
       );
   }, [refreshPersons]);
+
+  /**
+   * Tauri intercepts native drag-and-drop, so HTML5 drop events never fire in
+   * the webview. Its own event is also the only one that carries real
+   * filesystem paths, which is what the engine needs.
+   */
+  useEffect(() => {
+    const pending = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "enter" || event.payload.type === "over") {
+        if (!uploadingRef.current) setDragging(true);
+        return;
+      }
+      setDragging(false);
+      if (event.payload.type !== "drop" || uploadingRef.current) return;
+
+      const accepted = supportedPaths(event.payload.paths);
+      const rejected = event.payload.paths.length - accepted.length;
+      setUploadResult(null);
+      setUploadError(
+        rejected > 0
+          ? `Ignored ${rejected} file${rejected === 1 ? "" : "s"} — only ${SUPPORTED_EXTENSIONS.join(", ")} are supported.`
+          : null,
+      );
+      if (accepted.length > 0) setFiles(accepted);
+    });
+    return () => {
+      void pending.then((unlisten) => unlisten());
+    };
+  }, []);
 
   function toggle(personId: number) {
     setSelected((current) => {
@@ -113,7 +152,7 @@ function App() {
 
     for (const person of chosen) {
       try {
-        const note = await generateNcp(person.id);
+        const note = await generateNcp(person.id, context);
         setResults((current) =>
           current.map((entry) =>
             entry.person.id === person.id
@@ -148,9 +187,22 @@ function App() {
         <section className="panel">
           <h2 className="panel__title">Upload documents</h2>
           <form className="upload" onSubmit={submitUpload}>
-            <button type="button" className="btn" onClick={chooseFiles}>
-              Choose files…
-            </button>
+            <div
+              className={`dropzone${dragging ? " dropzone--active" : ""}`}
+              onClick={chooseFiles}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") chooseFiles();
+              }}
+            >
+              <span className="dropzone__label">
+                {dragging ? "Drop to add" : "Drop files here"}
+              </span>
+              <span className="dropzone__hint">
+                or click to browse · {SUPPORTED_EXTENSIONS.join(", ")}
+              </span>
+            </div>
 
             {files.length > 0 && (
               <ul className="filelist">
@@ -225,6 +277,18 @@ function App() {
               ))}
             </ul>
           )}
+
+          <label className="field">
+            <span className="field__label">Context for these notes</span>
+            <textarea
+              className="field__input"
+              rows={2}
+              value={context}
+              onChange={(event) => setContext(event.target.value)}
+              placeholder="e.g. quarterly review, focus on recent weight loss"
+              disabled={generating}
+            />
+          </label>
 
           <button
             type="button"

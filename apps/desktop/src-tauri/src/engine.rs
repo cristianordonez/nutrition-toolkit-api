@@ -138,11 +138,26 @@ pub fn list_persons() -> Result<serde_json::Value, String> {
     run_json(&["persons", "list"])
 }
 
-/// Generate a Nutrition Care Process for one resident via cloud-api.
+/// Generate a Nutrition Care Process for one resident.
+///
+/// `additional_context` is the reviewer's own steer for this note -- a reason
+/// for the review or something to emphasise. Blank input is dropped rather
+/// than passed as an empty flag, which the prompt would treat as a real but
+/// contentless instruction.
 #[tauri::command]
-pub fn generate_ncp(person_id: i64) -> Result<serde_json::Value, String> {
+pub fn generate_ncp(
+    person_id: i64,
+    additional_context: Option<String>,
+) -> Result<serde_json::Value, String> {
     let person_id = person_id.to_string();
-    run_json(&["ncp", "generate", "--person-id", &person_id])
+    let context = additional_context.unwrap_or_default();
+    let context = context.trim();
+
+    let mut args = vec!["ncp", "generate", "--person-id", &person_id];
+    if !context.is_empty() {
+        args.extend(["--additional-context", context]);
+    }
+    run_json(&args)
 }
 
 /// Report whether on-device extraction is ready on this machine.
@@ -208,8 +223,20 @@ mod tests {
     /// succeeding, since the UI renders whatever comes back.
     #[test]
     fn generate_ncp_reports_a_missing_person() {
-        let error = generate_ncp(987_654).expect_err("unknown person should fail");
+        let error =
+            generate_ncp(987_654, None).expect_err("unknown person should fail");
         assert!(error.contains("engine failed"), "got: {error}");
+    }
+
+    /// Whitespace-only context must not reach the model as an instruction.
+    #[test]
+    fn blank_context_is_not_passed_through() {
+        let error = generate_ncp(987_654, Some("   \n ".to_string()))
+            .expect_err("unknown person should still fail");
+        assert!(
+            !error.contains("--additional-context"),
+            "blank context should have been dropped: {error}"
+        );
     }
 
     /// Status has to answer even with no Ollama installed, because the panel
