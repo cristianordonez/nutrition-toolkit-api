@@ -2,15 +2,15 @@ r"""Developer workflow: extract local documents, print NCP-generation requests.
 
 Replaces the old (pre-split) one-call browser demo, which ran extraction and
 generation in a single process -- that stopped being possible once
-extraction (device) and generation (cloud) became separate apps/processes
+extraction (device) and generation (server) became separate apps/processes
 (see the split refactor plan, decision 8). This command runs the real
 extraction pipeline and prints the exact JSON payload the real
 ``POST /nutrition-care-processes/generate`` endpoint expects for each
 affected person, so a developer can pipe it into ``curl`` against a running
-cloud-api instance:
+server instance:
 
     engine demo build-context report.pdf > context.json
-    curl -X POST $CLOUD_API_URL/nutrition-care-processes/generate \
+    curl -X POST $SERVER_URL/nutrition-care-processes/generate \
         -H 'content-type: application/json' -d @context.json
 """
 
@@ -25,18 +25,16 @@ import typing
 
 from pydantic import BaseModel, Field
 
+from engine.controllers.base import BaseController
 from engine.controllers.session import controller_session
+from engine.models.base import ConsoleRenderableModel
+from engine.models.ncp_context import NCPGenerationRequest  # noqa: TC001
+from engine.models.output import Output
 from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
 from engine.pipelines.person.ingestion.pipeline import PersonIngestionPipeline
-from engine.repositories.clinical_note_repo import ClinicalNoteRepo
-from engine.repositories.facility_repo import FacilityRepo
+from engine.repositories.clinical_source_repo import ClinicalSourceRepo
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
-from ntk.controllers.base import BaseController
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.ncp_context import NCPGenerationRequest  # noqa: TC001
-from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -79,22 +77,17 @@ class BuildContextController(BaseController):
     ) -> Output[BuildContextResult]:
         """Extract the supplied documents and build one request per person."""
         with controller_session(self.session) as session:
-            facility_resolver = FacilityResolver(FacilityRepo(session))
-            person_service = PersonService(
-                PersonRepo(session),
-                facility_resolver,
-            )
+            person_service = PersonService(PersonRepo(session))
             pipeline = PersonIngestionPipeline(
-                clinical_note_repository=ClinicalNoteRepo(session),
+                clinical_source_repository=ClinicalSourceRepo(session),
                 person_service=person_service,
-                facility_resolver=facility_resolver,
             )
             result = await pipeline.ingest(files=options.files)
             person_ids = sorted(
                 {
                     fact.person_id
                     for document in result.documents
-                    for fact in document.extracted_facts
+                    for fact in document.clinical_facts
                     if fact.person_id is not None
                 },
             )

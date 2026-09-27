@@ -35,14 +35,13 @@ def _transformed_document(filename: str) -> TransformedDocument:
     return TransformedDocument(
         document=Document(
             filename=filename,
-            file_type="pdf",
+            media_type="application/pdf",
             checksum=filename,
             storage_uri=filename,
             document_type="clinical-note",
         ),
-        document_sources=[],
-        extracted_facts=[],
-        related_models=[],
+        clinical_sources=[],
+        clinical_facts=[],
     )
 
 

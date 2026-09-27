@@ -1,215 +1,73 @@
+"""Persistence relationships for generic clinical sources and facts."""
+
 from __future__ import annotations
 
-import hashlib
-import json
-from datetime import UTC, datetime
+from sqlmodel import Session, SQLModel, create_engine, select
 
-import pytest
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, SQLModel, create_engine
-
-from engine.models.sql.document import Document, DocumentSource, DocumentSourceType
-from engine.models.sql.extracted_fact import ExtractedFact, build_fact_key
-from engine.models.sql.facility import Facility
-from engine.models.sql.person import (
-    ClinicalFactType,
-    Person,
-    PersonClinicalFact,
-    PersonEdema,
-    PersonLab,
-    PersonMealIntake,
-    PersonWeight,
-    PersonWound,
-)
+import engine.models.sql  # noqa: F401
+from engine.models.sql.clinical_fact import ClinicalFact
+from engine.models.sql.clinical_source import ClinicalSource, ClinicalSourceKind
+from engine.models.sql.document import Document
+from engine.models.sql.person import Person
 
 
-def test_build_fact_key_is_stable_and_generated_on_fact() -> None:
-    effective_at = datetime(2026, 8, 27, 12, 30, tzinfo=UTC)
-    payload = {"result": 3.0, "name": "Albumin"}
-    expected_json = json.dumps(
-        {
-            "fact_type": "lab",
-            "payload": payload,
-            "observed_at": None,
-            "effective_at": effective_at,
-        },
-        default=str,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    expected = hashlib.sha256(expected_json.encode("utf-8")).hexdigest()
-
-    fact = ExtractedFact(
-        fact_type="lab",
-        payload={"name": "Albumin", "result": 3.0},
-        effective_at=effective_at,
-        confidence=1.0,
-    )
-
-    assert fact.fact_key == expected
-    assert build_fact_key("lab", payload, effective_at) == expected
-
-
-def test_only_source_id_references_document_source() -> None:
-    table = ExtractedFact.__table__  # ty: ignore[unresolved-attribute]
-
-    assert {key.target_fullname for key in table.c.source_id.foreign_keys} == {
-        "document_source.id",
+def _fact(*, person_id: int, source: ClinicalSource | None) -> ClinicalFact:
+    values: dict[str, object] = {
+        "person_id": person_id,
+        "clinical_source_id": source.id if source is not None else None,
+        "fact_type": "weight",
+        "payload": {"weight_lb": 140, "measured_at": "2026-08-20T00:00:00Z"},
+        "identity_hash": "weight-2026-08-20",
+        "content_hash": "weight-content",
     }
-    assert not table.c.source_page.foreign_keys
+    if source is not None:
+        values["source"] = source
+    return ClinicalFact(**values)  # ty: ignore[invalid-argument-type]
 
 
-def test_source_and_fact_key_prevent_duplicate_facts() -> None:
-    engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(engine)
-    document = Document(
-        filename="report.pdf",
-        file_type="application/pdf",
-        checksum="sha256:duplicate",
-        storage_uri="file:///report.pdf",
-        document_type="person-report",
-    )
-    source = DocumentSource(
-        document_id=1,
-        document=document,
-        source_type=DocumentSourceType.PDF,
-        source_page=1,
-        evidence_hash="a" * 64,
-    )
-    facts = [
-        ExtractedFact(
-            source=source,
-            fact_type="lab",
-            payload={"name": "Albumin", "result": "3.0"},
-            confidence=1.0,
+def test_document_source_fact_provenance_round_trips() -> None:
+    database = create_engine("sqlite://")
+    SQLModel.metadata.create_all(database)
+
+    with Session(database) as session:
+        person = Person(name="Doe, Jane", person_identifier="R1")
+        document = Document(
+            filename="weights.pdf",
+            media_type="application/pdf",
+            checksum="sha256:weights",
+            document_type="weight-report",
         )
-        for _ in range(2)
-    ]
-
-    with Session(engine) as session:
-        session.add_all([document, source, *facts])
-        with pytest.raises(IntegrityError):
-            session.commit()
-
-
-def test_document_page_and_evidence_hash_prevent_duplicate_sources() -> None:
-    engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(engine)
-    document = Document(
-        filename="report.pdf",
-        file_type="application/pdf",
-        checksum="sha256:source-duplicate",
-        storage_uri="file:///report.pdf",
-        document_type="person-report",
-    )
-    sources = [
-        DocumentSource(
-            document_id=1,
+        source = ClinicalSource(
             document=document,
-            source_type=DocumentSourceType.PDF,
-            source_page=1,
-            evidence_hash="b" * 64,
+            person=person,
+            source_kind=ClinicalSourceKind.REPORT_SECTION,
+            source_key="weights-page-1",
+            content="Weight 140 lb",
         )
-        for _ in range(2)
-    ]
-
-    with Session(engine) as session:
-        session.add_all([document, *sources])
-        with pytest.raises(IntegrityError):
-            session.commit()
-
-
-def test_document_source_fact_and_person_record_relationships() -> None:
-    engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(engine)
-    facility = Facility(facility_identifier="FAC-1", name="Facility")
-    person = Person(name="Person")
-    document = Document(
-        filename="report.pdf",
-        file_type="application/pdf",
-        checksum="sha256:abc",
-        storage_uri="file:///report.pdf",
-        document_type="person-report",
-    )
-    source = DocumentSource(
-        document_id=1,
-        document=document,
-        source_type=DocumentSourceType.PDF,
-        source_page=1,
-        evidence_hash="c" * 64,
-    )
-    fact = ExtractedFact(
-        source=source,
-        person=person,
-        fact_type="clinical-records",
-        payload={"report": "person"},
-        effective_at=datetime(2026, 8, 27, tzinfo=UTC),
-        confidence=1.0,
-    )
-    records = [
-        PersonWound(
-            person_id=1,
-            person=person,
-            extracted_fact=fact,
-            type="Pressure injury",
-            location="Sacrum",
-            observed_at=datetime(2026, 8, 27, tzinfo=UTC),
-        ),
-        PersonLab(
-            person_id=1,
-            person=person,
-            extracted_fact=fact,
-            name="Albumin",
-            result="3.0",
-            observed_at=datetime(2026, 8, 27, tzinfo=UTC),
-        ),
-        PersonEdema(
-            person_id=1,
-            person=person,
-            extracted_fact=fact,
-            location="Lower extremities",
-            severity="2+",
-            observed_at=datetime(2026, 8, 27, tzinfo=UTC),
-        ),
-        PersonMealIntake(
-            person_id=1,
-            person=person,
-            extracted_fact=fact,
-            min_percent=50,
-            max_percent=75,
-            observed_at=datetime(2026, 8, 27, tzinfo=UTC),
-        ),
-        PersonClinicalFact(
-            person_id=1,
-            person=person,
-            extracted_fact=fact,
-            clinical_fact_type=ClinicalFactType.OBSERVATION,
-            observation_type="swallowing",
-            status="Impaired",
-            observed_at=datetime(2026, 8, 27, tzinfo=UTC),
-        ),
-        PersonWeight(
-            person_id=1,
-            person=person,
-            extracted_fact=fact,
-            measured_at=datetime(2026, 8, 27, tzinfo=UTC),
-            weight_lb=130,
-        ),
-    ]
-
-    with Session(engine) as session:
-        session.add_all([facility, person, document, source, fact, *records])
+        fact = _fact(person_id=1, source=source)
+        fact.person = person
+        session.add(fact)
         session.commit()
-        session.refresh(document)
-        session.refresh(source)
-        session.refresh(fact)
 
-        assert document.sources == [source]
-        assert source.extracted_facts == [fact]
-        assert fact.person == person
-        assert fact.wounds == [records[0]]
-        assert fact.labs == [records[1]]
-        assert fact.edema == [records[2]]
-        assert fact.meal_intakes == [records[3]]
-        assert fact.clinical_facts == [records[4]]
-        assert fact.weights == [records[5]]
+        stored = session.exec(select(ClinicalFact)).one()
+        assert stored.source.content == "Weight 140 lb"
+        assert stored.source.document.filename == "weights.pdf"
+        assert stored.person.person_identifier == "R1"
+
+
+def test_fact_can_exist_without_a_document_or_source() -> None:
+    database = create_engine("sqlite://")
+    SQLModel.metadata.create_all(database)
+
+    with Session(database) as session:
+        person = Person(name="Doe, Jane", person_identifier="R1")
+        session.add(person)
+        session.commit()
+        session.refresh(person)
+        fact = _fact(person_id=person.id, source=None)  # ty: ignore[invalid-argument-type]
+        session.add(fact)
+        session.commit()
+
+        stored = session.exec(select(ClinicalFact)).one()
+        assert stored.clinical_source_id is None
+        assert stored.source is None

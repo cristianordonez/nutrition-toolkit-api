@@ -2,56 +2,38 @@
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import pathlib
 import typing
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from engine.controllers.base import BaseController
 from engine.controllers.session import controller_session
-from engine.models.settings import SETTINGS
-from engine.pipelines.person.ingestion.pipeline import PersonIngestionPipeline
-from engine.pipelines.person.ingestion.transformer import (
-    ExtractedFactTransformer,
-    PersonTransformationResult,
-)
-from engine.repositories.clinical_note_repo import ClinicalNoteRepo
-from engine.repositories.facility_repo import FacilityRepo
-from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
-from engine.services.person.person_service import PersonService
-from ntk.controllers.base import BaseController
-from ntk.controllers.uploads import (
+from engine.controllers.uploads import (
     ReadableUpload,
     UploadRequirements,
     materialize_uploads,
 )
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.output import Output
-from ntk.utils.parallel import ParallelPoolHandler
+from engine.models.base import ConsoleRenderableModel
+from engine.models.output import Output
+from engine.pipelines.person.ingestion.failure_recorder import (
+    IngestionFailureRecorder,
+)
+from engine.pipelines.person.ingestion.pipeline import PersonIngestionPipeline
+from engine.pipelines.person.ingestion.transformer import (
+    ClinicalFactTransformer,
+    PersonTransformationResult,
+)
+from engine.repositories.clinical_source_repo import ClinicalSourceRepo
+from engine.repositories.person_repo import PersonRepo
+from engine.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
     from collections.abc import Sequence
     from datetime import date
 
     from sqlmodel import Session
-
-
-def _ingest_document(path: pathlib.Path) -> PersonTransformationResult:
-    """Ingest one path with worker-local database and service resources."""
-    with controller_session(None) as session:
-        facility_resolver = FacilityResolver(FacilityRepo(session))
-        person_service = PersonService(
-            PersonRepo(session),
-            facility_resolver,
-        )
-        service = PersonIngestionPipeline(
-            clinical_note_repository=ClinicalNoteRepo(session),
-            person_service=person_service,
-            facility_resolver=facility_resolver,
-        )
-        return asyncio.run(service.ingest(files=[path]))
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -106,21 +88,36 @@ class DocumentIngestResult(ConsoleRenderableModel):
     documents: int
     facts: int
     person_ids: list[int]
+    #: Extractions that failed during the run. Non-zero means this document
+    #: gave up some of its content: the facts that did land are real, but the
+    #: report is incomplete and re-ingesting it once the cause is fixed will
+    #: recover the rest.
+    extraction_failures: int = 0
+    #: A few of those failures, so a reader can tell a quota problem from an
+    #: unreadable page without opening the log.
+    failure_samples: list[str] = Field(default_factory=list)
+    #: Distinct failure messages `failure_samples` left out. Non-zero means the
+    #: samples are not the whole story and the log has causes they do not name.
+    unshown_failure_messages: int = 0
 
     @classmethod
     def from_transformation(
         cls,
         result: PersonTransformationResult,
+        failures: IngestionFailureRecorder | None = None,
     ) -> DocumentIngestResult:
         """Summarize a completed transformation."""
         return cls(
+            extraction_failures=failures.count if failures else 0,
+            failure_samples=failures.samples if failures else [],
+            unshown_failure_messages=(failures.unshown_messages if failures else 0),
             documents=len(result.documents),
-            facts=sum(len(document.extracted_facts) for document in result.documents),
+            facts=sum(len(document.clinical_facts) for document in result.documents),
             person_ids=sorted(
                 {
                     fact.person_id
                     for document in result.documents
-                    for fact in document.extracted_facts
+                    for fact in document.clinical_facts
                     if fact.person_id is not None
                 },
             ),
@@ -146,7 +143,25 @@ class DocumentIngestController(BaseController):
         self,
         options: DocumentIngestOptions,
     ) -> Output[DocumentIngestResult]:
-        """Materialize uploads and run the document ETL pipeline."""
+        """Materialize uploads and run the document ETL pipeline.
+
+        The run happens inside a failure recorder so a partial extraction --
+        pages the model could not read, a spent quota part-way through -- is
+        reported rather than hidden behind the facts that did land.
+        """
+        with IngestionFailureRecorder() as failures:
+            result = await self._ingest(options)
+        return Output(
+            result=DocumentIngestResult.from_transformation(result, failures),
+            controller=self.name,
+            exit_code=0,
+        )
+
+    async def _ingest(
+        self,
+        options: DocumentIngestOptions,
+    ) -> PersonTransformationResult:
+        """Materialize the uploads and run the pipeline over them."""
         async with materialize_uploads(
             typing.cast("Sequence[ReadableUpload]", _as_uploads(options.files)),
             UploadRequirements(
@@ -159,68 +174,38 @@ class DocumentIngestController(BaseController):
         ) as uploads:
             paths = list(
                 {
-                    ExtractedFactTransformer.document_checksum(path): path
+                    ClinicalFactTransformer.document_checksum(path): path
                     for path in uploads.paths
                 }.values(),
             )
-            if (
-                self.session is not None
-                or len(paths) == 1
-                or options.person_id is not None
-            ):
-                with controller_session(self.session) as session:
-                    facility_resolver = FacilityResolver(FacilityRepo(session))
-                    person_service = PersonService(
-                        PersonRepo(session),
-                        facility_resolver,
+            # A batch deliberately shares one session and one pipeline. Separate
+            # worker sessions can race while resolving people and inserting rows
+            # protected by SQLite uniqueness constraints. Extractors keep their
+            # own bounded model-call concurrency where they support it.
+            with controller_session(self.session) as session:
+                person_service = PersonService(PersonRepo(session))
+                known_person_name: str | None = None
+                known_date_of_birth: date | None = None
+                if options.person_id is not None:
+                    person = person_service.repository.get_by_id(
+                        options.person_id,
                     )
-                    known_person_name: str | None = None
-                    known_date_of_birth: date | None = None
-                    if options.person_id is not None:
-                        person = person_service.repository.get_by_id(
-                            options.person_id,
-                        )
-                        if person is None:
-                            msg = f"Person {options.person_id} was not found"
-                            raise LookupError(msg)
-                        known_person_name = person.name
-                        known_date_of_birth = person.date_of_birth
-                    service = PersonIngestionPipeline(
-                        clinical_note_repository=ClinicalNoteRepo(session),
-                        person_service=person_service,
-                        facility_resolver=facility_resolver,
-                    )
-                    result = await service.ingest(
-                        files=paths,
-                        person_id=options.person_id,
-                        source_person_name=known_person_name,
-                        date_of_birth=known_date_of_birth,
-                    )
-            else:
-                handler = ParallelPoolHandler(
-                    mode=SETTINGS.document_ingestion_pool_mode,
-                    workers=SETTINGS.document_ingestion_workers,
+                    if person is None:
+                        msg = f"Person {options.person_id} was not found"
+                        raise LookupError(msg)
+                    known_person_name = person.name
+                    known_date_of_birth = person.date_of_birth
+                service = PersonIngestionPipeline(
+                    clinical_source_repository=ClinicalSourceRepo(session),
+                    person_service=person_service,
                 )
-                results = typing.cast(
-                    "list[PersonTransformationResult]",
-                    await asyncio.to_thread(
-                        handler.map,
-                        _ingest_document,
-                        paths,
-                    ),
+                result = await service.ingest(
+                    files=paths,
+                    person_id=options.person_id,
+                    source_person_name=known_person_name,
+                    date_of_birth=known_date_of_birth,
                 )
-                result = PersonTransformationResult(
-                    documents=[
-                        document
-                        for worker_result in results
-                        for document in worker_result.documents
-                    ],
-                )
-        return Output(
-            result=DocumentIngestResult.from_transformation(result),
-            controller=self.name,
-            exit_code=0,
-        )
+        return result
 
 
 __all__ = [

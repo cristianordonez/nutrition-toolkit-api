@@ -1,52 +1,21 @@
-"""Person identity and clinical-note models."""
+"""Resident identity persistence."""
 
 from __future__ import annotations
 
 import typing
-from datetime import UTC, date, datetime
-from enum import StrEnum
+from datetime import date, datetime  # noqa: TC003
 
-from sqlalchemy import Column, Enum, UniqueConstraint, text
+from sqlalchemy import Index, text
 from sqlalchemy.orm import relationship
-from sqlmodel import Field, Index, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
-from engine.models.sql.clinical import (
-    ClinicalFactType,
-    PersonAllergy,
-    PersonAppetiteObservation,
-    PersonClinicalFact,
-    PersonDiagnosis,
-    PersonDialysis,
-    PersonDiet,
-    PersonEdema,
-    PersonEnteralFeeding,
-    PersonFluidPlan,
-    PersonFoodPreference,
-    PersonGIObservation,
-    PersonLab,
-    PersonMealIntake,
-    PersonMedication,
-    PersonMiscOrder,
-    PersonNutritionGoal,
-    PersonOralFeedingStatus,
-    PersonParenteralNutrition,
-    PersonSupplement,
-    PersonWeight,
-    PersonWound,
-)
+from engine.models.clinical_facts import utc_now
 
 if typing.TYPE_CHECKING:
-    from engine.models.sql import Facility
-
-    from .extracted_fact import ExtractedFact
-
-
-class ExtractionStatus(StrEnum):
-    PENDING = "pending"
-    EXTRACTED = "extracted"
-    SKIPPED = "skipped"
-    FAILED = "failed"
-    NOT_APPLICABLE = "not_applicable"
+    from .clinical_fact import ClinicalFact
+    from .clinical_source import ClinicalSource
+    from .facility import Facility
+    from .ncp_note import NCPNote
 
 
 def normalize_person_name_part(value: str) -> str:
@@ -72,154 +41,85 @@ def parse_person_name(name: str) -> tuple[str, str]:
 
 
 class Person(SQLModel, table=True):
+    """A resident whose clinical assertions live in ``clinical_fact``."""
+
     __tablename__ = "person"
     __table_args__ = (
-        UniqueConstraint(
-            "normalized_first_name",
-            "normalized_last_name",
-            "date_of_birth",
-            name="uq_person_natural_identity",
-        ),
         Index(
-            "uq_person_identifier_without_facility",
+            "uq_person_unscoped_identifier",
             "person_identifier",
             unique=True,
-            postgresql_where=text(
-                "facility_id IS NULL AND person_identifier IS NOT NULL",
-            ),
             sqlite_where=text(
                 "facility_id IS NULL AND person_identifier IS NOT NULL",
             ),
         ),
         Index(
-            "uq_person_identifier_with_facility",
+            "uq_person_facility_identifier",
             "facility_id",
             "person_identifier",
             unique=True,
-            postgresql_where=text(
-                "facility_id IS NOT NULL AND person_identifier IS NOT NULL",
-            ),
             sqlite_where=text(
                 "facility_id IS NOT NULL AND person_identifier IS NOT NULL",
             ),
         ),
-    )
-    id: int | None = Field(default=None, primary_key=True)
-    name: str
-    first_name: str = Field(default="")
-    last_name: str = Field(default="")
-    normalized_first_name: str = Field(default="", index=True)
-    normalized_last_name: str = Field(default="", index=True)
-    date_of_birth: date | None = None
-    facility_id: int | None = Field(default=None, foreign_key="facility.id", index=True)
-    person_identifier: str | None = Field(default=None, index=True)
-    sex: str | None = None
-    height_in: float | None = Field(default=None, gt=0)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    facility: Facility | None = Relationship(
-        sa_relationship=relationship("Facility", back_populates="persons"),
-    )
-    weights: list[PersonWeight] = Relationship(
-        sa_relationship=relationship("PersonWeight", back_populates="person"),
-    )
-    diagnoses: list[PersonDiagnosis] = Relationship(
-        sa_relationship=relationship("PersonDiagnosis", back_populates="person"),
-    )
-    allergies: list[PersonAllergy] = Relationship(
-        sa_relationship=relationship("PersonAllergy", back_populates="person"),
-    )
-    medications: list[PersonMedication] = Relationship(
-        sa_relationship=relationship("PersonMedication", back_populates="person"),
-    )
-    diets: list[PersonDiet] = Relationship(
-        sa_relationship=relationship("PersonDiet", back_populates="person"),
-    )
-    enteral_feedings: list[PersonEnteralFeeding] = Relationship(
-        sa_relationship=relationship(
-            "PersonEnteralFeeding",
-            back_populates="person",
+        Index(
+            "uq_person_unscoped_natural_identity",
+            "normalized_first_name",
+            "normalized_last_name",
+            "date_of_birth",
+            unique=True,
+            sqlite_where=text("facility_id IS NULL AND date_of_birth IS NOT NULL"),
         ),
-    )
-    supplements: list[PersonSupplement] = Relationship(
-        sa_relationship=relationship("PersonSupplement", back_populates="person"),
-    )
-    dialysis_records: list[PersonDialysis] = Relationship(
-        sa_relationship=relationship("PersonDialysis", back_populates="person"),
-    )
-    oral_feeding_status_history: list[PersonOralFeedingStatus] = Relationship(
-        sa_relationship=relationship(
-            "PersonOralFeedingStatus",
-            back_populates="person",
-        ),
-    )
-    parenteral_nutrition_records: list[PersonParenteralNutrition] = Relationship(
-        sa_relationship=relationship(
-            "PersonParenteralNutrition",
-            back_populates="person",
-        ),
-    )
-    fluid_plans: list[PersonFluidPlan] = Relationship(
-        sa_relationship=relationship("PersonFluidPlan", back_populates="person"),
-    )
-    food_preferences: list[PersonFoodPreference] = Relationship(
-        sa_relationship=relationship(
-            "PersonFoodPreference",
-            back_populates="person",
-        ),
-    )
-    misc_orders: list[PersonMiscOrder] = Relationship(
-        sa_relationship=relationship("PersonMiscOrder", back_populates="person"),
-    )
-    nutrition_goals: list[PersonNutritionGoal] = Relationship(
-        sa_relationship=relationship("PersonNutritionGoal", back_populates="person"),
-    )
-    labs: list[PersonLab] = Relationship(
-        sa_relationship=relationship("PersonLab", back_populates="person"),
-    )
-    edema: list[PersonEdema] = Relationship(
-        sa_relationship=relationship(
-            "PersonEdema",
-            back_populates="person",
-            collection_class=list,
-        ),
-    )
-    meal_intakes: list[PersonMealIntake] = Relationship(
-        sa_relationship=relationship(
-            "PersonMealIntake",
-            back_populates="person",
-            collection_class=list,
-        ),
-    )
-    appetite_observations: list[PersonAppetiteObservation] = Relationship(
-        sa_relationship=relationship(
-            "PersonAppetiteObservation",
-            back_populates="person",
-        ),
-    )
-    gi_observations: list[PersonGIObservation] = Relationship(
-        sa_relationship=relationship("PersonGIObservation", back_populates="person"),
-    )
-    wounds: list[PersonWound] = Relationship(
-        sa_relationship=relationship("PersonWound", back_populates="person"),
-    )
-    clinical_facts: list[PersonClinicalFact] = Relationship(
-        sa_relationship=relationship(
-            "PersonClinicalFact",
-            back_populates="person",
-            collection_class=list,
+        Index(
+            "uq_person_facility_natural_identity",
+            "facility_id",
+            "normalized_first_name",
+            "normalized_last_name",
+            "date_of_birth",
+            unique=True,
+            sqlite_where=text(
+                "facility_id IS NOT NULL AND date_of_birth IS NOT NULL",
+            ),
         ),
     )
 
-    clinical_notes: list[PersonClinicalNote] = Relationship(
+    id: int | None = Field(default=None, primary_key=True)
+    facility_id: int | None = Field(
+        default=None,
+        foreign_key="facility.id",
+        index=True,
+        ondelete="RESTRICT",
+    )
+    name: str
+    first_name: str = ""
+    last_name: str = ""
+    normalized_first_name: str = Field(default="", index=True)
+    normalized_last_name: str = Field(default="", index=True)
+    date_of_birth: date | None = None
+    person_identifier: str | None = Field(default=None, index=True)
+    sex: str | None = None
+    height_in: float | None = Field(default=None, gt=0)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    facility: Facility = Relationship(back_populates="people")
+    clinical_sources: list[ClinicalSource] = Relationship(
         sa_relationship=relationship(
-            "PersonClinicalNote",
+            "ClinicalSource",
             back_populates="person",
             collection_class=list,
         ),
     )
-    extracted_facts: list[ExtractedFact] = Relationship(
+    clinical_facts: list[ClinicalFact] = Relationship(
         sa_relationship=relationship(
-            "ExtractedFact",
+            "ClinicalFact",
+            back_populates="person",
+            collection_class=list,
+        ),
+    )
+    ncp_notes: list[NCPNote] = Relationship(
+        sa_relationship=relationship(
+            "NCPNote",
             back_populates="person",
             collection_class=list,
         ),
@@ -247,75 +147,4 @@ class Person(SQLModel, table=True):
         super().__init__(**data)
 
 
-class PersonClinicalNote(SQLModel, table=True):
-    """A locally persisted clinical note ingested from a document."""
-
-    __tablename__ = "person_clinical_note"
-    __table_args__ = (
-        UniqueConstraint(
-            "person_id",
-            "note_key",
-        ),
-    )
-    id: int | None = Field(default=None, primary_key=True)
-    person_id: int = Field(foreign_key="person.id", index=True)
-    note_date: datetime = Field(index=True)
-    note_type: str | None = None
-    author: str | None = None
-    note_text: str
-    raw_text: str
-    note_key: str = Field(index=True, unique=True)
-    extraction_status: ExtractionStatus = Field(
-        default=ExtractionStatus.PENDING,
-        sa_column=Column(
-            Enum(
-                ExtractionStatus,
-                name="extraction_status",
-                values_callable=lambda enum_type: [item.value for item in enum_type],
-            ),
-            nullable=False,
-            default="pending",
-            index=True,
-        ),
-    )
-    person: Person = Relationship(back_populates="clinical_notes")
-    source_id: int | None = Field(
-        default=None,
-        foreign_key="document_source.id",
-        index=True,
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
-        index=True,
-    )
-
-
-__all__ = [
-    "ClinicalFactType",
-    "ExtractionStatus",
-    "Person",
-    "PersonAllergy",
-    "PersonAppetiteObservation",
-    "PersonClinicalFact",
-    "PersonClinicalNote",
-    "PersonDiagnosis",
-    "PersonDialysis",
-    "PersonDiet",
-    "PersonEdema",
-    "PersonEnteralFeeding",
-    "PersonFluidPlan",
-    "PersonFoodPreference",
-    "PersonGIObservation",
-    "PersonLab",
-    "PersonMealIntake",
-    "PersonMedication",
-    "PersonMiscOrder",
-    "PersonNutritionGoal",
-    "PersonOralFeedingStatus",
-    "PersonParenteralNutrition",
-    "PersonSupplement",
-    "PersonWeight",
-    "PersonWound",
-    "normalize_person_name_part",
-    "parse_person_name",
-]
+__all__ = ["Person", "normalize_person_name_part", "parse_person_name"]

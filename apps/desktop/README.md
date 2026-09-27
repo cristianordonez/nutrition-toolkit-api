@@ -8,7 +8,7 @@ The desktop application. Two pieces live here:
   device: extracts structured clinical facts from uploaded documents (via OpenAI
   today; an on-device/llama.cpp model is a planned future swap), owns all
   person/clinical data locally in SQLite, and calls the
-  [cloud API](../cloud-api/README.md) over HTTP to generate Nutrition Care Process
+  [server](../server/README.md) over HTTP to generate Nutrition Care Process
   notes from that local data.
 - `src` / `src-tauri` — the Tauri 2 desktop shell (React + TypeScript + Vite). Three
   tabs: **Notes** (drag in documents, ingest them, pick residents, generate a note
@@ -34,10 +34,10 @@ ones that matter on a first run:
 | Setting | Required? | Why |
 | --- | --- | --- |
 | `NTK_OPEN_AI_API_KEY` | Yes | Document extraction. Must be non-empty (see below). |
-| `NTK_CLOUD_API_BASE_URL` | Defaults to `http://localhost:8000` | Where cloud-api is reachable. |
-| `NTK_CLOUD_API_KEY` | Yes, to generate notes | Bearer token for cloud-api. Mint with `tox -e api-key`. |
+| `NTK_SERVER_BASE_URL` | Defaults to `http://localhost:8000` | Where server is reachable. |
+| `NTK_SERVER_API_KEY` | Yes, to generate notes | Bearer token for server. Mint with `tox -e api-key`. |
 | `NTK_USE_LOCAL_EXTRACTION` | No, defaults `false` | Extract via Ollama instead of OpenAI. |
-| `NTK_FACTS_DATABASE_PATH` | No | Overrides the platform data directory. |
+| `NTK_DATABASE_PATH` | No | Overrides the unified local SQLite database path. |
 
 **Where this file is read from.** `ntk.models.base.get_env_file()` resolves
 `$NTK_CONFIG_FILE`, and otherwise falls back to `<cwd>/.env`. The Tauri shell
@@ -46,9 +46,9 @@ creating it keeps the desktop app's settings separate from the compose stack's.
 Without it, a command run from the repository root reads the root `.env`
 instead — which works, but means one file serves both.
 
-**Note generation needs cloud-api running.** It happens there and nowhere else,
+**Note generation needs server running.** It happens there and nowhere else,
 because the diet and nutrition-care manual lookups search a pgvector knowledge
-base that only exists cloud-side. There is deliberately no on-device note
+base that only exists server-side. There is deliberately no on-device note
 agent, so generation fails with a clear error rather than quietly producing a
 note without those lookups. Start it with `tox -e up` from the repository root.
 
@@ -107,8 +107,7 @@ in `$HOME`:
 | Logs | `~/Library/Logs/NutritionToolkit/engine.log` |
 
 Linux uses `~/.local/share` and `~/.local/state`; Windows uses `%LOCALAPPDATA%`.
-`NTK_FACTS_DATABASE_PATH`, `NTK_SETTINGS_DATABASE_PATH`, and `NTK_LOG_FILE`
-override any of them.
+`NTK_DATABASE_PATH` and `NTK_LOG_FILE` override their default locations.
 
 Installs that predate this used `~/.nutrition-toolkit`. Those files are moved
 into the data directory on the next run, and the old directory is removed once
@@ -150,7 +149,7 @@ does not change when the packaging does.
 | `engine_version` | `engine --version` |
 | `ingest_documents` | `document ingest --files …` |
 | `list_persons` | `persons list` |
-| `generate_ncp` | `ncp generate --person-id …` |
+| `generate_ncp` | `ncp generate --person-id … --note-type quarterly` |
 | `calculate_energy` | `calculate energy …` |
 | `calculate_tubefeed` | `tubefeed calculate …` |
 | `list_formulas` | `tubefeed formulas` |
@@ -209,8 +208,8 @@ uv run --package engine engine document ingest --files path/to/report.pdf
 ```
 
 Developer workflow — extract local documents and print the exact NCP-generation
-request JSON that `apps/cloud-api`'s `/nutrition-care-processes/generate` endpoint
-expects, so it can be piped into a manual `curl` call against a running cloud-api
+request JSON that `apps/server`'s `/nutrition-care-processes/generate` endpoint
+expects, so it can be piped into a manual `curl` call against a running server
 server:
 
 ```bash

@@ -14,14 +14,40 @@ export type IngestSummary = {
   documents: number;
   facts: number;
   person_ids: number[];
+  /**
+   * Extractions that failed during the run.
+   *
+   * Extraction is fault-tolerant, so a run can return facts and still have
+   * lost content. Non-zero means this document is only partly ingested: what
+   * landed is real, and re-ingesting once the cause is fixed recovers the rest.
+   */
+  extraction_failures: number;
+  /** A few of those failures, so the cause is visible without the log file. */
+  failure_samples: string[];
+  /**
+   * Distinct failure messages `failure_samples` left out.
+   *
+   * Non-zero means the samples are not the whole story: other things went
+   * wrong for reasons they do not name, and only the log has those.
+   */
+  unshown_failure_messages: number;
 };
 
 /** A generated Nutrition Care Process note. */
+export type NCPNoteType =
+  | "annual"
+  | "quarterly"
+  | "admission"
+  | "significant_change";
+
 export type GeneratedNCP = {
   person_id: number;
   person_name: string;
   person_identifier: string;
+  ncp_note_id: number;
+  note_type: NCPNoteType;
   note_text: string;
+  status: "draft";
 };
 
 /**
@@ -44,8 +70,44 @@ export const ingestDocuments = (paths: string[]) =>
 export const listPersons = () =>
   call<{ persons: Person[] }>("list_persons").then((result) => result.persons);
 
-export const generateNcp = (personId: number, additionalContext?: string) =>
-  call<GeneratedNCP>("generate_ncp", { personId, additionalContext });
+export type PersonSummaryField = {
+  key: string;
+  label: string;
+  value: string | null;
+};
+
+export type PersonDataCategory = {
+  key: string;
+  label: string;
+  count: number;
+  detail: string | null;
+};
+
+export type MissingPersonData = {
+  key: string;
+  label: string;
+  reason: string;
+};
+
+/** Concise coverage snapshot for a selected resident. */
+export type PersonDataSummary = {
+  person_id: number;
+  name: string;
+  person_identifier: string | null;
+  overview: PersonSummaryField[];
+  categories: PersonDataCategory[];
+  missing: MissingPersonData[];
+  conflicts: string[];
+};
+
+export const getPersonSummary = (personId: number) =>
+  call<PersonDataSummary>("person_summary", { personId });
+
+export const generateNcp = (
+  personId: number,
+  noteType: NCPNoteType,
+  additionalContext?: string,
+) => call<GeneratedNCP>("generate_ncp", { personId, noteType, additionalContext });
 
 /** File types the document extractors accept. */
 export const SUPPORTED_EXTENSIONS = ["pdf", "csv", "txt"] as const;
@@ -145,3 +207,45 @@ export type TubefeedArgs = {
 /** Returns the recommendation text, ready to paste into a note. */
 export const calculateTubefeed = (args: TubefeedArgs) =>
   call<string>("calculate_tubefeed", { ...args });
+
+/** How the window decides its appearance. */
+export type DarkMode = "on" | "off" | "system";
+
+/** The device user's own settings, stored in the shared application database. */
+export type UserSettings = {
+  id: number;
+  full_name: string | null;
+  credentials: string | null;
+  /** true forces dark, false forces light, null follows the OS. */
+  dark_mode: boolean | null;
+  /** Whether a hosted model was requested. Not the same as it being in use. */
+  use_cloud_model: boolean;
+};
+
+/** Settings plus state the database does not store. */
+export type SettingsView = {
+  settings: UserSettings;
+  /** Whether a token is in the OS keychain. The token itself never leaves it. */
+  has_cloud_token: boolean;
+  /** The model an agent would actually use right now. */
+  active_provider: "ollama" | "openai";
+};
+
+export const getSettings = () => call<SettingsView>("get_settings");
+
+/** Fields left undefined are not changed. */
+export const updateSettings = (changes: {
+  darkMode?: DarkMode;
+  useCloudModel?: "on" | "off";
+  /** Goes straight to the OS keychain. "" removes the stored token. */
+  cloudApiToken?: string;
+}) => call<SettingsView>("update_settings", { ...changes });
+
+/** The stored tri-state as the value a `data-theme` attribute needs. */
+export const resolveTheme = (darkMode: boolean | null): "dark" | "light" => {
+  if (darkMode !== null) return darkMode ? "dark" : "light";
+  const prefersDark =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  return prefersDark ? "dark" : "light";
+};

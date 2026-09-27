@@ -5,8 +5,12 @@ from datetime import UTC, datetime
 from sqlmodel import Session, SQLModel, create_engine
 
 import engine.models.sql  # noqa: F401
-from engine.models.sql.person import ExtractionStatus, PersonClinicalNote
-from engine.repositories.clinical_note_repo import ClinicalNoteRepo
+from engine.models.sql.clinical_source import (
+    ClinicalSource,
+    ClinicalSourceKind,
+    ExtractionStatus,
+)
+from engine.repositories.clinical_source_repo import ClinicalSourceRepo
 
 
 def test_create_persists_clinical_note_and_get_by_key_finds_it() -> None:
@@ -14,13 +18,14 @@ def test_create_persists_clinical_note_and_get_by_key_finds_it() -> None:
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        repository = ClinicalNoteRepo(session)
-        note = PersonClinicalNote(
+        repository = ClinicalSourceRepo(session)
+        note = ClinicalSource(
             person_id=1,
-            note_date=datetime(2026, 8, 20, tzinfo=UTC),
-            note_text="Person consumed 75% of lunch.",
-            raw_text="Person consumed 75% of lunch.",
-            note_key="note-key-1",
+            source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+            effective_at=datetime(2026, 8, 20, tzinfo=UTC),
+            content="Person consumed 75% of lunch.",
+            raw_content="Person consumed 75% of lunch.",
+            source_key="note-key-1",
             extraction_status=ExtractionStatus.PENDING,
         )
 
@@ -36,24 +41,26 @@ def test_create_returns_existing_clinical_note_with_the_same_key() -> None:
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        repository = ClinicalNoteRepo(session)
+        repository = ClinicalSourceRepo(session)
         person_id = 1
         original = repository.create(
-            PersonClinicalNote(
+            ClinicalSource(
                 person_id=person_id,
-                note_date=datetime(2026, 8, 20, tzinfo=UTC),
-                note_text="Original note text.",
-                raw_text="Original note text.",
-                note_key="same-note-key",
+                source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+                effective_at=datetime(2026, 8, 20, tzinfo=UTC),
+                content="Original note text.",
+                raw_content="Original note text.",
+                source_key="same-note-key",
                 extraction_status=ExtractionStatus.PENDING,
             ),
         )
-        duplicate = PersonClinicalNote(
+        duplicate = ClinicalSource(
             person_id=person_id,
-            note_date=datetime(2026, 8, 20, tzinfo=UTC),
-            note_text="Duplicate note text.",
-            raw_text="Duplicate note text.",
-            note_key="same-note-key",
+            source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+            effective_at=datetime(2026, 8, 20, tzinfo=UTC),
+            content="Duplicate note text.",
+            raw_content="Duplicate note text.",
+            source_key="same-note-key",
             extraction_status=ExtractionStatus.PENDING,
         )
 
@@ -68,14 +75,15 @@ def test_set_extraction_status_persists_the_new_status() -> None:
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        repository = ClinicalNoteRepo(session)
+        repository = ClinicalSourceRepo(session)
         note = repository.create(
-            PersonClinicalNote(
+            ClinicalSource(
                 person_id=1,
-                note_date=datetime(2026, 8, 20, tzinfo=UTC),
-                note_text="Person consumed 75% of lunch.",
-                raw_text="Person consumed 75% of lunch.",
-                note_key="status-note",
+                source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+                effective_at=datetime(2026, 8, 20, tzinfo=UTC),
+                content="Person consumed 75% of lunch.",
+                raw_content="Person consumed 75% of lunch.",
+                source_key="status-note",
                 extraction_status=ExtractionStatus.PENDING,
             ),
         )
@@ -92,14 +100,15 @@ def test_update_identity_corrects_existing_note_ownership() -> None:
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        repository = ClinicalNoteRepo(session)
+        repository = ClinicalSourceRepo(session)
         note = repository.create(
-            PersonClinicalNote(
+            ClinicalSource(
                 person_id=1,
-                note_date=datetime(2026, 9, 1, tzinfo=UTC),
-                note_text="Transferred person note.",
-                raw_text="Transferred person note.",
-                note_key="transferred-note",
+                source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+                effective_at=datetime(2026, 9, 1, tzinfo=UTC),
+                content="Transferred person note.",
+                raw_content="Transferred person note.",
+                source_key="transferred-note",
                 extraction_status=ExtractionStatus.EXTRACTED,
             ),
         )

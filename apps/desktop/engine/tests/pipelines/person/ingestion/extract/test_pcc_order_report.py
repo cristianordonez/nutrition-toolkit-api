@@ -5,6 +5,7 @@ import typing
 from datetime import UTC, datetime
 
 import pymupdf
+import pytest
 
 from engine.models.extracted_fact_create import (
     DietPayload,
@@ -14,7 +15,8 @@ from engine.models.extracted_fact_create import (
     MiscOrderPayload,
     SupplementPayload,
 )
-from engine.models.sql.clinical import FeedingMethod
+from engine.models.clinical_vocab import FeedingMethod
+from engine.pipelines.person.ingestion.extract import pcc_order_report
 from engine.pipelines.person.ingestion.extract.pcc_order_report import (
     OrderReportMode,
     PccOrderReportExtractor,
@@ -258,3 +260,54 @@ def test_demo_extracts_orders_when_identity_column_was_removed(
     assert all(fact.source_person_identifier is None for fact in facts)
     assert isinstance(facts[0].payload, DietPayload)
     assert isinstance(facts[1].payload, MedicationPayload)
+
+
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [
+        ("Illness, unspecified (R69)", "ICD-10 diagnosis, no order"),
+        (
+            "PAIN, UNSPECIFIED (R52), HYPOTENSION, UNSP",
+            "ICD-10 diagnosis leading a list",
+        ),
+        (
+            "OLSEN, EDISON, NJ (732) 549-3286 M,W,F CHAIR TIME 11:15A",
+            "clinic address, area code and phone",
+        ),
+        ("Cardiologist Iselin, NJ (732) 283-0440", "provider address and phone"),
+    ],
+)
+def test_coded_text_is_not_mistaken_for_a_resident(line: str, reason: str) -> None:
+    """Each of these invented a resident in production.
+
+    A diagnosis code and a telephone area code both read as resident
+    identifiers, so the report's `Last, First (ID)` shape matched lines that
+    describe no person at all -- and real orders were then filed under
+    "ILLNESS, UNSPECIFIED", "PAIN, UNSPECIFIED" and "OLSEN, EDISON, NJ".
+    """
+    match = pcc_order_report._ORDER_PERSON_RE.match(line)  # noqa: SLF001
+    assert match is not None, "these lines do match the shape; that is the problem"
+
+    starts_resident = PccOrderReportExtractor._starts_a_resident(match)  # noqa: SLF001
+
+    assert starts_resident is False, reason
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Ortiz, Carmen (210757) Vitamin D 1000 unit tablet",
+        # A resident row may carry no order; the order follows on the next line.
+        "Ortiz, Carmen (210757)",
+        "Cai, Test (EN140472) Ensure Enlive BID",
+        "Smith, John (06353)",
+        # An identifier that merely starts like a code is still a resident.
+        "Doe, Jane (R69412) Protein supplement",
+    ],
+)
+def test_real_resident_rows_are_still_recognized(line: str) -> None:
+    """The guard must not cost us residents to avoid the false ones."""
+    match = pcc_order_report._ORDER_PERSON_RE.match(line)  # noqa: SLF001
+    assert match is not None
+
+    assert PccOrderReportExtractor._starts_a_resident(match) is True  # noqa: SLF001

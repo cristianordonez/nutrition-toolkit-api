@@ -5,47 +5,35 @@ from datetime import UTC, date, datetime
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from engine.models.sql.facility import Facility
-from engine.models.sql.person import ExtractionStatus, Person, PersonClinicalNote
+from engine.models.sql.clinical_source import (
+    ClinicalSource,
+    ClinicalSourceKind,
+    ExtractionStatus,
+)
+from engine.models.sql.person import Person
 from engine.pipelines.person.ingestion.extract.pcc_progress_notes import (
     ParsedProgressNote,
 )
-from engine.repositories.clinical_note_repo import ClinicalNoteRepo
-from engine.repositories.facility_repo import FacilityRepo
+from engine.repositories.clinical_source_repo import ClinicalSourceRepo
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
 
 
 def _service(session: Session) -> PersonService:
-    facility_repository = FacilityRepo(session)
-    for identifier, name in (
-        ("FAC-1", "Facility One"),
-        ("FAC-FIRST", "First Facility"),
-        ("FAC-SECOND", "Second Facility"),
-    ):
-        facility_repository.create(
-            Facility(facility_identifier=identifier, name=name),
-        )
-    return PersonService(
-        PersonRepo(session),
-        FacilityResolver(facility_repository),
-    )
+    return PersonService(PersonRepo(session))
 
 
-def test_resolve_or_create_prefers_facility_scoped_identifier() -> None:
+def test_resolve_or_create_reuses_a_person_by_identifier() -> None:
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
         service = _service(session)
         created = service.resolve_or_create_person(
-            facility_name="Facility One",
             source_person_identifier="R-7",
             source_person_name="Doe, Jane",
         )
         resolved = service.resolve_or_create_person(
-            facility_name="Facility One",
             source_person_identifier="R-7",
             source_person_name="Jane Changed",
             height_in=64,
@@ -83,15 +71,9 @@ def test_richer_report_enriches_unique_name_only_person() -> None:
 
     with Session(engine) as session:
         service = _service(session)
-        assert service.facility_resolver is not None
-        facility = service.facility_resolver.resolve("Facility One")
-        assert facility is not None
-        existing = service.repository.create(
-            Person(name="Dickow, Denise", facility_id=facility.id),
-        )
+        existing = service.repository.create(Person(name="Dickow, Denise"))
 
         resolved = service.resolve_or_create_person(
-            facility_name="Facility One",
             source_person_identifier="210407",
             source_person_name="DICKOW, DENISE",
             date_of_birth=birth_date,
@@ -111,13 +93,11 @@ def test_report_without_birth_date_reuses_unique_dated_name() -> None:
     with Session(engine) as session:
         service = _service(session)
         existing = service.resolve_or_create_person(
-            facility_name="Facility One",
             source_person_name="Dickow, Denise",
             date_of_birth=birth_date,
         )
 
         resolved = service.resolve_or_create_person(
-            facility_name="Facility One",
             source_person_identifier="210407",
             source_person_name="Dickow, Denise",
         )
@@ -146,7 +126,6 @@ def test_identifier_match_rejects_conflicting_birth_date() -> None:
     with Session(engine) as session:
         service = _service(session)
         service.resolve_or_create_person(
-            facility_name="Facility One",
             source_person_identifier="R-7",
             source_person_name="Doe, Jane",
             date_of_birth=date(1940, 1, 2),
@@ -154,14 +133,20 @@ def test_identifier_match_rejects_conflicting_birth_date() -> None:
 
         with pytest.raises(ValueError, match="different birth date"):
             service.resolve_or_create_person(
-                facility_name="Facility One",
                 source_person_identifier="R-7",
                 source_person_name="Doe, Jane",
                 date_of_birth=date(1941, 1, 2),
             )
 
 
-def test_natural_identity_survives_a_facility_transfer() -> None:
+def test_a_new_identifier_does_not_relabel_a_known_person() -> None:
+    """Name and birth date still resolve a person whose chart number changed.
+
+    This used to describe a facility transfer, where a second identifier was
+    allowed to replace the first. With no facility, a second identifier for a
+    matched person is just a conflicting claim, so the person is reused and
+    the identifier already on file is kept rather than silently rewritten.
+    """
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
     birth_date = date(1940, 1, 2)
@@ -169,74 +154,22 @@ def test_natural_identity_survives_a_facility_transfer() -> None:
     with Session(engine) as session:
         service = _service(session)
         original = service.resolve_or_create_person(
-            facility_name="First Facility",
             source_person_identifier="OLD-1",
             source_person_name="Doe, Jane",
             date_of_birth=birth_date,
         )
-        original_facility_id = original.facility_id
-        transferred = service.resolve_or_create_person(
-            facility_name="Second Facility",
+        resolved = service.resolve_or_create_person(
             source_person_identifier="NEW-1",
             source_person_name="DOE, JANE",
             date_of_birth=birth_date,
         )
 
-        assert transferred.id == original.id
-        assert (
-            service.repository.get_by_identifier(
-                "OLD-1",
-                facility_id=original_facility_id,
-            )
-            is None
-        )
-        assert (
-            service.repository.get_by_identifier(
-                "NEW-1",
-                facility_id=transferred.facility_id,
-            )
-            is not None
-        )
-        assert transferred.facility is not None
-        assert transferred.facility.name == "Second Facility"
+        assert resolved.id == original.id
+        assert resolved.person_identifier == "OLD-1"
+        assert len(service.repository.get_all()) == 1
 
 
-def test_unresolved_facility_does_not_replace_current_assignment() -> None:
-    engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(engine)
-    birth_date = date(1940, 1, 2)
-
-    with Session(engine) as session:
-        service = _service(session)
-        person = service.resolve_or_create_person(
-            facility_name="Facility One",
-            source_person_identifier="R-7",
-            source_person_name="Doe, Jane",
-            date_of_birth=birth_date,
-        )
-        original_facility_id = person.facility_id
-
-        resolved = service.resolve_or_create_person(
-            facility_name="Noisy report heading",
-            source_person_identifier="UNKNOWN-7",
-            source_person_name="Doe, Jane",
-            date_of_birth=birth_date,
-        )
-
-        assert resolved.id == person.id
-        assert resolved.facility_id == original_facility_id
-        assert (
-            service.repository.get_by_identifier(
-                "R-7",
-                facility_id=original_facility_id,
-            )
-            is not None
-        )
-        assert service.facility_resolver is not None
-        assert service.facility_resolver.resolve("Noisy report heading") is None
-
-
-def test_unresolved_clinical_note_facility_does_not_block_natural_identity() -> None:
+def test_a_clinical_note_resolves_by_natural_identity() -> None:
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
     birth_date = date(1940, 1, 2)
@@ -249,7 +182,6 @@ def test_unresolved_clinical_note_facility_does_not_block_natural_identity() -> 
         )
         note = ParsedProgressNote(
             source_person_name="DOE, JANE",
-            facility_name="Noisy report heading",
             date_of_birth=birth_date,
             note_text="Nutrition follow-up",
             raw_text="Nutrition follow-up",
@@ -269,18 +201,18 @@ def test_get_person_detail_by_internal_id_includes_clinical_notes() -> None:
     with Session(engine) as session:
         service = _service(session)
         person = service.resolve_or_create_person(
-            facility_name="Facility One",
             source_person_identifier="R-7",
             source_person_name="Doe, Jane",
         )
-        note = ClinicalNoteRepo(session).create(
-            PersonClinicalNote(
+        note = ClinicalSourceRepo(session).create(
+            ClinicalSource(
                 person_id=person.id,  # ty: ignore[invalid-argument-type]
-                note_date=datetime(2026, 9, 7, tzinfo=UTC),
+                source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+                effective_at=datetime(2026, 9, 7, tzinfo=UTC),
                 note_type="Nutrition/Dietary",
-                note_text="Nutrition assessment",
-                raw_text="Nutrition assessment",
-                note_key="nutrition-assessment",
+                content="Nutrition assessment",
+                raw_content="Nutrition assessment",
+                source_key="nutrition-assessment",
                 extraction_status=ExtractionStatus.EXTRACTED,
             ),
         )
@@ -293,25 +225,17 @@ def test_get_person_detail_by_internal_id_includes_clinical_notes() -> None:
         assert "Nutrition assessment" in detail.model_dump_json()
 
 
-def test_get_person_detail_scopes_identifier_to_facility() -> None:
+def test_get_person_detail_resolves_by_identifier() -> None:
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        facility = Facility(facility_identifier="FAC-1", name="Facility One")
-        session.add(facility)
-        session.commit()
-        session.refresh(facility)
         service = _service(session)
         service.resolve_or_create_person(
             source_person_name="Doe, Jane",
             source_person_identifier="R-7",
-            facility_id=facility.id,
         )
 
-        detail = service.get_person_detail(
-            "R-7",
-            facility_identifier="FAC-1",
-        )
+        detail = service.get_person_detail("R-7")
 
         assert detail.name == "Doe, Jane"

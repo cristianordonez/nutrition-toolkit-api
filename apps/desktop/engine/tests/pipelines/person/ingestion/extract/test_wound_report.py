@@ -5,16 +5,13 @@ import typing
 from datetime import UTC, datetime
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine
 
 import engine.models.sql  # noqa: F401
 from engine.models.extracted_fact_create import ExtractedFactCreate, WoundPayload
-from engine.models.sql.person import PersonWound
 from engine.pipelines.person.ingestion.extract.wound_report import WoundReportExtractor
-from engine.pipelines.person.ingestion.transformer import ExtractedFactTransformer
-from engine.repositories.facility_repo import FacilityRepo
+from engine.pipelines.person.ingestion.transformer import ClinicalFactTransformer
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
@@ -38,19 +35,10 @@ def test_wound_report_uses_report_end_date_as_observed_at(
     assert len(facts) == 1
     assert facts[0].source_person_identifier == "EN140468"
     assert facts[0].source_person_name == "Chen Naijing"
-    assert facts[0].facility_name == "Embassy Manor"
     payload = facts[0].payload
     assert isinstance(payload, WoundPayload)
     assert payload.observed_at == datetime(2026, 8, 26, tzinfo=UTC)
 
-
-def test_wound_report_preserves_observed_facility_name() -> None:
-    assert (
-        WoundReportExtractor._parse_wound_facility_name(  # noqa: SLF001
-            "Facility: Aristacare at Embassy Manor",
-        )
-        == "Aristacare at Embassy Manor"
-    )
 
 
 def test_wound_report_without_date_is_rejected(
@@ -107,22 +95,16 @@ def test_reimported_wound_observation_updates_existing_row(
 
     with Session(engine) as session:
         repository = PersonRepo(session)
-        facility_repository = FacilityRepo(session)
-        FacilityResolver(facility_repository).register_trusted(name="Facility")
-        person_service = PersonService(
-            repository,
-            FacilityResolver(facility_repository),
-        )
+        person_service = PersonService(repository)
         documents = []
         for index, note in enumerate(("Stable", "Stable with less drainage")):
             path = tmp_path / f"wounds-{index}.csv"
             path.write_text(f"report {index}", encoding="utf-8")
             documents.append(
-                ExtractedFactTransformer(person_service).transform(
+                ClinicalFactTransformer(person_service).transform(
                     path,
                     [
                         ExtractedFactCreate(
-                            facility_name="Facility",
                             source_person_identifier="RES1",
                             source_person_name="Person",
                             payload=WoundPayload(
@@ -142,7 +124,9 @@ def test_reimported_wound_observation_updates_existing_row(
         repository.load_transformed_documents([documents[0]])
         repository.load_transformed_documents([documents[1]])
 
-        wounds = list(session.exec(select(PersonWound)).all())
+        person = repository.get_by_identifier("RES1")
+        assert person is not None and person.id is not None
+        wounds = repository.get_clinical_records(person.id).wounds
         assert len(wounds) == 1
         assert wounds[0].wound_number == "16"
         assert wounds[0].assessment_note == "Stable with less drainage"

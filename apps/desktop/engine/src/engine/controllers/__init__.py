@@ -12,7 +12,9 @@ _COMMAND_GROUP_MODULES = (
     "engine.controllers.localmodel.app",
     "engine.controllers.ncp.app",
     "engine.controllers.persons.app",
+    "engine.controllers.settings.app",
     "engine.controllers.tubefeed.app",
+    "engine.controllers.knowledge.app",
 )
 
 

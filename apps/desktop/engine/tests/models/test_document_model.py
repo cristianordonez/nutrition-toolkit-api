@@ -13,21 +13,24 @@ def test_document_schema_and_persistence() -> None:
     table = Document.__table__  # ty: ignore[unresolved-attribute]
     assert set(table.c.keys()) == {
         "id",
+        "facility_id",
         "filename",
-        "file_type",
+        "media_type",
         "checksum",
         "storage_uri",
+        "byte_size",
         "imported_at",
+        "updated_at",
         "source_observed_at",
         "document_type",
-        "facility_id",
+        "document_metadata",
     }
 
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
     document = Document(
         filename="orders.pdf",
-        file_type="application/pdf",
+        media_type="application/pdf",
         checksum="sha256:abc123",
         storage_uri="file:///reports/orders.pdf",
         document_type="pcc-order-report",
@@ -42,17 +45,16 @@ def test_document_schema_and_persistence() -> None:
         assert document.imported_at.tzinfo in {None, UTC}
 
 
-def test_document_checksum_is_indexed_and_unique() -> None:
+def test_document_checksum_is_indexed_and_unique_within_scope() -> None:
     table = Document.__table__  # ty: ignore[unresolved-attribute]
     assert table.c.checksum.index is True
-    assert table.c.checksum.unique is True
 
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
     documents = [
         Document(
             filename=filename,
-            file_type="application/pdf",
+            media_type="application/pdf",
             checksum="sha256:same-content",
             storage_uri=f"file:///{filename}",
             document_type="person-report",

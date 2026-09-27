@@ -1,19 +1,25 @@
-"""Return Nutrition Care Processes for a person, fetched from cloud-api."""
+"""Return the NCP notes held on this device for one person."""
 
 from __future__ import annotations
 
+import typing
+
 from pydantic import BaseModel, Field
 
-from engine.clients.cloud_api_client import CloudAPIClient
-from engine.models.settings import SETTINGS
-from ntk.controllers.base import BaseController
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.ncp_public import NutritionCareProcessPublic  # noqa: TC001
-from ntk.models.output import Output
+from engine.controllers.base import BaseController
+from engine.controllers.session import controller_session
+from engine.models.base import ConsoleRenderableModel
+from engine.models.output import Output
+from engine.models.sql.ncp_note import NCPNote  # noqa: TC001
+from engine.repositories.ncp_note_repo import NCPNoteRepo
+from engine.repositories.person_repo import PersonRepo
+
+if typing.TYPE_CHECKING:
+    from sqlmodel import Session
 
 
 class PersonNCPsOptions(BaseModel):
-    """Person identifier whose Nutrition Care Processes should be returned."""
+    """Person identifier whose clinical notes should be returned."""
 
     person_identifier: str = Field(
         min_length=1,
@@ -22,34 +28,41 @@ class PersonNCPsOptions(BaseModel):
 
 
 class PersonNCPsResult(ConsoleRenderableModel):
-    """Nutrition Care Processes belonging to the requested person."""
+    """Clinical notes belonging to the requested person."""
 
-    ncps: list[NutritionCareProcessPublic]
+    ncps: list[NCPNote]
 
     def to_console(self) -> str:
-        """Render ncps as formatted JSON."""
+        """Render notes as formatted JSON."""
         return self.model_dump_json(indent=2)
 
 
 class PersonNCPsController(BaseController):
-    """Retrieve Nutrition Care Processes for one person from cloud-api."""
+    """Retrieve one person's locally stored clinical notes."""
 
     name = "ncps"
-    help = "Get Nutrition Care Processes by person identifier"
+    help = "Get clinical notes by person identifier"
     options_model = PersonNCPsOptions
 
-    def __init__(self, client: CloudAPIClient | None = None) -> None:
-        """Store the cloud-api client used to fetch NCPs."""
-        self.client = client or CloudAPIClient(str(SETTINGS.cloud_api_base_url))
+    def __init__(self, session: Session | None = None) -> None:
+        """Store the optional controller-owned session."""
+        self.session = session
 
-    async def run(
-        self,
-        options: PersonNCPsOptions,
-    ) -> Output[PersonNCPsResult]:
-        """Return NCPs for the supplied person identifier."""
-        ncps = await self.client.list_ncps(options.person_identifier)
+    def run(self, options: PersonNCPsOptions) -> Output[PersonNCPsResult]:
+        """Return the notes stored for the supplied person identifier."""
+        with controller_session(self.session) as session:
+            person = PersonRepo(session).get_by_identifier(
+                options.person_identifier,
+            )
+            # An unknown identifier is an empty history, not an error: the
+            # caller asked what is on file, and the answer is nothing.
+            notes = (
+                NCPNoteRepo(session).list_for_person(person.id)
+                if person is not None and person.id is not None
+                else []
+            )
         return Output(
-            result=PersonNCPsResult(ncps=ncps),
+            result=PersonNCPsResult(ncps=notes),
             controller=self.name,
             exit_code=0,
         )

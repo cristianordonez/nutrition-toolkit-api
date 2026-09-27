@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from engine.models.sql.knowledge import KnowledgeType
+
+from .base import KnowledgeExtractor
+
+
+class NutritionCareManualExtractor(KnowledgeExtractor):
+    """Recognize and chunk a clinical knowledge document."""
+
+    knowledge_type = KnowledgeType.NUTRITION_CARE_MANUAL
+
+    def is_expected_format(self) -> bool:
+        """Return whether the document is a supported knowledge source."""
+        return (
+            self._is_pdf(self.path)
+            and self._first_page_contains(
+                "Nutrition Care Manual",
+            )
+            and self._first_page_contains("Diet Manual") is False
+        )
+
+
+class DietManualExtractor(KnowledgeExtractor):
+    """Recognize and chunk a clinical knowledge document."""
+
+    knowledge_type = KnowledgeType.DIET_MANUAL
+
+    def is_expected_format(self) -> bool:
+        """Return whether the document is a supported knowledge source."""
+        return (
+            self._is_pdf(self.path)
+            and self._first_page_contains("Diet Manual")
+            and self._first_page_contains("Nutrition Care Manual")
+        )

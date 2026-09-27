@@ -23,7 +23,7 @@ from engine.models.extracted_fact_create import (
     DialysisPayload,
     MealIntakePayload,
 )
-from engine.models.sql.clinical import AppetiteLevel, ClinicalStatus, DialysisType
+from engine.models.clinical_vocab import AppetiteLevel, ClinicalStatus, DialysisType
 
 
 class FakeAgent:
@@ -181,7 +181,6 @@ def test_run_unknown_document_returns_identity_bound_facts() -> None:
         identity=AIExtractedIdentity(
             source_person_name="Patel, Sushilaben",
             source_person_identifier="EN140519",
-            facility_name="Embassy Manor at Edison",
         ),
         fact=AIExtractedFact(
             payload=MealIntakePayload(

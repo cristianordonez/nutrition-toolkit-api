@@ -1,37 +1,31 @@
 from __future__ import annotations
 
-import warnings
-from datetime import UTC, datetime
-
+from engine.models.sql.clinical_fact import ClinicalFact
 from engine.models.sql.document import Document
-from engine.models.sql.person import PersonLab
 from engine.pipelines.person.ingestion.transformer import TransformedDocument
 
 
-def test_related_models_serialize_using_their_runtime_model() -> None:
-    """Do not run heterogeneous SQLModels through every union serializer."""
+def test_generic_clinical_facts_serialize_their_typed_payload() -> None:
     transformed = TransformedDocument(
         document=Document(
             filename="labs.pdf",
-            file_type="application/pdf",
+            media_type="application/pdf",
             checksum="sha256:checksum",
             storage_uri="file:///labs.pdf",
             document_type="PCCLabResultsExtractor",
         ),
-        document_sources=[],
-        extracted_facts=[],
-        related_models=[
-            PersonLab(
+        clinical_sources=[],
+        clinical_facts=[
+            ClinicalFact(
                 person_id=1,
-                name="Albumin",
-                result="3.2",
-                observed_at=datetime(2026, 7, 29, 15, 55, tzinfo=UTC),
+                fact_type="lab",
+                payload={"name": "Albumin", "result": "3.2"},
+                identity_hash="identity",
+                content_hash="content",
             ),
         ],
     )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        serialized = transformed.model_dump(mode="json")
+    serialized = transformed.model_dump(mode="json")
 
-    assert serialized["related_models"][0]["name"] == "Albumin"
+    assert serialized["clinical_facts"][0]["payload"]["name"] == "Albumin"

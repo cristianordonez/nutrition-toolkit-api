@@ -14,7 +14,7 @@ authors = [
 ]
 requires-python = ">= 3.11"
 dependencies = [
-    "ntk-core",
+    "platformdirs>=4.3",
     "pyyaml>=6.0.3",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
@@ -26,13 +26,14 @@ dependencies = [
     "pymupdf>=1.28.2",
     "httpx>=0.28",
     "logfire>=4.41.0",
+    "keyring>=25.7.0",
+    "sentence-transformers>=6.0.0",
+    "sqlite-vec>=0.1.9",
 ]
 
 [project.scripts]
-engine = "engine.presentation.cli.app:main"
+engine = "engine.cli:main"
 
-[tool.uv.sources]
-ntk-core = { workspace = true }
 
 [tool.hatch]
 version.source = "vcs"

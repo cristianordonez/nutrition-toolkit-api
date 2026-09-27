@@ -21,7 +21,8 @@ from engine.models.extracted_fact_create import (
     OralFeedingStatusPayload,
     ParenteralNutritionPayload,
 )
-from engine.models.sql.clinical import (
+from engine.models.clinical_facts import PersonDiet, PersonMedication
+from engine.models.clinical_vocab import (
     AppetiteLevel,
     ClinicalStatus,
     FoodPreferenceReason,
@@ -30,8 +31,6 @@ from engine.models.sql.clinical import (
     GISymptom,
     NutritionGoalType,
     ParenteralAccessRoute,
-    PersonDiet,
-    PersonMedication,
 )
 
 
@@ -44,7 +43,7 @@ def test_created_at_is_application_time_not_historical_observation_time() -> Non
         name="Lasix",
         observed_at=observed_at,
         state_key="lasix",
-        extracted_fact_id=1,
+        clinical_source_id=1,
     )
 
     assert before_create <= medication.created_at <= datetime.now(UTC)
@@ -139,7 +138,7 @@ def test_person_diet_model_canonicalizes_direct_input() -> None:
             "texture": "mechanical soft",
             "restrictions": ["low cholesterol"],
             "state_key": "test",
-            "extracted_fact_id": 1,
+            "clinical_source_id": 1,
         },
     )
 

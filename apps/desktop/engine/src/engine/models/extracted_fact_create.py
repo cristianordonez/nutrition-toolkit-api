@@ -13,7 +13,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from engine.models.sql.clinical.common import (
+from engine.models.food_vocab import LiquidConsistency, PackageType  # noqa: TC001
+from engine.models.clinical_facts import (
     AppetiteLevel,
     ClinicalStatus,
     DentitionStatus,
@@ -34,9 +35,8 @@ from engine.models.sql.clinical.common import (
     normalize_diet_texture,
     normalize_diet_type,
 )
-from engine.models.sql.document import SourceAuthority
-from engine.models.sql.extracted_fact import ExtractionMethod
-from ntk.models.food_vocab import LiquidConsistency, PackageType  # noqa: TC001
+from engine.models.sql.clinical_fact import ExtractionMethod
+from engine.models.sql.clinical_source import SourceAuthority
 
 
 class FactType(StrEnum):
@@ -46,7 +46,7 @@ class FactType(StrEnum):
     LAB = "lab"
     EDEMA = "edema"
     WOUND = "wound"
-    INTAKE = "intake"
+    MEAL_INTAKE = "meal_intake"
     CLINICAL_FACT = "clinical_fact"
     MEDICATION = "medication"
     DIAGNOSIS = "diagnosis"
@@ -107,7 +107,7 @@ class WoundPayload(BaseModel):
 
 
 class MealIntakePayload(BaseModel):
-    type: typing.Literal["intake"] = "intake"
+    type: typing.Literal["meal_intake"] = "meal_intake"
     min_percent: float | None = None
     max_percent: float | None = None
     observed_at: datetime
@@ -409,16 +409,13 @@ class ExtractedFactCreate(BaseModel):
     # unresolved identity clues
     source_person_identifier: str | None = None
     source_person_name: str | None = None
-    facility_name: str | None = None
-    facility_identifier: str | None = None
     date_of_birth: date | None = None
     sex: str | None = None
     height_in: float | None = Field(default=None, gt=0)
 
     # already known identity
     person_id: int | None = None
-    facility_id: int | None = None
-    clinical_note_id: int | None = None
+    clinical_source_id: int | None = None
 
     # source-system identity and authority
     source_system: str | None = None

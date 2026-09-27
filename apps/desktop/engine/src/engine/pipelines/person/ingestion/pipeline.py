@@ -4,11 +4,13 @@ import importlib
 import logging
 import typing
 
-from engine.models.sql.person import (
+from engine.models.sql.clinical_source import (
+    ClinicalSource,
+    ClinicalSourceKind,
     ExtractionStatus,
-    PersonClinicalNote,
+    SourceAuthority,
 )
-from ntk.utils.misc import require_id
+from engine.utils.misc import require_id
 
 from .extract.pcc_order_report import (
     OrderReportMode,
@@ -22,7 +24,7 @@ from .extract.pcc_progress_notes import (
 from .extract.registry import EXTRACTOR_REGISTRY
 from .extract.unknown_file import UnknownFileExtractor
 from .transformer import (
-    ExtractedFactTransformer,
+    ClinicalFactTransformer,
     PersonTransformationResult,
 )
 
@@ -31,9 +33,8 @@ if typing.TYPE_CHECKING:
     from datetime import date
 
     from engine.models.extracted_fact_create import ExtractedFactCreate
-    from engine.repositories.clinical_note_repo import ClinicalNoteRepo
+    from engine.repositories.clinical_source_repo import ClinicalSourceRepo
     from engine.repositories.person_repo import PersonRepo
-    from engine.services.facility_resolver import FacilityResolver
     from engine.services.person.person_service import PersonService
 
     from .extract.base import PersonExtractor
@@ -110,19 +111,17 @@ class PersonIngestionPipeline:
 
     def __init__(
         self,
-        clinical_note_repository: ClinicalNoteRepo | None = None,
+        clinical_source_repository: ClinicalSourceRepo | None = None,
         person_service: PersonService | None = None,
-        facility_resolver: FacilityResolver | None = None,
     ) -> None:
         """Initialize optional persistence and embedding dependencies."""
-        self.clinical_note_repository = clinical_note_repository
+        self.clinical_source_repository = clinical_source_repository
         self.person_service = person_service
-        self.facility_resolver = facility_resolver
-        self.transformer: ExtractedFactTransformer | None = None
+        self.transformer: ClinicalFactTransformer | None = None
         self._extractor_cache: dict[pathlib.Path, PersonExtractor] = {}
-        self._processed_clinical_notes: dict[
+        self._processed_clinical_sources: dict[
             pathlib.Path,
-            list[PersonClinicalNote],
+            list[ClinicalSource],
         ] = {}
 
     @staticmethod
@@ -163,12 +162,22 @@ class PersonIngestionPipeline:
         request_checksums: set[str] = set()
         person_repository = self._person_repository()
         for path in files:
-            checksum = ExtractedFactTransformer.document_checksum(path)
-            if checksum in request_checksums or person_repository.document_exists(
-                checksum,
-            ):
+            checksum = ClinicalFactTransformer.document_checksum(path)
+            if checksum in request_checksums:
+                logger.info("Skipping duplicate file in this request: %s", path)
+                continue
+            # Skip only what finished. A genuine extraction error leaves a
+            # FAILED source and is retried; a successful zero-fact result is
+            # recorded as NOT_APPLICABLE and is complete.
+            if person_repository.document_ingestion_is_complete(checksum):
                 logger.info("Skipping previously ingested document: %s", path)
                 continue
+            if person_repository.document_exists(checksum):
+                logger.info(
+                    "Re-processing %s: it was ingested before but has unfinished "
+                    "or failed extraction",
+                    path,
+                )
             request_checksums.add(checksum)
             extractor = self._find_extractor(path)
             extracted_facts = await self._extract_report(
@@ -190,26 +199,18 @@ class PersonIngestionPipeline:
                     "source_observed_at",
                     None,
                 ),
+                existing_sources=self._processed_clinical_sources.get(
+                    path.resolve(),
+                    (),
+                ),
             )
             transformed_documents.append(transformed)
             if (
                 isinstance(extractor, PccOrderReportExtractor)
                 and extractor.report_mode is OrderReportMode.ACTIVE_SNAPSHOT
-                and all(
-                    fact.facility_id is not None for fact in transformed.extracted_facts
-                )
             ):
                 active_order_documents.append(transformed)
             else:
-                if (
-                    isinstance(extractor, PccOrderReportExtractor)
-                    and extractor.report_mode is OrderReportMode.ACTIVE_SNAPSHOT
-                ):
-                    logger.warning(
-                        "Persisting %s without destructive order reconciliation "
-                        "because its facility was not resolved",
-                        path.name,
-                    )
                 incremental_documents.append(transformed)
             ingested_files.append(path)
         if incremental_documents:
@@ -219,7 +220,7 @@ class PersonIngestionPipeline:
                 active_order_documents,
             )
         if transformed_documents:
-            self._mark_clinical_notes_extracted(ingested_files)
+            self._mark_clinical_sources_extracted(ingested_files)
         return PersonTransformationResult(documents=transformed_documents)
 
     @staticmethod
@@ -232,18 +233,20 @@ class PersonIngestionPipeline:
             return facts
         return [fact for fact in facts if fact.payload.type != "diet"]
 
-    def _mark_clinical_notes_extracted(self, files: list[pathlib.Path]) -> None:
+    def _mark_clinical_sources_extracted(self, files: list[pathlib.Path]) -> None:
         """Mark successfully processed notes after their facts are persisted."""
-        if self.clinical_note_repository is None:
+        if self.clinical_source_repository is None:
             return
-        processed_notes = {
-            note.note_key: note
+        processed_sources = {
+            source.source_key: source
             for path in files
-            for note in self._processed_clinical_notes.pop(path.resolve(), ())
+            for source in self._processed_clinical_sources.pop(path.resolve(), ())
         }
-        for clinical_note in processed_notes.values():
-            self.clinical_note_repository.set_extraction_status(
-                clinical_note,
+        for source in processed_sources.values():
+            if source.extraction_status is ExtractionStatus.FAILED:
+                continue
+            self.clinical_source_repository.set_extraction_status(
+                source,
                 ExtractionStatus.EXTRACTED,
             )
 
@@ -311,9 +314,9 @@ class PersonIngestionPipeline:
         extractor: PccProgressNotesExtractor,
     ) -> list[ExtractedFactCreate]:
         """Resolve and persist notes before persistence-free fact extraction."""
-        repository = self._clinical_note_repository()
+        repository = self._clinical_source_repository()
         prepared: list[PreparedProgressNoteExtraction] = []
-        note_by_key: dict[str, PersonClinicalNote] = {}
+        source_by_key: dict[str, ClinicalSource] = {}
         selected_notes = extractor.extract_notes()
         selected_identities = {
             (note.source_person_identifier, note.source_person_name)
@@ -327,19 +330,18 @@ class PersonIngestionPipeline:
             if identity not in selected_identities:
                 self._person_service().resolve_or_create_clinical_note(identity_note)
         for note_key, note in extractor.deduplicate_notes(selected_notes):
-            clinical_note = self._prepare_clinical_note(note, note_key)
-            if clinical_note is None:
+            clinical_source = self._prepare_clinical_source(note, note_key)
+            if clinical_source is None:
                 continue
-            note_by_key[note_key] = clinical_note
+            source_by_key[note_key] = clinical_source
             prepared.append(
                 PreparedProgressNoteExtraction(
                     note=note,
-                    person_id=clinical_note.person_id,
-                    clinical_note_id=clinical_note.id,
+                    person_id=clinical_source.person_id,
+                    clinical_source_id=clinical_source.id,
                 ),
             )
         facts = extractor.extract_header_facts()
-        successful_notes: list[PersonClinicalNote] = []
         for outcome in await extractor.extract_prepared(prepared):
             note_key = extractor.get_note_key(
                 source_person_identifier=outcome.prepared.note.source_person_identifier,
@@ -348,25 +350,26 @@ class PersonIngestionPipeline:
                 author=outcome.prepared.note.author,
                 note_text=outcome.prepared.note.note_text,
             )
-            clinical_note = note_by_key[note_key]
+            clinical_source = source_by_key[note_key]
             if outcome.error is not None:
                 repository.set_extraction_status(
-                    clinical_note,
+                    clinical_source,
                     ExtractionStatus.FAILED,
                 )
                 continue
             facts.extend(outcome.facts or ())
-            successful_notes.append(clinical_note)
-        self._processed_clinical_notes[path.resolve()] = successful_notes  # noqa: ASYNC240
+        self._processed_clinical_sources[path.resolve()] = list(  # noqa: ASYNC240
+            source_by_key.values(),
+        )
         return facts
 
-    def _prepare_clinical_note(
+    def _prepare_clinical_source(
         self,
         note: ParsedProgressNote,
         note_key: str,
-    ) -> PersonClinicalNote | None:
+    ) -> ClinicalSource | None:
         """Resolve identity and create or prepare one persisted clinical note."""
-        repository = self._clinical_note_repository()
+        repository = self._clinical_source_repository()
         person = self._person_service().resolve_or_create_clinical_note(note)
         existing = repository.get_by_key(note_key)
         if existing is not None:
@@ -391,14 +394,24 @@ class PersonIngestionPipeline:
             msg = f"Clinical note {note_key} does not have an effective date"
             raise ValueError(msg)
         return repository.create(
-            PersonClinicalNote(
+            ClinicalSource(
                 person_id=require_id(person.id),
-                note_date=note.note_date,
+                source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+                source_key=note_key,
+                effective_at=note.note_date,
                 note_type=note.note_type,
                 author=note.author,
-                note_text=note.note_text,
-                raw_text=note.raw_text,
-                note_key=note_key,
+                content=note.note_text,
+                raw_content=note.raw_text,
+                content_hash=ClinicalFactTransformer.content_hash(note.raw_text),
+                page_start=note.source_page,
+                page_end=note.source_page,
+                locator={"page": note.source_page}
+                if note.source_page is not None
+                else {},
+                source_system="pointclickcare",
+                source_record_type=note.note_type,
+                source_authority=SourceAuthority.CLINICAL_DOCUMENT,
                 extraction_status=ExtractionStatus.PENDING,
             ),
         )
@@ -410,11 +423,11 @@ class PersonIngestionPipeline:
     def _person_repository(self) -> PersonRepo:
         return self._person_service().repository
 
-    def _clinical_note_repository(self) -> ClinicalNoteRepo:
-        if self.clinical_note_repository is None:
-            msg = "A clinical-note repository is required for note ingestion"
+    def _clinical_source_repository(self) -> ClinicalSourceRepo:
+        if self.clinical_source_repository is None:
+            msg = "A clinical-source repository is required for note ingestion"
             raise RuntimeError(msg)
-        return self.clinical_note_repository
+        return self.clinical_source_repository
 
     def _person_service(self) -> PersonService:
         if self.person_service is None:
@@ -422,11 +435,8 @@ class PersonIngestionPipeline:
             raise RuntimeError(msg)
         return self.person_service
 
-    def _fact_transformer(self) -> ExtractedFactTransformer:
+    def _fact_transformer(self) -> ClinicalFactTransformer:
         """Return the configured transformer with person ID resolution."""
         if self.transformer is None:
-            self.transformer = ExtractedFactTransformer(
-                self._person_service(),
-                self.facility_resolver,
-            )
+            self.transformer = ClinicalFactTransformer(self._person_service())
         return self.transformer

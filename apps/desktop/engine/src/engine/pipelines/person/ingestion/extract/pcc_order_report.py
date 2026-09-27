@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pymupdf
 
-from engine.models.sql.document import SourceAuthority
+from engine.models.sql.clinical_source import SourceAuthority
 
 from .base import PersonExtractor
 from .order_classifier import ClassifiedOrderPayload, OrderClassifier
@@ -29,6 +29,15 @@ _ORDER_PERSON_RE = re.compile(
     r"^(?P<name>[^()\n]+,\s*[^()\n]+?)\s*"
     r"\((?P<id>[A-Z]{0,4}\d+)\)\s*(?P<order>.*)$",
 )
+#: An ICD-10 code: one letter, two digits, and an optional decimal subdivision
+#: (R69, I10, E11.9). Resident identifiers on this report are longer -- five
+#: digits and up, or a letter prefix with six, like EN140056 -- so nothing
+#: legitimate is lost by refusing this shape.
+_ICD10_CODE_RE = re.compile(r"[A-Z]\d{2}(?:\.\d{1,4})?")
+#: A telephone area code, which only disqualifies an identifier when the text
+#: that follows it is the rest of the phone number.
+_AREA_CODE_RE = re.compile(r"\d{3}")
+_PHONE_NUMBER_RE = re.compile(r"\d{3}[-.\s]\d{4}\b")
 _REPORT_DATE_RE = re.compile(
     r"\bDate\s*:\s*(?P<date>"
     r"\d{1,2}/\d{1,2}/\d{4}"
@@ -139,16 +148,11 @@ class PccOrderReportExtractor(PersonExtractor):
         ):
             msg = "An active order snapshot requires a report Date timestamp"
             raise ValueError(msg)
-        facility_name = self._parse_facility_name(
-            self._first_page_text,
-            "Order Listing Report",
-        )
         return [
             self._build_extracted_fact(
                 order,
-                source_person_identifier=facility_resident_identifier,
+                source_person_identifier=resident_identifier,
                 source_person_name=source_person_name,
-                facility_name=facility_name,
                 source_page=source_page,
                 source_system="pointclickcare",
                 source_record_type=order.type,
@@ -160,7 +164,7 @@ class PccOrderReportExtractor(PersonExtractor):
             )
             for (
                 source_page,
-                facility_resident_identifier,
+                resident_identifier,
                 source_person_name,
                 order,
             ) in self._extract_pdf(
@@ -191,12 +195,12 @@ class PccOrderReportExtractor(PersonExtractor):
                         report_observed_at=report_observed_at,
                     )
                 for (
-                    facility_resident_identifier,
+                    resident_identifier,
                     source_person_name,
                     order,
                 ) in page_orders:
                     identity = (
-                        (facility_resident_identifier or "").casefold(),
+                        (resident_identifier or "").casefold(),
                         order.type,
                         self._normalize_summary(self._payload_text(order)),
                         order.source_revision_date,
@@ -207,7 +211,7 @@ class PccOrderReportExtractor(PersonExtractor):
                     orders.append(
                         (
                             page_index + 1,
-                            facility_resident_identifier,
+                            resident_identifier,
                             source_person_name,
                             order,
                         ),
@@ -262,31 +266,41 @@ class PccOrderReportExtractor(PersonExtractor):
         *,
         report_observed_at: datetime | None = None,
     ) -> list[ParsedPersonOrder]:
-        """Parse each order with the person identifier on its row."""
+        """Parse each order with the person identifier on its row.
+
+        Every resident row on this report introduces that resident's first
+        order on the same line, which is what distinguishes it from other text
+        of the same shape.
+        """
         orders: list[ParsedPersonOrder] = []
-        facility_resident_identifier: str | None = None
+        resident_identifier: str | None = None
         source_person_name: str | None = None
         row_lines: list[str] = []
         for raw_line in text.splitlines():
             line = raw_line.strip()
             if not line or cls._is_report_chrome(line):
                 continue
-            if person_match := _ORDER_PERSON_RE.match(line):
+            person_match = _ORDER_PERSON_RE.match(line)
+            if person_match is not None and not cls._starts_a_resident(person_match):
+                # Shaped like a resident row but introduces no order, so it is
+                # something else on the page -- see _starts_a_resident.
+                person_match = None
+            if person_match is not None:
                 cls._append_order(
                     orders,
-                    facility_resident_identifier,
+                    resident_identifier,
                     source_person_name,
                     row_lines,
                     report_observed_at=report_observed_at,
                 )
-                facility_resident_identifier = person_match.group("id").strip()
+                resident_identifier = person_match.group("id").strip()
                 source_person_name = person_match.group("name").strip()
                 row_lines = [person_match.group("order").strip()]
             elif row_lines:
                 row_lines.append(line)
         cls._append_order(
             orders,
-            facility_resident_identifier,
+            resident_identifier,
             source_person_name,
             row_lines,
             report_observed_at=report_observed_at,
@@ -297,21 +311,20 @@ class PccOrderReportExtractor(PersonExtractor):
     def _append_order(
         cls,
         orders: list[ParsedPersonOrder],
-        facility_resident_identifier: str | None,
+        resident_identifier: str | None,
         source_person_name: str | None,
         row_lines: list[str],
         *,
         report_observed_at: datetime | None,
     ) -> None:
-        if facility_resident_identifier is None or source_person_name is None:
+        if resident_identifier is None or source_person_name is None:
             return
         parsed_orders = cls._parse_order_text(
             " ".join(row_lines),
             report_observed_at=report_observed_at,
         )
         orders.extend(
-            (facility_resident_identifier, source_person_name, order)
-            for order in parsed_orders
+            (resident_identifier, source_person_name, order) for order in parsed_orders
         )
 
     @staticmethod
@@ -341,6 +354,32 @@ class PccOrderReportExtractor(PersonExtractor):
             status=match.group("status"),
             observed_at=report_observed_at,
             revision_date=revision_date,
+        )
+
+    @staticmethod
+    def _starts_a_resident(person_match: re.Match[str]) -> bool:
+        """Whether a line matching the resident pattern really is one.
+
+        ``Last, First (ID)`` is not a shape unique to residents. Two kinds of
+        line on this report wear it too, and each one seen in production
+        invented a resident and filed real orders under them:
+
+        * a coded diagnosis -- ``Illness, unspecified (R69)`` -- because an
+          ICD-10 code reads as an identifier;
+        * a clinic address -- ``OLSEN, EDISON, NJ (732) 549-3286`` -- because
+          a telephone area code does too.
+
+        Neither the name nor the order can rule these out: the name is free
+        text, and a resident row may legitimately carry no order at all, with
+        the order following on the next line. So the identifier is what gets
+        checked, by rejecting the two shapes that are known not to be one.
+        """
+        identifier = person_match.group("id").strip()
+        order = person_match.group("order").strip()
+        if _ICD10_CODE_RE.fullmatch(identifier):
+            return False
+        return not (
+            _AREA_CODE_RE.fullmatch(identifier) and _PHONE_NUMBER_RE.match(order)
         )
 
     @staticmethod

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import typing
 from datetime import UTC, datetime
+
+from sqlmodel import Session, SQLModel, create_engine
 
 from engine.controllers.persons import weights
 from engine.controllers.persons.app import PersonControllerGroup
@@ -15,8 +16,11 @@ from engine.controllers.persons.weights import (
     PersonWeightsController,
     PersonWeightsOptions,
 )
-from engine.models.sql.person import PersonWeight
-from ntk.models.ncp_public import NutritionCareProcessPublic
+from engine.models.clinical_facts import PersonWeight
+from engine.models.ncp_note import NCPNoteStatus, NCPNoteType
+from engine.models.sql.ncp_note import NCPNote
+from engine.models.sql.person import Person
+from engine.repositories.person_repo import PersonRepo
 
 if typing.TYPE_CHECKING:
     import pytest
@@ -42,35 +46,42 @@ def test_person_group_registers_plural_query_commands() -> None:
     assert weight_args.person_ids == [person_id]
 
 
-def test_person_ncps_command_queries_cloud_api(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    ncp = NutritionCareProcessPublic(
-        id=1,
-        person_identifier="person-42",
-        note_text="Assessment",
-        content_hash="hash",
-        created_by="model",
-        status="draft",
-        created_at=datetime(2026, 8, 28, tzinfo=UTC),
-    )
+def test_person_ncps_command_reads_local_storage() -> None:
+    """Notes now live only on this device, so no network call is made."""
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        person = PersonRepo(session).create(
+            Person(name="Cai, Test", person_identifier="person-42"),
+        )
+        session.add(
+            NCPNote(
+                person_id=person.id,
+                note_type=NCPNoteType.QUARTERLY,
+                content="Assessment",
+                status=NCPNoteStatus.FINALIZED,
+                finalized_at=datetime(2026, 8, 28, tzinfo=UTC),
+            ),
+        )
+        session.commit()
 
-    class Client:
-        async def list_ncps(
-            self,
-            person_identifier: str,
-        ) -> list[NutritionCareProcessPublic]:
-            assert person_identifier == "person-42"
-            return [ncp]
-
-    output = asyncio.run(
-        PersonNCPsController(client=Client()).run(  # ty: ignore[invalid-argument-type]
+        output = PersonNCPsController(session=session).run(
             PersonNCPsOptions(person_identifier="person-42"),
-        ),
-    )
+        )
 
-    assert output.result.ncps == [ncp]
-    assert '"note_text": "Assessment"' in output.result.to_console()
+    assert [note.content for note in output.result.ncps] == ["Assessment"]
+    assert '"content": "Assessment"' in output.result.to_console()
+
+
+def test_person_ncps_command_reports_an_unknown_person_as_empty() -> None:
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        output = PersonNCPsController(session=session).run(
+            PersonNCPsOptions(person_identifier="nobody"),
+        )
+
+    assert output.result.ncps == []
 
 
 def test_person_weights_command_queries_requested_ids(

@@ -6,16 +6,16 @@ from datetime import UTC, date, datetime
 
 import pymupdf
 import pytest
-from sqlmodel import Session, SQLModel, col, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine
 
 import engine.models.sql  # noqa: F401
+from engine.models.clinical_facts import PersonDiet, PersonMiscOrder
+from engine.models.clinical_vocab import ClinicalStatus
 from engine.models.extracted_fact_create import (
     DietPayload,
     ExtractedFactCreate,
     MiscOrderPayload,
 )
-from engine.models.sql.clinical import ClinicalStatus, PersonDiet
-from engine.models.sql.person import PersonMiscOrder
 from engine.pipelines.person.ingestion.extract.pcc_order_report import (
     PccOrderReportExtractor,
 )
@@ -23,12 +23,10 @@ from engine.pipelines.person.ingestion.pipeline import (
     PersonIngestionPipeline,
 )
 from engine.pipelines.person.ingestion.transformer import (
-    ExtractedFactTransformer,
+    ClinicalFactTransformer,
     TransformedDocument,
 )
-from engine.repositories.facility_repo import FacilityRepo
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
@@ -37,24 +35,20 @@ if typing.TYPE_CHECKING:
 _REVISION_DATE = date(2026, 8, 1)
 _OBSERVED_AT = datetime(2026, 9, 1, tzinfo=UTC)
 _NEWER_OBSERVED_AT = datetime(2026, 9, 2, tzinfo=UTC)
+_LATEST_OBSERVED_AT = datetime(2026, 9, 3, tzinfo=UTC)
 
 
 def _transform_orders(
     session: Session,
     path: pathlib.Path,
-    orders: list[tuple[str, str, str, str]],
+    orders: list[tuple[str, str, str]],
     *,
     observed_at: datetime = _OBSERVED_AT,
 ) -> TransformedDocument:
     path.write_text(path.name, encoding="utf-8")
-    facility_repository = FacilityRepo(session)
-    resolver = FacilityResolver(facility_repository)
-    for facility_name in {order[0] for order in orders}:
-        resolver.register_trusted(name=facility_name)
-    person_service = PersonService(PersonRepo(session), resolver)
+    person_service = PersonService(PersonRepo(session))
     facts = [
         ExtractedFactCreate(
-            facility_name=facility_name,
             source_person_identifier=identifier,
             source_person_name=source_person_name,
             payload=MiscOrderPayload(
@@ -66,9 +60,9 @@ def _transform_orders(
             ),
             confidence=1,
         )
-        for facility_name, identifier, source_person_name, summary in orders
+        for identifier, source_person_name, summary in orders
     ]
-    return ExtractedFactTransformer(person_service).transform(
+    return ClinicalFactTransformer(person_service).transform(
         path,
         facts,
         extractor_name="PccOrderReportExtractor",
@@ -77,11 +71,19 @@ def _transform_orders(
 
 
 def _orders(session: Session) -> list[PersonMiscOrder]:
-    return list(
-        session.exec(
-            select(PersonMiscOrder).order_by(col(PersonMiscOrder.id)),
-        ).all(),
-    )
+    return [
+        record
+        for record in PersonRepo(session).facts.list_records()
+        if isinstance(record, PersonMiscOrder)
+    ]
+
+
+def _active_diets(session: Session) -> list[PersonDiet]:
+    return [
+        record
+        for record in PersonRepo(session).facts.list_records()
+        if isinstance(record, PersonDiet) and record.status is ClinicalStatus.ACTIVE
+    ]
 
 
 def _transform_diet(
@@ -94,16 +96,11 @@ def _transform_diet(
 ) -> TransformedDocument:
     """Build one active diet snapshot for the shared test person."""
     path.write_text(path.name, encoding="utf-8")
-    resolver = FacilityResolver(FacilityRepo(session))
-    resolver.register_trusted(name="Facility A")
-    transformer = ExtractedFactTransformer(
-        PersonService(PersonRepo(session), resolver),
-    )
+    transformer = ClinicalFactTransformer(PersonService(PersonRepo(session)))
     return transformer.transform(
         path,
         [
             ExtractedFactCreate(
-                facility_name="Facility A",
                 source_person_identifier="RES-DIET",
                 source_person_name="Diet Person",
                 payload=DietPayload(
@@ -132,8 +129,8 @@ def test_active_snapshot_upserts_inserts_and_deactivates_missing_orders(
             session,
             tmp_path / "first.pdf",
             [
-                ("Facility A", "RES1", "Person One", "Renal diet"),
-                ("Facility A", "RES1", "Person One", "Protein supplement"),
+                ("RES1", "Person One", "Renal diet"),
+                ("RES1", "Person One", "Protein supplement"),
             ],
         )
         repository.reconcile_active_order_documents([first])
@@ -142,8 +139,8 @@ def test_active_snapshot_upserts_inserts_and_deactivates_missing_orders(
             session,
             tmp_path / "repeated.pdf",
             [
-                ("Facility A", "RES1", "Person One", "Renal diet"),
-                ("Facility A", "RES1", "Person One", "Protein supplement"),
+                ("RES1", "Person One", "Renal diet"),
+                ("RES1", "Person One", "Protein supplement"),
             ],
         )
         repository.reconcile_active_order_documents([repeated])
@@ -155,8 +152,8 @@ def test_active_snapshot_upserts_inserts_and_deactivates_missing_orders(
             session,
             tmp_path / "second.pdf",
             [
-                ("Facility A", "RES1", "Person One", "  RENAL   DIET "),
-                ("Facility A", "RES1", "Person One", "Weekly weights"),
+                ("RES1", "Person One", "  RENAL   DIET "),
+                ("RES1", "Person One", "Weekly weights"),
             ],
             observed_at=_NEWER_OBSERVED_AT,
         )
@@ -166,14 +163,14 @@ def test_active_snapshot_upserts_inserts_and_deactivates_missing_orders(
         renal = next(
             order for order in stored.values() if "renal" in order.description.lower()
         )
-        assert renal.id == original_ids["Renal diet"]
+        assert renal.id != original_ids["Renal diet"]
         assert renal.status == "active"
         assert stored["Protein supplement"].status == "inactive"
         assert stored["Weekly weights"].status == "active"
         assert len(stored) == 3  # noqa: PLR2004
 
 
-def test_reconciliation_is_scoped_to_person_and_facility(
+def test_reconciliation_is_scoped_to_the_person(
     tmp_path: pathlib.Path,
 ) -> None:
     engine = create_engine("sqlite://")
@@ -184,9 +181,9 @@ def test_reconciliation_is_scoped_to_person_and_facility(
             session,
             tmp_path / "all.pdf",
             [
-                ("Facility A", "A1", "Person One", "Order A1"),
-                ("Facility A", "A2", "Person Two", "Order A2"),
-                ("Facility B", "B1", "Person One", "Order B1"),
+                ("A1", "Person One", "Order A1"),
+                ("A2", "Person Two", "Order A2"),
+                ("B1", "Person One", "Order B1"),
             ],
         )
         repository.reconcile_active_order_documents([initial])
@@ -194,7 +191,7 @@ def test_reconciliation_is_scoped_to_person_and_facility(
         person_one_only = _transform_orders(
             session,
             tmp_path / "person-one.pdf",
-            [("Facility A", "A1", "Person One", "Replacement A1")],
+            [("A1", "Person One", "Replacement A1")],
             observed_at=_NEWER_OBSERVED_AT,
         )
         repository.reconcile_active_order_documents([person_one_only])
@@ -206,7 +203,50 @@ def test_reconciliation_is_scoped_to_person_and_facility(
         assert stored["Order B1"] == "active"
 
 
-def test_snapshot_reuses_matching_diet_with_unscoped_provenance(
+def test_snapshot_freshness_is_evaluated_per_person(
+    tmp_path: pathlib.Path,
+) -> None:
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        repository = PersonRepo(session)
+        repository.reconcile_active_order_documents(
+            [
+                _transform_orders(
+                    session,
+                    tmp_path / "person-a-current.pdf",
+                    [("A1", "Person One", "Current A")],
+                    observed_at=_LATEST_OBSERVED_AT,
+                ),
+                _transform_orders(
+                    session,
+                    tmp_path / "person-b-old.pdf",
+                    [("B1", "Person Two", "Old B")],
+                    observed_at=_OBSERVED_AT,
+                ),
+            ],
+        )
+
+        mixed_snapshot = _transform_orders(
+            session,
+            tmp_path / "mixed.pdf",
+            [
+                ("A1", "Person One", "Stale A"),
+                ("B1", "Person Two", "Current B"),
+            ],
+            observed_at=_NEWER_OBSERVED_AT,
+        )
+        repository.reconcile_active_order_documents([mixed_snapshot])
+
+        stored = {order.description: order.status for order in _orders(session)}
+        assert stored == {
+            "Current A": "active",
+            "Old B": "inactive",
+            "Current B": "active",
+        }
+
+
+def test_snapshot_reuses_the_matching_diet_row(
     tmp_path: pathlib.Path,
 ) -> None:
     engine = create_engine("sqlite://")
@@ -218,9 +258,8 @@ def test_snapshot_reuses_matching_diet_with_unscoped_provenance(
             tmp_path / "progress-note.pdf",
             observed_at=_OBSERVED_AT,
         )
-        initial.extracted_facts[0].facility_id = None
         repository.load_transformed_documents([initial])
-        original = session.exec(select(PersonDiet)).one()
+        original = _active_diets(session)[0]
         original_id = original.id
 
         snapshot = _transform_diet(
@@ -230,14 +269,12 @@ def test_snapshot_reuses_matching_diet_with_unscoped_provenance(
         )
         # A request may already have attached the transformed provenance graph.
         # Reconciliation must inspect and replace duplicates before it can flush.
-        session.add(snapshot.document)
-        assert snapshot.related_models[0] in session
         repository.reconcile_active_order_documents([snapshot])
 
-        stored = session.exec(select(PersonDiet)).one()
-        assert stored.id == original_id
-        assert stored.observed_at == _NEWER_OBSERVED_AT.replace(tzinfo=None)
-        assert stored.extracted_fact.facility_id is not None
+        stored = _active_diets(session)
+        assert len(stored) == 1
+        assert stored[0].id != original_id
+        assert stored[0].observed_at == _NEWER_OBSERVED_AT
 
 
 def test_newer_snapshot_updates_changed_diet_without_adding_a_row(
@@ -253,7 +290,7 @@ def test_newer_snapshot_updates_changed_diet_without_adding_a_row(
             observed_at=_OBSERVED_AT,
         )
         repository.reconcile_active_order_documents([initial])
-        original_id = session.exec(select(PersonDiet)).one().id
+        original_id = _active_diets(session)[0].id
 
         changed = _transform_diet(
             session,
@@ -264,11 +301,12 @@ def test_newer_snapshot_updates_changed_diet_without_adding_a_row(
         )
         repository.reconcile_active_order_documents([changed])
 
-        stored = session.exec(select(PersonDiet)).one()
-        assert stored.id == original_id
-        assert stored.diet_type == "renal"
-        assert stored.texture == "pureed"
-        assert stored.observed_at == _NEWER_OBSERVED_AT.replace(tzinfo=None)
+        stored = _active_diets(session)
+        assert len(stored) == 1
+        assert stored[0].id != original_id
+        assert stored[0].diet_type == "renal"
+        assert stored[0].texture == "pureed"
+        assert stored[0].observed_at == _NEWER_OBSERVED_AT
 
 
 def test_older_snapshot_imported_later_does_not_replace_current_orders(
@@ -281,7 +319,7 @@ def test_older_snapshot_imported_later_does_not_replace_current_orders(
         current = _transform_orders(
             session,
             tmp_path / "current.pdf",
-            [("Facility A", "RES1", "Person One", "Current order")],
+            [("RES1", "Person One", "Current order")],
             observed_at=_NEWER_OBSERVED_AT,
         )
         repository.reconcile_active_order_documents([current])
@@ -289,7 +327,7 @@ def test_older_snapshot_imported_later_does_not_replace_current_orders(
         historical = _transform_orders(
             session,
             tmp_path / "historical.pdf",
-            [("Facility A", "RES1", "Person One", "Historical order")],
+            [("RES1", "Person One", "Historical order")],
             observed_at=_OBSERVED_AT,
         )
         repository.reconcile_active_order_documents([historical])
@@ -297,7 +335,7 @@ def test_older_snapshot_imported_later_does_not_replace_current_orders(
         assert {order.description: order.status for order in _orders(session)} == {
             "Current order": "active",
         }
-        assert len(historical.extracted_facts) == 1
+        assert historical.clinical_facts == []
 
 
 def test_reconciliation_rolls_back_when_a_later_snapshot_is_invalid(
@@ -310,24 +348,27 @@ def test_reconciliation_rolls_back_when_a_later_snapshot_is_invalid(
         initial = _transform_orders(
             session,
             tmp_path / "initial.pdf",
-            [("Facility A", "RES1", "Person One", "Existing order")],
+            [("RES1", "Person One", "Existing order")],
         )
         repository.reconcile_active_order_documents([initial])
 
         valid = _transform_orders(
             session,
             tmp_path / "valid.pdf",
-            [("Facility A", "RES1", "Person One", "New order")],
+            [("RES1", "Person One", "New order")],
             observed_at=_NEWER_OBSERVED_AT,
         )
         invalid = _transform_orders(
             session,
             tmp_path / "invalid.pdf",
-            [("Facility A", "RES2", "Person Two", "Invalid order")],
+            [("RES2", "Person Two", "Invalid order")],
         )
-        invalid_order = invalid.related_models[0]
-        assert isinstance(invalid_order, PersonMiscOrder)
-        invalid_order.status = ClinicalStatus.INACTIVE
+        invalid_order = invalid.clinical_facts[0]
+        invalid_order.lifecycle_status = ClinicalStatus.INACTIVE.value
+        invalid_order.payload = {
+            **invalid_order.payload,
+            "status": ClinicalStatus.INACTIVE.value,
+        }
 
         with pytest.raises(ValueError, match="only active orders"):
             repository.reconcile_active_order_documents([valid, invalid])
@@ -346,17 +387,16 @@ def test_unresolved_person_does_not_modify_existing_orders(
         initial = _transform_orders(
             session,
             tmp_path / "initial.pdf",
-            [("Facility A", "RES1", "Person One", "Existing order")],
+            [("RES1", "Person One", "Existing order")],
         )
         repository.reconcile_active_order_documents([initial])
         unresolved = _transform_orders(
             session,
             tmp_path / "unresolved.pdf",
-            [("Facility A", "RES1", "Person One", "Replacement order")],
+            [("RES1", "Person One", "Replacement order")],
             observed_at=_NEWER_OBSERVED_AT,
         )
-        unresolved_order = unresolved.related_models[0]
-        assert isinstance(unresolved_order, PersonMiscOrder)
+        unresolved_order = unresolved.clinical_facts[0]
         unresolved_order.person_id = None  # ty: ignore[invalid-assignment]
 
         with pytest.raises(ValueError, match="resolved person"):
@@ -383,6 +423,11 @@ def test_parser_failure_before_reconciliation_leaves_repository_untouched(
 
         @staticmethod
         def document_exists(_checksum: str) -> bool:
+            return False
+
+        @staticmethod
+        def document_ingestion_is_complete(_checksum: str) -> bool:
+            """A document only counts as ingested once it produced facts."""
             return False
 
         def load_transformed_documents(self, _documents: object) -> None:

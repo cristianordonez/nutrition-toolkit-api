@@ -13,8 +13,6 @@ class AIExtractedIdentity(BaseModel):
     source_person_name: str | None = None
     source_person_identifier: str | None = None
     date_of_birth: date | None = None
-    facility_name: str | None = None
-    facility_identifier: str | None = None
 
 
 class AIExtractedFact(BaseModel):

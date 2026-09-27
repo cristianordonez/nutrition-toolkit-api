@@ -9,11 +9,11 @@ from math import ceil, isclose
 from pydantic import BaseModel
 
 from engine.data.enteral_formulas import Formula, LocalFormulaCatalog
-from ntk.models.derived_calculations import ExistingTubeFeedNutrition
-from ntk.models.food_vocab import PackageType
+from engine.models.derived_calculations import ExistingTubeFeedNutrition
+from engine.models.food_vocab import PackageType
 
 if typing.TYPE_CHECKING:
-    from engine.models.sql.clinical.enteral_feeding import PersonEnteralFeeding
+    from engine.models.clinical_facts import PersonEnteralFeeding
 
 
 class FreeWaterFlush(BaseModel):

@@ -20,6 +20,7 @@ from engine.agents.data_extraction_agent import (
     ExtractedClinicalFacts,
     ExtractionInput,
 )
+from engine.models.clinical_vocab import ClinicalStatus, NUTRITION_DOCUMENTATION_TERMS
 from engine.models.extracted_fact_create import (
     AllergyPayload,
     ClinicalFactPayload,
@@ -28,9 +29,8 @@ from engine.models.extracted_fact_create import (
     LabPayload,
 )
 from engine.models.settings import SETTINGS
-from engine.models.sql.clinical.common import ClinicalStatus
-from engine.models.sql.document import SourceAuthority
-from engine.models.sql.extracted_fact import ExtractionMethod
+from engine.models.sql.clinical_fact import ExtractionMethod
+from engine.models.sql.clinical_source import ClinicalSource, SourceAuthority
 
 from .base import PersonExtractor
 from .registry import register_extractor
@@ -40,7 +40,6 @@ if typing.TYPE_CHECKING:
 
     from engine.models.ai_extraction import AIExtractedFact
     from engine.models.extracted_fact_create import PersonFactPayload
-    from engine.models.sql.person import PersonClinicalNote
 
 
 logger = logging.getLogger(__name__)
@@ -157,12 +156,7 @@ _NUTRITION_FILTERED_NOTE_TYPES = {
     "order note",
     "orders - administration note",
 }
-_NUTRITION_ASSESSMENT_TYPE_TERMS = (
-    "dietary",
-    "dietitian",
-    "dietician",
-    "nutrition",
-)
+_NUTRITION_ASSESSMENT_TYPE_TERMS = NUTRITION_DOCUMENTATION_TERMS
 _NUTRITION_TERM_RE = re.compile(
     r"(?<!\w)(?:"
     + "|".join(
@@ -252,7 +246,6 @@ class ExtractedNote(BaseModel):
     page_end: int
     source_person_identifier: str | None = None
     source_person_name: str | None = None
-    facility_name: str | None = None
     date_of_birth: date | None = None
     sex: str | None = None
     height_in: float | None = None
@@ -265,7 +258,6 @@ class ExtractedNote(BaseModel):
 class ParsedProgressNote(BaseModel):
     source_person_identifier: str | None = None
     source_person_name: str | None = None
-    facility_name: str | None = None
     date_of_birth: date | None = None
     sex: str | None = None
     height_in: float | None = None
@@ -288,7 +280,7 @@ class PreparedProgressNoteExtraction:
 
     note: ParsedProgressNote
     person_id: int | None
-    clinical_note_id: int | None
+    clinical_source_id: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -439,7 +431,7 @@ class PccProgressNotesExtractor(PersonExtractor):
             PreparedProgressNoteExtraction(
                 note=note,
                 person_id=None,
-                clinical_note_id=None,
+                clinical_source_id=None,
             )
             for _note_key, note in self.deduplicate_notes(notes)
         ]
@@ -583,7 +575,6 @@ class PccProgressNotesExtractor(PersonExtractor):
             extraction_method=ExtractionMethod.DETERMINISTIC,
             source_person_identifier=note.source_person_identifier,
             source_person_name=note.source_person_name,
-            facility_name=note.facility_name,
             date_of_birth=note.date_of_birth,
             sex=note.sex,
             height_in=note.height_in,
@@ -669,7 +660,7 @@ class PccProgressNotesExtractor(PersonExtractor):
                 note,
                 ai_fact,
                 person_id=prepared.person_id,
-                clinical_note_id=prepared.clinical_note_id,
+                clinical_source_id=prepared.clinical_source_id,
             )
             for ai_fact in extracted_clinical_facts.facts
         ]
@@ -677,7 +668,7 @@ class PccProgressNotesExtractor(PersonExtractor):
     def _build_fact_from_ai_output(
         self,
         note: ParsedProgressNote,
-        progress_note: PersonClinicalNote,
+        progress_note: ClinicalSource,
         ai_fact: AIExtractedFact,
     ) -> ExtractedFactCreate:
         """Build a fact from a progress-note model for compatibility callers."""
@@ -685,7 +676,7 @@ class PccProgressNotesExtractor(PersonExtractor):
             note,
             ai_fact,
             person_id=progress_note.person_id,
-            clinical_note_id=progress_note.id,
+            clinical_source_id=progress_note.id,
         )
 
     @staticmethod
@@ -694,7 +685,7 @@ class PccProgressNotesExtractor(PersonExtractor):
         ai_fact: AIExtractedFact,
         *,
         person_id: int | None,
-        clinical_note_id: int | None,
+        clinical_source_id: int | None,
     ) -> ExtractedFactCreate:
         """Build the transient fact returned by a session-free worker."""
         logger.debug("AI Fact: %s", ai_fact)
@@ -712,10 +703,9 @@ class PccProgressNotesExtractor(PersonExtractor):
             model_name=DATA_EXTRACTION_MODEL,
             extraction_method=ExtractionMethod.AI,
             person_id=person_id,
-            clinical_note_id=clinical_note_id,
+            clinical_source_id=clinical_source_id,
             source_person_identifier=note.source_person_identifier,
             source_person_name=note.source_person_name,
-            facility_name=note.facility_name,
             date_of_birth=note.date_of_birth if person_id is None else None,
             sex=note.sex if person_id is None else None,
             height_in=note.height_in if person_id is None else None,
@@ -821,9 +811,8 @@ class PccProgressNotesExtractor(PersonExtractor):
 
     def _extract_document(self) -> list[ExtractedNote]:
         extracted_pages: list[ExtractedNote] = []
-        facility_resident_identifier: str | None = None
+        resident_identifier: str | None = None
         source_person_name: str | None = None
-        facility_name: str | None = None
         date_of_birth: date | None = None
         sex: str | None = None
         report_observed_at: datetime | None = None
@@ -850,14 +839,12 @@ class PccProgressNotesExtractor(PersonExtractor):
                             f"# on page {page_index + 1} of {self.path.name}"
                         )
                         raise ValueError(msg)
-                    facility_resident_identifier = (
-                        medical_record_identifier or header_identifier
-                    )
+                    resident_identifier = medical_record_identifier or header_identifier
                     date_of_birth = self._parse_date_of_birth(raw_page_text)
                     sex = self._parse_sex(raw_page_text)
                 else:
-                    facility_resident_identifier = (
-                        medical_record_identifier or facility_resident_identifier
+                    resident_identifier = (
+                        medical_record_identifier or resident_identifier
                     )
                     date_of_birth = (
                         self._parse_date_of_birth(raw_page_text) or date_of_birth
@@ -875,13 +862,6 @@ class PccProgressNotesExtractor(PersonExtractor):
                 parsed_diagnoses = self._parse_diagnoses(raw_page_text)
                 if parsed_diagnoses:
                     diagnoses = parsed_diagnoses
-                facility_name = (
-                    self._parse_facility_name(
-                        raw_page_text,
-                        "Progress Notes *NEW*",
-                    )
-                    or facility_name
-                )
                 body_start = self._body_start_index(lines)
                 body_text = "\n".join(
                     str(line["text"]) for line in lines[body_start:]
@@ -892,9 +872,8 @@ class PccProgressNotesExtractor(PersonExtractor):
                             raw_text=body_text,
                             page_start=page_index + 1,
                             page_end=page_index + 1,
-                            source_person_identifier=facility_resident_identifier,
+                            source_person_identifier=resident_identifier,
                             source_person_name=source_person_name,
-                            facility_name=facility_name,
                             date_of_birth=date_of_birth,
                             sex=sex,
                             report_observed_at=report_observed_at,
@@ -969,7 +948,6 @@ class PccProgressNotesExtractor(PersonExtractor):
         return ParsedProgressNote(
             source_person_identifier=split_note.source_person_identifier,
             source_person_name=split_note.source_person_name,
-            facility_name=split_note.facility_name,
             date_of_birth=split_note.date_of_birth,
             sex=split_note.sex,
             height_in=split_note.height_in,
@@ -994,9 +972,8 @@ class PccProgressNotesExtractor(PersonExtractor):
     def _split_progress_notes(pages: list[ExtractedNote]) -> list[ExtractedNote]:
         notes: list[ExtractedNote] = []
         current_lines: list[str] = []
-        facility_resident_identifier: str | None = None
+        resident_identifier: str | None = None
         source_person_name: str | None = None
-        facility_name: str | None = None
         date_of_birth: date | None = None
         sex: str | None = None
         height_in: float | None = None
@@ -1016,9 +993,8 @@ class PccProgressNotesExtractor(PersonExtractor):
                     raw_text="\n".join(current_lines).strip(),
                     page_start=page_start,
                     page_end=page_end or page_start,
-                    source_person_identifier=facility_resident_identifier,
+                    source_person_identifier=resident_identifier,
                     source_person_name=source_person_name,
-                    facility_name=facility_name,
                     date_of_birth=date_of_birth,
                     sex=sex,
                     height_in=height_in,
@@ -1035,7 +1011,7 @@ class PccProgressNotesExtractor(PersonExtractor):
         for page in pages:
             if (
                 current_lines
-                and page.source_person_identifier != facility_resident_identifier
+                and page.source_person_identifier != resident_identifier
                 and page.source_person_identifier is not None
             ):
                 append_current_note()
@@ -1044,9 +1020,8 @@ class PccProgressNotesExtractor(PersonExtractor):
                     append_current_note()
                     current_lines = [line]
                     page_start = page.page_start
-                    facility_resident_identifier = page.source_person_identifier
+                    resident_identifier = page.source_person_identifier
                     source_person_name = page.source_person_name
-                    facility_name = page.facility_name
                     date_of_birth = page.date_of_birth
                     sex = page.sex
                     height_in = page.height_in
@@ -1062,7 +1037,7 @@ class PccProgressNotesExtractor(PersonExtractor):
         return notes
 
     @staticmethod
-    def _parse_facility_resident_identifier(text: str) -> str | None:
+    def _parse_resident_identifier(text: str) -> str | None:
         person = PccProgressNotesExtractor._parse_person(text)
         return person[0] if person else None
 

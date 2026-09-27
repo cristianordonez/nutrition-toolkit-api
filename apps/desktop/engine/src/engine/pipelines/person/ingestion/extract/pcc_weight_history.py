@@ -66,23 +66,18 @@ class PccWeightHistoryExtractor(PersonExtractor):
 
     def _facts(self, *, require_identity: bool) -> list[ExtractedFactCreate]:
         """Build facts using strict ingestion or relaxed demo identity rules."""
-        facility_name = self._parse_facility_name(
-            self._first_page_text,
-            "Weights and Vitals Summary",
-        )
         return [
             self._build_extracted_fact(
                 weight,
-                source_person_identifier=facility_resident_identifier,
+                source_person_identifier=resident_identifier,
                 source_person_name=source_person_name,
-                facility_name=facility_name,
                 height_in=height_in,
                 source_page=source_page,
                 source_system="pointclickcare",
             )
             for (
                 source_page,
-                facility_resident_identifier,
+                resident_identifier,
                 source_person_name,
                 height_in,
                 weight,
@@ -105,7 +100,7 @@ class PccWeightHistoryExtractor(PersonExtractor):
         """Extract the existing single-person report format."""
         entries: list[PersonWeight] = []
         seen: set[WeightKey] = set()
-        facility_resident_identifier: str | None = None
+        resident_identifier: str | None = None
         source_person_name: str | None = None
         height_in: float | None = None
         with pymupdf.open(self.path) as document:
@@ -114,30 +109,26 @@ class PccWeightHistoryExtractor(PersonExtractor):
                 page_text = page.get_text("text")
                 parsed_person = self._parse_person(page_text)
                 if parsed_person is not None:
-                    facility_resident_identifier, source_person_name = parsed_person
+                    resident_identifier, source_person_name = parsed_person
                     height_in = self._parse_height(page_text)
                 else:
                     height_in = self._parse_height(page_text) or height_in
                 weight_rows = self._parse_weight_rows(page_text)
-                if (
-                    require_identity
-                    and weight_rows
-                    and facility_resident_identifier is None
-                ):
+                if require_identity and weight_rows and resident_identifier is None:
                     msg = (
                         "Unable to determine the person for weight rows on "
                         f"page {page_number + 1} of {self.path.name}"
                     )
                     raise ValueError(msg)
                 for weight_key, entry in weight_rows:
-                    key = (facility_resident_identifier, weight_key[0])
+                    key = (resident_identifier, weight_key[0])
                     if key in seen:
                         continue
                     seen.add(key)
                     entries.append(
                         (
                             page_number + 1,
-                            facility_resident_identifier,
+                            resident_identifier,
                             source_person_name,
                             height_in,
                             entry,
@@ -173,17 +164,17 @@ class PccWeightHistoryExtractor(PersonExtractor):
                         continue
                     for weight_key, entry in self._parse_weight_rows(line):
                         (
-                            facility_resident_identifier,
+                            resident_identifier,
                             source_person_name,
                         ) = current_person
-                        key = (facility_resident_identifier, weight_key[0])
+                        key = (resident_identifier, weight_key[0])
                         if key in seen:
                             continue
                         seen.add(key)
                         entries.append(
                             (
                                 page_number + 1,
-                                facility_resident_identifier,
+                                resident_identifier,
                                 source_person_name,
                                 height_in,
                                 entry,
@@ -216,7 +207,7 @@ class PccWeightHistoryExtractor(PersonExtractor):
         return rows
 
     @staticmethod
-    def _parse_facility_resident_identifier(text: str) -> str | None:
+    def _parse_resident_identifier(text: str) -> str | None:
         person = PccWeightHistoryExtractor._parse_person(text)
         return person[0] if person else None
 

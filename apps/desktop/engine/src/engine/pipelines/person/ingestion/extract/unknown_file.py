@@ -16,8 +16,8 @@ from engine.agents.data_extraction_agent import (
     ExtractionInput,
 )
 from engine.models.extracted_fact_create import ExtractedFactCreate
-from engine.models.sql.extracted_fact import ExtractionMethod
-from ntk.utils.tokens import sliding_window
+from engine.models.sql.clinical_fact import ExtractionMethod
+from engine.utils.tokens import sliding_window
 
 from .base import PersonExtractor
 
@@ -28,7 +28,11 @@ if typing.TYPE_CHECKING:
     from engine.models.ai_extraction import AIUnknownDocumentFact
 
 
-_SUPPORTED_SUFFIXES = {".pdf"}
+#: The desktop app offers these for drag-and-drop, so the extractor has to
+#: accept the same set. A plain-text file has no pages, which is why page
+#: provenance below is optional rather than assumed.
+_SUPPORTED_SUFFIXES = {".pdf", ".txt"}
+_PLAIN_TEXT_SUFFIXES = {".txt"}
 _UNKNOWN_DOCUMENT_CHUNK_TOKENS = 600
 _MAX_UNKNOWN_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
@@ -142,6 +146,58 @@ class UnknownFileExtractor(PersonExtractor):
                     )
                     for fact in extracted_facts
                 )
+        return self._attribute_to_document_subject(facts, self.file.name)
+
+    @staticmethod
+    def _attribute_to_document_subject(
+        facts: list[ExtractedFactCreate],
+        document_name: str,
+    ) -> list[ExtractedFactCreate]:
+        """Complete each fact's identity from the one the document establishes.
+
+        Chunk boundaries are an artifact of tokenization, not a change of
+        subject. A discharge packet identifies its patient in a header, but a
+        600-token window taken from the middle of a medication table contains
+        no header -- so the agent reads real facts out of it and has nothing
+        to attribute them to. Persistence then refuses the whole batch,
+        because a person cannot be created from facts alone.
+
+        Identity arrives in pieces, not all-or-nothing: one chunk carries a
+        name and an MRN, the next a name and a date of birth, a third only a
+        name. So this fills in each *field* a fact is missing rather than only
+        rescuing facts that named nobody at all -- a chunk that has the name
+        but no birth date and no identifier is rejected by persistence just as
+        surely as one with no identity whatsoever.
+
+        Applied only when the document speaks about one person. Two facts that
+        state the same field differently mean the document names more than one
+        subject, and guessing which of them an unattributed medication belongs
+        to is exactly the kind of error that must not be made quietly: nothing
+        is filled in, and persistence fails loudly instead.
+        """
+        subject = _document_subject(facts)
+        if not isinstance(subject, _DocumentSubject):
+            # Downstream this surfaces as "Cannot create a person without
+            # first name, last name, and birth date or a person identifier",
+            # thrown from persistence with no hint of which document or which
+            # names caused it. Say so here, where that is still known.
+            incomplete = sum(1 for fact in facts if not _is_persistable(fact))
+            if incomplete and subject:
+                logger.warning(
+                    "%s identifies more than one subject (%s), so %s of %s facts "
+                    "keep an incomplete identity and will be rejected",
+                    document_name,
+                    "; ".join(conflict.describe() for conflict in subject),
+                    incomplete,
+                    len(facts),
+                )
+            return facts
+        for fact in facts:
+            fact.source_person_name = fact.source_person_name or subject.name
+            fact.source_person_identifier = (
+                fact.source_person_identifier or subject.identifier
+            )
+            fact.date_of_birth = fact.date_of_birth or subject.birth_date
         return facts
 
     def _validate_file_size(self) -> None:
@@ -189,8 +245,6 @@ class UnknownFileExtractor(PersonExtractor):
             source_person_identifier=identity.source_person_identifier,
             source_person_name=identity.source_person_name,
             date_of_birth=identity.date_of_birth,
-            facility_name=identity.facility_name,
-            facility_identifier=identity.facility_identifier,
             source_page=source_page,
             person_id=person_id,
         )
@@ -230,8 +284,142 @@ class UnknownFileExtractor(PersonExtractor):
 
     def _get_document_pages(self) -> list[tuple[int | None, str]]:
         """Read text with one-based PDF page provenance when available."""
+        if self.file.suffix.casefold() in _PLAIN_TEXT_SUFFIXES:
+            # No pages to cite, so provenance is None rather than a made-up 1.
+            text = self.file.read_text(encoding="utf-8", errors="replace")
+            return [(None, text.strip())]
         with pymupdf.open(self.file) as document:
             return [
                 (page_number + 1, document.load_page(page_number).get_text().strip())
                 for page_number in range(document.page_count)
             ]
+
+
+class _Conflict(typing.NamedTuple):
+    """Two facts stated one field differently, with the pair that disagreed.
+
+    Carries the values because "this document names more than one subject" is
+    not, on its own, enough to act on: which field split, and into what, is
+    the difference between a genuine second patient and two spellings that
+    should have compared equal.
+    """
+
+    field: str
+    first: object
+    second: object
+
+    def describe(self) -> str:
+        """Render the disagreement for a log line."""
+        return f"{self.field} {self.first!r} vs {self.second!r}"
+
+
+#: Split a name into comparable words, so "Diawatan, Mark" and "Mark Diawatan"
+#: are recognised as one person written two ways.
+_NAME_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+class _DocumentSubject(typing.NamedTuple):
+    """The one person a document speaks about, assembled from every chunk."""
+
+    name: str | None
+    identifier: str | None
+    birth_date: date | None
+
+
+def _is_persistable(fact: ExtractedFactCreate) -> bool:
+    """Whether this fact carries enough identity for a person to be created.
+
+    Mirrors the rule `person_service.resolve_or_create_person` enforces, so
+    the warning above counts the facts that will actually be rejected.
+    """
+    has_natural_identity = bool(fact.source_person_name and fact.date_of_birth)
+    return has_natural_identity or bool(fact.source_person_identifier)
+
+
+def _name_key(name: str | None) -> frozenset[str] | None:
+    """Compare names by their word set, ignoring case, order and punctuation."""
+    words = frozenset(_NAME_WORD_RE.findall((name or "").casefold()))
+    return words or None
+
+
+def _text_key(value: str | None) -> str | None:
+    """Compare identifiers ignoring case and punctuation, so "MR-123" == "mr123"."""
+    cleaned = "".join(
+        character for character in (value or "").casefold() if character.isalnum()
+    )
+    return cleaned or None
+
+
+def _agreed_value[T](
+    facts: list[ExtractedFactCreate],
+    read: typing.Callable[[ExtractedFactCreate], T | None],
+    key: typing.Callable[[T | None], object],
+    field: str,
+) -> T | _Conflict | None:
+    """Return the value every fact that stated this field agreed on.
+
+    None when no fact stated it; a `_Conflict` naming both values when two
+    disagreed. The first spelling wins, so the value keeps whatever formatting
+    the document used.
+    """
+    agreed: T | None = None
+    agreed_key: object = None
+    for fact in facts:
+        value = read(fact)
+        value_key = key(value)
+        if value_key is None:
+            continue
+        if agreed_key is None:
+            agreed, agreed_key = value, value_key
+        elif value_key != agreed_key:
+            return _Conflict(field=field, first=agreed, second=value)
+    return agreed
+
+
+def _document_subject(
+    facts: list[ExtractedFactCreate],
+) -> _DocumentSubject | list[_Conflict] | None:
+    """Who the document is about, when that is one settled answer.
+
+    Otherwise says why not: a list of `_Conflict` when chunks identified
+    different people, or None when no chunk identified anybody. Neither is
+    safe to fill in from, but only the first is worth reporting.
+    """
+    name = _agreed_value(
+        facts,
+        lambda fact: fact.source_person_name,
+        _name_key,
+        "name",
+    )
+    identifier = _agreed_value(
+        facts,
+        lambda fact: fact.source_person_identifier,
+        _text_key,
+        "identifier",
+    )
+    birth_date = _agreed_value(
+        facts,
+        lambda fact: fact.date_of_birth,
+        lambda value: value,
+        "date of birth",
+    )
+    conflicts = [
+        value
+        for value in (name, identifier, birth_date)
+        if isinstance(value, _Conflict)
+    ]
+    if conflicts:
+        return conflicts
+    if name is None and identifier is None and birth_date is None:
+        return None
+
+    return _DocumentSubject(
+        name=typing.cast("str | None", name),
+        identifier=typing.cast("str | None", identifier),
+        birth_date=typing.cast("date | None", birth_date),
+    )
+
+
+def _or_none[T](value: T | _Conflict | None) -> T | None:
+    """Drop a disagreement, keeping only a value every chunk agreed on."""
+    return None if isinstance(value, _Conflict) else value

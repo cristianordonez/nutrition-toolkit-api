@@ -8,10 +8,7 @@ from datetime import UTC, date, datetime
 from pydantic import TypeAdapter, ValidationError
 
 from engine.data.enteral_formulas import LocalFormulaCatalog
-from engine.models.person_detail import PersonDetail
-from engine.models.sql.clinical import (
-    ClinicalStatus,
-    NutritionGoalType,
+from engine.models.clinical_facts import (
     PersonAllergy,
     PersonDialysis,
     PersonEnteralFeeding,
@@ -19,21 +16,14 @@ from engine.models.sql.clinical import (
     PersonNutritionGoal,
     PersonParenteralNutrition,
     PersonWeight,
+    build_state_key,
+    normalize_clinical_text,
 )
-from engine.services.calculators.parenteral_nutrition_calculator import (
-    ParenteralNutritionCalculator,
+from engine.models.clinical_vocab import (
+    ClinicalStatus,
+    NutritionGoalType,
 )
-from engine.services.calculators.tubefeed_calculator import TubeFeedCalculator
-from engine.services.calculators.weight_history_calculator import (
-    WeightHistoryCalculator,
-)
-from ntk.calculators.nutrition_calculator import (
-    EnergyNeedsInput,
-    Gender,
-    Goal,
-    NutritionCalculator,
-)
-from ntk.models.derived_calculations import (
+from engine.models.derived_calculations import (
     AnthropometricCalculations,
     ClinicalConflict,
     DerivedPersonCalculations,
@@ -42,7 +32,21 @@ from ntk.models.derived_calculations import (
     TubeFeedCalculation,
     WeightChangeDetail,
 )
-from ntk.utils.convert import Convert
+from engine.models.person_detail import PersonDetail
+from engine.services.calculators.nutrition_calculator import (
+    EnergyNeedsInput,
+    Gender,
+    Goal,
+    NutritionCalculator,
+)
+from engine.services.calculators.parenteral_nutrition_calculator import (
+    ParenteralNutritionCalculator,
+)
+from engine.services.calculators.tubefeed_calculator import TubeFeedCalculator
+from engine.services.calculators.weight_history_calculator import (
+    WeightHistoryCalculator,
+)
+from engine.utils.convert import Convert
 
 if typing.TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -176,8 +180,6 @@ class PersonDetailBuilder:
             age=age,
             sex=person.sex,
             height_in=person.height_in,
-            facility_id=person.facility_id,
-            facility=person.facility,
             person_identifier=person.person_identifier,
             current_weight=current_weight,
             current_diet=current_diet,
@@ -222,7 +224,6 @@ class PersonDetailBuilder:
             wounds=self._ordered_records(records.wounds),
             clinical_facts=self._ordered_records(records.clinical_facts),
             clinical_notes=self._ordered_records(records.clinical_notes),
-            extracted_facts=self._ordered_records(person.extracted_facts or ()),
             conflicts=conflicts,
             derived_calculations=derived_calculations,
         )
@@ -526,7 +527,17 @@ class PersonDetailBuilder:
         """Keep active regimens without treating a shared drug name as conflict."""
         medications_by_regimen: dict[str, PersonMedication] = {}
         for medication in cls._active(records):
-            medications_by_regimen.setdefault(medication.state_key, medication)
+            regimen_key = medication.state_key or build_state_key(
+                "medication",
+                normalize_clinical_text(medication.name),
+                medication.dose,
+                normalize_clinical_text(medication.dose_text),
+                normalize_clinical_text(medication.dose_unit),
+                normalize_clinical_text(medication.route),
+                normalize_clinical_text(medication.frequency),
+                normalize_clinical_text(medication.indication),
+            )
+            medications_by_regimen.setdefault(regimen_key, medication)
         return sorted(
             medications_by_regimen.values(),
             key=cls._clinical_sort_key,
@@ -639,18 +650,25 @@ class PersonDetailBuilder:
 
     @staticmethod
     def _clinical_time(record: object) -> datetime | None:
-        """Return clinical state time without using insertion time as evidence."""
-        values = [
-            parsed
-            for parsed in (
-                PersonDetailBuilder._as_datetime(
-                    getattr(record, field_name, None),
-                )
-                for field_name in ("effective_at", "observed_at")
-            )
-            if parsed is not None
-        ]
-        return max(values) if values else None
+        """Return clinical state time without using insertion time as evidence.
+
+        ``effective_at`` wins outright when present rather than being maxed
+        against ``observed_at``. For a record read off a PCC report the two
+        mean different things: ``effective_at`` is the day the order was
+        written or last revised, while ``observed_at`` is the day the report
+        was printed -- the same value for every row in the run. Taking the
+        later of the two therefore let the print date speak for records it
+        knows nothing about, and an order last revised eleven months ago read
+        as current.
+        """
+        effective_at = PersonDetailBuilder._as_datetime(
+            getattr(record, "effective_at", None),
+        )
+        if effective_at is not None:
+            return effective_at
+        return PersonDetailBuilder._as_datetime(
+            getattr(record, "observed_at", None),
+        )
 
     @staticmethod
     def _record_time(record: object) -> datetime | None:
@@ -765,7 +783,7 @@ class PersonDetailBuilder:
             f"{prior_date:%m/%d/%y}: {cls._format_number(prior_weight_lb)} lbs; "
             f"{cls._format_number(absolute_change_lb)} lbs {direction} "
             f"({cls._format_number(percent_change)}%) over "
-            f"{elapsed_timeframe} compared with latest weight"
+            f"{elapsed_timeframe}"
         )
 
     @staticmethod

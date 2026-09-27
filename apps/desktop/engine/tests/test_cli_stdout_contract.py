@@ -17,7 +17,7 @@ import typing
 
 import logfire
 
-import engine.presentation.cli.app as cli_app
+from engine import cli as cli_app
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -42,15 +42,15 @@ def test_logfire_console_output_is_not_stdout(
 def test_a_command_prints_only_its_json_result(tmp_path: pathlib.Path) -> None:
     """End-to-end: a real CLI run leaves stdout parseable on its own."""
     completed = subprocess.run(
-        [sys.executable, "-m", "engine.presentation.cli.app", "tubefeed", "formulas"],
+        [sys.executable, "-m", "engine.cli", "tubefeed", "formulas"],
         capture_output=True,
         text=True,
         check=False,
         env={
             **os.environ,
             # Seed and read a throwaway catalog rather than the developer's own.
-            "NTK_FACTS_DATABASE_PATH": str(tmp_path / "facts.db"),
-            "NTK_SETTINGS_DATABASE_PATH": str(tmp_path / "settings.db"),
+            "NTK_DATABASE_PATH": str(tmp_path / "facts.db"),
+            "NTK_LOG_FILE": str(tmp_path / "engine.log"),
         },
     )
 

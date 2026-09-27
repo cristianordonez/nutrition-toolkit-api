@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from engine.models.extracted_fact_create import ExtractedFactCreate, WeightPayload
+from engine.pipelines.extraction import DocumentExtractor
 from engine.pipelines.person.ingestion.extract.base import PersonExtractor
-from ntk.pipelines.extraction import DocumentExtractor
 
 
 class FactExtractor(PersonExtractor):
@@ -23,7 +23,7 @@ def test_person_extractor_is_a_document_extractor() -> None:
     assert issubclass(PersonExtractor, DocumentExtractor)
 
 
-def test_person_extractor_builds_facts_and_parses_facility(
+def test_person_extractor_builds_facts(
     tmp_path,  # noqa: ANN001
 ) -> None:
     extractor = FactExtractor(tmp_path / "weights.pdf")
@@ -33,17 +33,7 @@ def test_person_extractor_builds_facts_and_parses_facility(
             measured_at=datetime(2026, 9, 1, tzinfo=UTC),
         ),
         source_person_identifier="A123",
-        facility_name="Embassy Manor",
     )
 
     assert fact.source_person_identifier == "A123"
-    assert fact.facility_name == "Embassy Manor"
     assert fact.confidence == 1.0
-    assert (
-        PersonExtractor._parse_facility_name(  # noqa: SLF001
-            "Weights and Vitals Summary\nEmbassy Manor\nResident: Example",
-            "Weights and Vitals Summary",
-        )
-        == "Embassy Manor"
-    )
-    assert not hasattr(DocumentExtractor, "_parse_facility_name")

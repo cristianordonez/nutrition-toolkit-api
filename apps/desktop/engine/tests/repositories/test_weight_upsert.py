@@ -7,12 +7,9 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from engine.models.extracted_fact_create import ExtractedFactCreate, WeightPayload
-from engine.models.sql.extracted_fact import ExtractedFact, ExtractionMethod
-from engine.models.sql.person import PersonWeight
-from engine.pipelines.person.ingestion.transformer import ExtractedFactTransformer
-from engine.repositories.facility_repo import FacilityRepo
+from engine.models.sql.clinical_fact import ClinicalFact, ExtractionMethod
+from engine.pipelines.person.ingestion.transformer import ClinicalFactTransformer
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
@@ -37,14 +34,8 @@ def test_overlapping_weight_history_upserts_existing_observation(
 
     with Session(engine) as session:
         repository = PersonRepo(session)
-        facility_repository = FacilityRepo(session)
-        resolver = FacilityResolver(facility_repository)
-        resolver.register_trusted(name="Facility")
-        person_service = PersonService(
-            repository,
-            resolver,
-        )
-        transformer = ExtractedFactTransformer(person_service)
+        person_service = PersonService(repository)
+        transformer = ClinicalFactTransformer(person_service)
 
         first = transformer.transform(
             first_path,
@@ -64,11 +55,13 @@ def test_overlapping_weight_history_upserts_existing_observation(
         else:
             repository.load_transformed_documents([second])
 
-        weights = list(session.exec(select(PersonWeight)).all())
+        person = repository.get_by_identifier("R-1")
+        assert person is not None and person.id is not None
+        weights = repository.get_weights_by_person_ids([person.id])
         assert len(weights) == 1
         assert weights[0].weight_lb == expected_weight
         assert weights[0].description == "Standing"
-        assert len(session.exec(select(ExtractedFact)).all()) == expected_fact_count
+        assert len(session.exec(select(ClinicalFact)).all()) == expected_fact_count
 
 
 def _weight_fact(
@@ -80,7 +73,6 @@ def _weight_fact(
     return ExtractedFactCreate(
         source_person_identifier="R-1",
         source_person_name="Person",
-        facility_name="Facility",
         payload=WeightPayload(
             weight_lb=weight_lb,
             measured_at=measured_at,
@@ -98,7 +90,6 @@ def _ai_weight_fact(
     return ExtractedFactCreate(
         source_person_identifier="R-1",
         source_person_name="Person",
-        facility_name="Facility",
         payload=WeightPayload(
             weight_lb=weight_lb,
             measured_at=measured_at,
@@ -112,11 +103,9 @@ def _ai_weight_fact(
 
 def _loaded_repository(
     session: Session,
-) -> tuple[PersonRepo, ExtractedFactTransformer]:
+) -> tuple[PersonRepo, ClinicalFactTransformer]:
     repository = PersonRepo(session)
-    resolver = FacilityResolver(FacilityRepo(session))
-    resolver.register_trusted(name="Facility")
-    return repository, ExtractedFactTransformer(PersonService(repository, resolver))
+    return repository, ClinicalFactTransformer(PersonService(repository))
 
 
 def test_ai_weight_does_not_overwrite_a_parsed_weight(
@@ -156,7 +145,9 @@ def test_ai_weight_does_not_overwrite_a_parsed_weight(
             ],
         )
 
-        weights = list(session.exec(select(PersonWeight)).all())
+        person = repository.get_by_identifier("R-1")
+        assert person is not None and person.id is not None
+        weights = repository.get_weights_by_person_ids([person.id])
 
     assert len(weights) == 1
     assert weights[0].weight_lb == 121  # noqa: PLR2004
@@ -185,7 +176,9 @@ def test_ai_weight_is_kept_when_no_parsed_weight_exists(
             ],
         )
 
-        weights = list(session.exec(select(PersonWeight)).all())
+        person = repository.get_by_identifier("R-1")
+        assert person is not None and person.id is not None
+        weights = repository.get_weights_by_person_ids([person.id])
 
     assert len(weights) == 1
     assert weights[0].weight_lb == 118  # noqa: PLR2004

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import typing
 
+from engine.controllers.base import BaseControllerGroup
 from engine.controllers.calculate.energy import EnergyController
-from ntk.controllers.base import BaseControllerGroup
-from ntk.controllers.registry import register_command_group
+from engine.controllers.registry import register_command_group
 
 
 @register_command_group

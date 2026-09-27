@@ -6,11 +6,12 @@ import typing
 
 from pydantic import BaseModel, Field
 
+from engine.controllers.base import BaseController
 from engine.controllers.session import controller_session
-from engine.models.sql.clinical import PersonClinicalFact  # noqa: TC001
+from engine.models.base import ConsoleRenderableModel
+from engine.models.output import Output
+from engine.models.clinical_facts import PersonClinicalFact  # noqa: TC001
 from engine.repositories.person_repo import PersonRepo
-from ntk.controllers.base import BaseController
-from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -22,10 +23,14 @@ class PersonClinicalFactsOptions(BaseModel):
     person_ids: list[int] = Field(min_length=1)
 
 
-class PersonClinicalFactsResult(BaseModel):
+class PersonClinicalFactsResult(ConsoleRenderableModel):
     """Clinical facts belonging to requested persons."""
 
     clinical_facts: list[PersonClinicalFact]
+
+    def to_console(self) -> str:
+        """Render the persons as formatted JSON."""
+        return self.model_dump_json(indent=2)
 
 
 class PersonClinicalFactsController(BaseController):

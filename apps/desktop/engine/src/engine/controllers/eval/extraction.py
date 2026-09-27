@@ -27,12 +27,12 @@ from engine.agents.data_extraction_agent import (
     build_unknown_document_agent,
 )
 from engine.clients.ollama_client import OllamaClient
+from engine.controllers.base import BaseController
+from engine.models.base import ConsoleRenderableModel
+from engine.models.output import Output
 from engine.models.settings import SETTINGS
 from engine.pipelines.person.ingestion.extract.unknown_file import UnknownFileExtractor
 from engine.services.local_model import resolve_model
-from ntk.controllers.base import BaseController
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
     from engine.agents.data_extraction_agent import ExtractionProvider

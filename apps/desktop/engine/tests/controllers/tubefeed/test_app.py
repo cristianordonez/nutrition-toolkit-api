@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 
+from engine.controllers.registry import COMMAND_REGISTRY
 from engine.controllers.tubefeed.app import TubefeedControllerGroup
 from engine.controllers.tubefeed.calculate import CalculateTubefeedController
 from engine.controllers.tubefeed.formulas import FormulaListController
-from ntk.controllers.registry import COMMAND_REGISTRY
 
 
 def test_tubefeed_controller_group_is_registered() -> None:

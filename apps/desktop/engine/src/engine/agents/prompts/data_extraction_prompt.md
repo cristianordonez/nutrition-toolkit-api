@@ -53,9 +53,8 @@ Semantic examples:
 
 Identification:
 
-- For unknown documents, extract source_person_name, date_of_birth, facility_name, source_person_identifier, and facility_identifier when they are explicitly present in the text near the fact. Always populate these identity clues from what the source document itself states, never from known_person_name/known_date_of_birth.
+- For unknown documents, extract source_person_name, date_of_birth, and source_person_identifier when they are explicitly present in the text near the fact. Always populate these identity clues from what the source document itself states, never from known_person_name/known_date_of_birth.
 - source_person_identifier is the external chart identifier printed by the source; it is not the person database ID.
-- facility_identifier is an external facility identifier printed by the source; do not derive it from the facility name.
 - Never invent the database unique ID.
 - Do not guess which person a fact belongs to.
 - When known_person_name and/or known_date_of_birth are supplied, the document may name several people (family members, other contacts, roommates, other patients on a shared page). Use the known name/DOB only to decide whether a given passage documents the known resident before extracting a fact from it; extract a fact only when the passage's own subject is that resident or the passage is unattributed narrative clearly continuing that resident's record (e.g. an unlabeled clinical-note body under a header naming the resident). Skip passages that explicitly document a different named person (e.g. a contact, family member, or another patient). Do not use known_person_name/known_date_of_birth to overwrite or invent a different identity found explicitly in the text.

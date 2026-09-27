@@ -23,3 +23,6 @@ def controller_session(
         return
     with Session(engine, expire_on_commit=False) as created_session:
         yield created_session
+
+
+settings_session = controller_session

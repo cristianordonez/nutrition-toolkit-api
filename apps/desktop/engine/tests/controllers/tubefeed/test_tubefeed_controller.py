@@ -8,13 +8,10 @@ from engine.controllers.tubefeed.calculate import (
     CalculateTubefeedResponse,
 )
 from engine.data.enteral_formulas import Formula, LocalFormulaCatalog
-from engine.models.sql.clinical import (
-    ClinicalStatus,
-    FeedingMethod,
-    PersonEnteralFeeding,
-)
+from engine.models.food_vocab import PackageType
+from engine.models.clinical_facts import PersonEnteralFeeding
+from engine.models.clinical_vocab import ClinicalStatus, FeedingMethod
 from engine.services.calculators.tubefeed_calculator import TubeFeedCalculator
-from ntk.models.food_vocab import PackageType
 
 _READY_TO_HANG_SERVING_ML = 1000
 _READY_TO_HANG_CALORIES = 1200
@@ -205,7 +202,7 @@ def test_existing_continuous_feeding_uses_documented_inputs() -> None:
             caloric_density_kcal_ml=1.5,
             status=ClinicalStatus.ACTIVE,
             state_key="current-feeding",
-            extracted_fact_id=1,
+            clinical_source_id=1,
         ),
     )
 
@@ -228,7 +225,7 @@ def test_existing_feeding_rejects_missing_schedule_inputs() -> None:
         caloric_density_kcal_ml=1.5,
         status=ClinicalStatus.ACTIVE,
         state_key="incomplete-feeding",
-        extracted_fact_id=1,
+        clinical_source_id=1,
     )
 
     with pytest.raises(ValueError, match="requires rate and hours per day"):

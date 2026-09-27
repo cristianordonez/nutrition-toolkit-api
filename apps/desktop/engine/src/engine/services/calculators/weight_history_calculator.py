@@ -9,7 +9,7 @@ from datetime import date, datetime
 
 from pydantic import TypeAdapter, ValidationError
 
-from engine.models.sql.clinical.weight import PersonWeight  # noqa: TC001
+from engine.models.clinical_facts import PersonWeight  # noqa: TC001
 
 _ONE_MONTH_THRESHOLD_PERCENT = 5.0
 _THREE_MONTH_THRESHOLD_PERCENT = 7.5

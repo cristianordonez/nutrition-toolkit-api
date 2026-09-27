@@ -13,6 +13,7 @@ from .ncps import (
     PersonNCPsOptions,
     PersonNCPsResult,
 )
+from .summary import PersonSummaryController, PersonSummaryOptions
 from .weights import (
     PersonWeightsController,
     PersonWeightsOptions,
@@ -29,6 +30,8 @@ __all__ = [
     "PersonNCPsController",
     "PersonNCPsOptions",
     "PersonNCPsResult",
+    "PersonSummaryController",
+    "PersonSummaryOptions",
     "PersonWeightsController",
     "PersonWeightsOptions",
     "PersonWeightsResult",

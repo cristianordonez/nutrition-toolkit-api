@@ -6,7 +6,7 @@ import typing
 
 from engine.models.sql.person import Person, parse_person_name
 from engine.services.person.detail_builder import PersonDetailBuilder
-from ntk.utils.misc import require_id
+from engine.utils.misc import require_id
 
 if typing.TYPE_CHECKING:
     from datetime import date
@@ -16,7 +16,6 @@ if typing.TYPE_CHECKING:
         ParsedProgressNote,
     )
     from engine.repositories.person_repo import PersonRepo
-    from engine.services.facility_resolver import FacilityResolver
 
 
 class PersonService:
@@ -25,12 +24,10 @@ class PersonService:
     def __init__(
         self,
         repository: PersonRepo,
-        facility_resolver: FacilityResolver | None = None,
         person_detail_builder: PersonDetailBuilder | None = None,
     ) -> None:
-        """Store person and optional facility resolution dependencies."""
+        """Store person lookup and detail-building dependencies."""
         self.repository = repository
-        self.facility_resolver = facility_resolver
         self.person_detail_builder = person_detail_builder or PersonDetailBuilder()
 
     def find_person(  # noqa: PLR0913
@@ -38,7 +35,6 @@ class PersonService:
         *,
         person_id: int | None = None,
         source_person_identifier: str | None = None,
-        facility_id: int | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
         birth_date: date | None = None,
@@ -48,10 +44,7 @@ class PersonService:
         if person_id is not None:
             return self.repository.get_by_id(person_id)
         if source_person_identifier:
-            person = self.repository.get_by_identifier(
-                source_person_identifier,
-                facility_id=facility_id,
-            )
+            person = self.repository.get_by_identifier(source_person_identifier)
             if person is not None:
                 return person
         if source_person_name and (not first_name or not last_name):
@@ -70,15 +63,12 @@ class PersonService:
                 last_name,
                 birth_date=birth_date,
                 person_identifier=source_person_identifier,
-                facility_id=facility_id,
             )
         return None
 
-    def resolve_or_create_person(  # noqa: C901, PLR0913
+    def resolve_or_create_person(  # noqa: PLR0913
         self,
         *,
-        facility_name: str | None = None,
-        facility_id: int | None = None,
         source_person_identifier: str | None = None,
         source_person_name: str | None = None,
         first_name: str | None = None,
@@ -93,16 +83,10 @@ class PersonService:
             if source_person_identifier
             else None
         )
-        if facility_id is None and facility_name:
-            facility = self._require_facility_resolver().resolve(facility_name)
-            facility_id = require_id(facility.id) if facility is not None else None
         if source_person_name and (not first_name or not last_name):
             first_name, last_name = parse_person_name(source_person_name)
         identifier_match = (
-            self.repository.get_by_identifier(
-                source_person_identifier,
-                facility_id=facility_id,
-            )
+            self.repository.get_by_identifier(source_person_identifier)
             if source_person_identifier
             else None
         )
@@ -123,42 +107,24 @@ class PersonService:
             msg = "Person name and birth date conflict with person identifier"
             raise ValueError(msg)
         if natural_match is not None:
-            facility_changed = (
-                facility_id is not None
-                and natural_match.facility_id is not None
-                and natural_match.facility_id != facility_id
-            )
             natural_match = self.repository.update_demographics(
                 natural_match,
                 sex=sex,
                 height_in=height_in,
             )
-            if facility_id is not None:
-                natural_match = self.repository.assign_facility(
-                    natural_match,
-                    facility_id,
-                )
-            if source_person_identifier and (
-                natural_match.person_identifier is None or facility_changed
-            ):
+            if source_person_identifier and natural_match.person_identifier is None:
                 natural_match = self.repository.assign_identifier(
                     natural_match,
                     source_person_identifier,
-                    replace=facility_changed,
                 )
             return natural_match
         if identifier_match is not None:
-            self._validate_identity(
-                identifier_match,
-                facility_id=facility_id,
-                date_of_birth=date_of_birth,
-            )
+            self._validate_identity(identifier_match, date_of_birth=date_of_birth)
             return self.repository.update_demographics(
                 identifier_match,
                 date_of_birth=date_of_birth,
                 sex=sex,
                 height_in=height_in,
-                facility_id=facility_id,
                 person_identifier=source_person_identifier,
             )
 
@@ -168,7 +134,6 @@ class PersonService:
                 last_name,
                 birth_date=date_of_birth,
                 person_identifier=source_person_identifier,
-                facility_id=facility_id,
             )
             if first_name and last_name
             else None
@@ -176,7 +141,6 @@ class PersonService:
         if compatible_name_match is not None:
             self._validate_identity(
                 compatible_name_match,
-                facility_id=facility_id,
                 date_of_birth=date_of_birth,
             )
             return self.repository.update_demographics(
@@ -184,7 +148,6 @@ class PersonService:
                 date_of_birth=date_of_birth,
                 sex=sex,
                 height_in=height_in,
-                facility_id=facility_id,
                 person_identifier=source_person_identifier,
             )
 
@@ -207,7 +170,6 @@ class PersonService:
                 first_name=first_name or "",
                 last_name=last_name or "",
                 date_of_birth=date_of_birth,
-                facility_id=facility_id,
                 person_identifier=source_person_identifier,
                 sex=sex,
                 height_in=height_in,
@@ -216,14 +178,8 @@ class PersonService:
 
     def resolve_clinical_note(self, note: ParsedProgressNote) -> Person | None:
         """Resolve an existing person for a parsed PCC note."""
-        facility = (
-            self.facility_resolver.resolve(note.facility_name)
-            if self.facility_resolver is not None and note.facility_name
-            else None
-        )
         return self.find_person(
             source_person_identifier=note.source_person_identifier,
-            facility_id=require_id(facility.id) if facility is not None else None,
             source_person_name=note.source_person_name,
             birth_date=note.date_of_birth,
         )
@@ -231,7 +187,6 @@ class PersonService:
     def resolve_or_create_clinical_note(self, note: ParsedProgressNote) -> Person:
         """Resolve or create the person for a parsed PCC note."""
         return self.resolve_or_create_person(
-            facility_name=note.facility_name,
             source_person_identifier=note.source_person_identifier,
             source_person_name=note.source_person_name,
             date_of_birth=note.date_of_birth,
@@ -239,31 +194,13 @@ class PersonService:
             height_in=note.height_in,
         )
 
-    def get_person_detail(
-        self,
-        source_person_identifier: str,
-        *,
-        facility_identifier: str | None = None,
-    ) -> PersonDetail:
+    def get_person_detail(self, source_person_identifier: str) -> PersonDetail:
         """Return prepared context for an external person identifier."""
-        facility = (
-            self._require_facility_resolver().resolve(
-                facility_identifier=facility_identifier,
-            )
-            if facility_identifier is not None
-            else None
-        )
-        if facility_identifier is not None and facility is None:
-            message = f"Facility {facility_identifier!r} was not found"
-            raise LookupError(message)
         person = self.find_person(
             source_person_identifier=source_person_identifier,
-            facility_id=require_id(facility.id) if facility is not None else None,
         )
         if person is None:
             message = f"Person {source_person_identifier!r} was not found"
-            if facility_identifier is not None:
-                message += f" at facility {facility_identifier!r}"
             raise LookupError(message)
         return self._get_person_detail(person)
 
@@ -285,28 +222,14 @@ class PersonService:
         records = self.repository.get_clinical_records(require_id(person.id))
         return self.person_detail_builder.build(person, records)
 
-    def _require_facility_resolver(self) -> FacilityResolver:
-        if self.facility_resolver is None:
-            msg = "A facility resolver is required for this operation"
-            raise RuntimeError(msg)
-        return self.facility_resolver
-
     @staticmethod
-    def _validate_identity(
-        person: Person,
-        *,
-        facility_id: int | None,
-        date_of_birth: date | None,
-    ) -> None:
+    def _validate_identity(person: Person, *, date_of_birth: date | None) -> None:
         if (
             person.date_of_birth
             and date_of_birth
             and person.date_of_birth != date_of_birth
         ):
             msg = "Person identifier matched a different birth date"
-            raise ValueError(msg)
-        if person.facility_id and facility_id and person.facility_id != facility_id:
-            msg = "Person is already associated with a different facility"
             raise ValueError(msg)
 
 

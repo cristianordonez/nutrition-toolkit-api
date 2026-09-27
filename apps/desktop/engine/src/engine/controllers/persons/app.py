@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import typing
 
+from engine.controllers.base import BaseControllerGroup
+from engine.controllers.persons import PersonClinicalFactsController
 from engine.controllers.persons.list import PersonListController
 from engine.controllers.persons.ncps import PersonNCPsController
+from engine.controllers.persons.summary import PersonSummaryController
 from engine.controllers.persons.weights import PersonWeightsController
-from ntk.controllers.base import BaseControllerGroup
-from ntk.controllers.registry import register_command_group
+from engine.controllers.registry import register_command_group
 
 
 @register_command_group
@@ -22,8 +24,10 @@ class PersonControllerGroup(BaseControllerGroup):
         """Initialize the person subcommands."""
         self._subcommands = [
             PersonListController(),
+            PersonSummaryController(),
             PersonNCPsController(),
             PersonWeightsController(),
+            PersonClinicalFactsController(),
         ]
 
     @property

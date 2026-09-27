@@ -1,6 +1,6 @@
-# Nutrition Toolkit API
+# Nutrition Toolkit
 
-A monorepo split into a cloud API and an on-device desktop engine for
+A monorepo split into a server and an on-device desktop engine for
 generating Nutrition Care Process (NCP) notes.
 
 ## Architecture
@@ -16,7 +16,7 @@ lockfile and one virtual environment) rather than a single installable package:
 - [`packages/ntk-core`](packages/ntk-core) is a shared, pure-Pydantic library (the
   `ntk` Python package) — table-less schemas, calculators, and generic infra used by
   both apps below. It has no console scripts and is never run on its own.
-- [`apps/cloud-api`](apps/cloud-api) is the cloud service (the `api` package) — it
+- [`apps/server`](apps/server) is the server application (the `server` package) — it
   generates NCP notes via OpenAI + pydantic-ai and owns Postgres/pgvector.
 - [`apps/desktop`](apps/desktop) is the desktop app. Its Python backend,
   [`apps/desktop/engine`](apps/desktop/engine) (the `engine` package), runs on the
@@ -36,7 +36,7 @@ further details.
 
 ```bash
 cp sample.env .env  # first run only, then fill in the values
-tox -e up           # Postgres + Redis + migrations + cloud-api, in dependency order
+tox -e up           # Postgres + Redis + migrations + server, in dependency order
 tox -e api-key      # mint a key for the desktop engine, then put it in .env
 cd apps/desktop && npm run tauri dev   # the desktop window
 ```
@@ -44,25 +44,25 @@ cd apps/desktop && npm run tauri dev   # the desktop window
 The root `.env` does double duty, which is worth knowing before you edit it:
 docker compose reads it for the `${...}` references in `docker-compose.yml`
 (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `NTK_OPEN_AI_API_KEY`),
-*and* any engine or cloud-api process you run from the repository root picks it
+*and* any engine or server process you run from the repository root picks it
 up as its settings file — `ntk.models.base.get_env_file()` resolves
 `$NTK_CONFIG_FILE`, or falls back to `<cwd>/.env`. To keep an app's settings
 separate, copy its own `sample.env` and point `NTK_CONFIG_FILE` at the result.
-See [`sample.env`](sample.env), [`apps/cloud-api/sample.env`](apps/cloud-api/sample.env)
+See [`sample.env`](sample.env), [`apps/server/sample.env`](apps/server/sample.env)
 and [`apps/desktop/engine/sample.env`](apps/desktop/engine/sample.env).
 
 `tox -e up` waits for each service to pass its healthcheck and applies migrations
-before cloud-api starts, so the API is ready to serve when the command returns.
-`tox -e logs` follows cloud-api, `tox -e down` stops everything (`tox -e down -- -v`
+before server starts, so the API is ready to serve when the command returns.
+`tox -e logs` follows server, `tox -e down` stops everything (`tox -e down -- -v`
 also drops the data volumes).
 
 The desktop app is not containerized on purpose: it is a native window that owns
 local SQLite databases on your machine, so it runs on the host.
 
 One setting connects the halves: put the key from `tox -e api-key` in
-`NTK_CLOUD_API_KEY`. Note generation runs cloud-side only, because the diet and
+`NTK_SERVER_API_KEY`. Note generation runs server-side only, because the diet and
 nutrition-care manual lookups search a knowledge base that exists nowhere else.
-There is deliberately no on-device note agent, so cloud-api must be running to
+There is deliberately no on-device note agent, so server must be running to
 generate a note — the desktop app reports that plainly rather than falling back
 to a note that would be silently missing those lookups.
 
@@ -73,20 +73,71 @@ command; this is the quick-reference version, runnable from the repository root.
 
 | Package | README | Run |
 | --- | --- | --- |
-| `apps/cloud-api` (`api`) | [apps/cloud-api/README.md](apps/cloud-api/README.md) | `uv run --package api api --help` (CLI) · `uv run --package api api-server` (server) |
+| `apps/server` (`server`) | [apps/server/README.md](apps/server/README.md) | `uv run --package server server-cli --help` (CLI) · `uv run --package server server` (HTTP server) |
 | `apps/desktop/engine` (`engine`) | [apps/desktop/README.md](apps/desktop/README.md) | `uv run --package engine engine --help` (CLI) |
 | `packages/ntk-core` (`ntk`) | [packages/ntk-core/README.md](packages/ntk-core/README.md) | shared library — nothing to run, see its README for testing/linting |
 
 ```bash
-# cloud-api: start the FastAPI server (add --dev for autoreload)
-uv run --package api api-server
+# server: start the FastAPI server (add --dev for autoreload)
+uv run --package server server
 
-# cloud-api: CLI controller groups (ncp, calc, key, knowledge)
-uv run --package api api --help
+# server: CLI controller groups (ncp, calc, key, knowledge)
+uv run --package server server-cli --help
 
 # desktop engine: CLI controller groups (document, persons, ncp, tubefeed, demo)
 uv run --package engine engine --help
 ```
+
+## Logs
+
+Four places produce logs, and which one you want depends on what broke. Only
+the first survives a restart.
+
+| Source | Where | Holds |
+| --- | --- | --- |
+| **Engine log file** | `~/Library/Logs/NutritionToolkit/engine.log` | Ingestion, extraction and note generation, including the failures the UI does not show |
+| **Dev server** | The terminal running `npm run tauri dev` | Rust compile errors, panics, Vite HMR |
+| **Webview console** | `⌥⌘I` in the app window, or right-click → Inspect Element | React errors and failed `invoke()` calls |
+| **Logfire** | The project URL printed on startup | Agent runs, model calls, token usage |
+
+The engine log is the one to reach for first:
+
+```bash
+# follow it live
+tail -f ~/Library/Logs/NutritionToolkit/engine.log
+
+# what actually went wrong
+grep "^ERROR" ~/Library/Logs/NutritionToolkit/engine.log | tail -20
+
+# one failure with its traceback
+grep -A 15 "^ERROR" ~/Library/Logs/NutritionToolkit/engine.log | tail -40
+
+# how an ingestion run finished
+grep "extraction completed" ~/Library/Logs/NutritionToolkit/engine.log | tail
+```
+
+Lines are `LEVEL | timestamp | module: message`. The file rotates at midnight
+and keeps 30 days, so `engine.log.2026-09-23` and friends sit beside it.
+`NTK_DEBUG=true` raises it from INFO to DEBUG, and `NTK_LOG_FILE` moves it.
+
+The location follows each platform's convention (via `platformdirs`), so it is
+not `~/Library/Logs` everywhere:
+
+```text
+macOS    ~/Library/Logs/NutritionToolkit/engine.log
+Linux    ~/.local/state/NutritionToolkit/log/engine.log
+Windows  %LOCALAPPDATA%\NutritionToolkit\Logs\engine.log
+```
+
+The engine writes the same records to stderr, which is how the desktop shell
+surfaces a failed command. Note that the shell only shows stderr when the
+command **exits non-zero**: a run that half-failed still returns a result, so
+its failures reach the log file and the ingest warning count, but not the
+error banner. When a document ingests with fewer facts than expected, the log
+file is where the reason is.
+
+**Do not pipe `npm run tauri dev` through `tail` or `grep`** — they buffer, and
+you will see nothing for minutes while waiting on a build that already finished.
 
 ## Development
 
@@ -139,20 +190,20 @@ docker compose up -d
 
 ## Database Migrations
 
-Alembic manages PostgreSQL schema migrations for `apps/cloud-api` — the only
+Alembic manages PostgreSQL schema migrations for `apps/server` — the only
 package with a shared, persisted database (Postgres/pgvector). It is scoped there,
 not at the repository root: `apps/desktop/engine` persists locally in SQLite with
 no Alembic setup, and `packages/ntk-core` has no database at all.
 
 ```bash
-cd apps/cloud-api
+cd apps/server
 uv run alembic revision --autogenerate -m "describe the schema change"   # after changing a SQLModel table
 uv run alembic upgrade head                                              # apply pending migrations
 uv run alembic current                                                   # check the current revision
 uv run alembic downgrade -1                                              # roll back one migration
 ```
 
-See [`apps/cloud-api/alembic/README.md`](apps/cloud-api/alembic/README.md) for
+See [`apps/server/alembic/README.md`](apps/server/alembic/README.md) for
 full conventions (migration rules, destructive-change handling, deployment
 workflow) and what to do with a pre-split database that still has `person`/
 clinical tables.
@@ -191,7 +242,7 @@ pre-commit run <hook-id>
 
 ```bash
 uv run pytest packages/ntk-core/tests
-uv run pytest apps/cloud-api/tests
+uv run pytest apps/server/tests
 uv run pytest apps/desktop/engine/tests
 ```
 
@@ -207,21 +258,21 @@ uv run --group type ty check
 
 ## Deployment
 
-- Use the `api-server` command to run uvicorn on the cloud-api FastAPI app (see
-  [`apps/cloud-api/README.md`](apps/cloud-api/README.md) for details):
+- Use the `server` command to run uvicorn on the FastAPI app (see
+  [`apps/server/README.md`](apps/server/README.md) for details):
 
 ```bash
-uv run --package api api-server
+uv run --package server server
 ```
 
 - containerize the REST API using Docker:
 
 ```bash
-docker build -t ntk-api-image .
-docker run -d --env database_host=host.docker.internal --add-host=host.docker.internal:host-gateway -p 3000:3000 --name ntk-api ntk-api-image
+docker build -t ntk-server .
+docker run -d --env-file .env --add-host=host.docker.internal:host-gateway -p 8000:8000 --name ntk-server ntk-server
 ```
 
-- `apps/cloud-api`'s initial Alembic migration already enables the pgvector
+- `apps/server`'s initial Alembic migration already enables the pgvector
   extension (`CREATE EXTENSION IF NOT EXISTS vector`) as part of `alembic upgrade
   head`, provided the migration role can create extensions. If it can't, an admin
   needs to run this once manually before migrating:

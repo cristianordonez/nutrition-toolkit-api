@@ -1,13 +1,10 @@
 """Generate a Nutrition Care Process for an already-ingested person.
 
-Generation belongs cloud-side, and this posts the request there. cloud-api owns
-the note record and the diet and nutrition-care manual lookups, whose tools
-search a pgvector knowledge base that exists only there -- so it is the one
-agent that can produce a complete note. There is deliberately no on-device
-fallback: a second agent here would quietly generate notes missing those
-lookups, with nothing in the note to say so.
+Generation runs on this device, where the resident's record already lives, so
+no clinical data leaves the machine unless the user has explicitly switched on
+a hosted model in Settings and supplied their own API token.
 
-The request itself is built here from persisted data, and unlike
+The request is built here from persisted data, and unlike
 ``demo build-context`` no files are re-ingested.
 """
 
@@ -17,28 +14,31 @@ import typing
 
 from pydantic import BaseModel, Field
 
-from engine.clients.cloud_api_client import CloudAPIClient
+from engine.agents.ncp_agent import NCPAgent
+from engine.controllers.base import BaseController
 from engine.controllers.session import controller_session
-from engine.models.settings import SETTINGS
+from engine.models.base import ConsoleRenderableModel
+from engine.models.ncp_note import NCPNoteStatus, NCPNoteType
+from engine.models.output import Output
+from engine.models.sql.ncp_note import NCPNote
 from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
-from engine.repositories.facility_repo import FacilityRepo
+from engine.repositories.ncp_note_repo import NCPNoteRepo
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
+from engine.services.ai_provider import configured_provider
+from engine.services.note_retrieval import NoteRetrievalService
 from engine.services.person.person_service import PersonService
-from ntk.controllers.base import BaseController
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
 
-    from ntk.models.ncp_context import NCPGenerationRequest
+    from engine.models.ncp_context import NCPGenerationRequest
 
 
 class NCPGenerateOptions(BaseModel):
     """The resident to generate a Nutrition Care Process for."""
 
     person_id: int = Field(description="Internal person database ID")
+    note_type: NCPNoteType = Field(description="NCP assessment category")
     additional_context: str | None = Field(
         default=None,
         description="Optional runtime focus for this note",
@@ -51,7 +51,10 @@ class NCPGenerateResult(ConsoleRenderableModel):
     person_id: int
     person_name: str
     person_identifier: str
+    ncp_note_id: int
+    note_type: NCPNoteType
     note_text: str
+    status: NCPNoteStatus
     generated_by: str
 
     def to_console(self) -> str:
@@ -69,11 +72,13 @@ class NCPGenerateController(BaseController):
     def __init__(
         self,
         session: Session | None = None,
-        client: CloudAPIClient | None = None,
+        agent: NCPAgent | None = None,
+        retrieval: NoteRetrievalService | None = None,
     ) -> None:
-        """Store the session and the cloud-api client."""
+        """Store the session, the note agent, and prior-note retrieval."""
         self.session = session
-        self.client = client
+        self.agent = agent
+        self.retrieval = retrieval
 
     async def run(
         self,
@@ -81,24 +86,53 @@ class NCPGenerateController(BaseController):
     ) -> Output[NCPGenerateResult]:
         """Build this person's request and generate the note."""
         with controller_session(self.session) as session:
-            person_service = PersonService(
-                PersonRepo(session),
-                FacilityResolver(FacilityRepo(session)),
-            )
+            person_repository = PersonRepo(session)
+            person = person_repository.get_by_id(options.person_id)
+            if person is None:
+                msg = f"Person {options.person_id} was not found"
+                raise ValueError(msg)
+            person_service = PersonService(person_repository)
             detail = person_service.get_person_detail_by_id(options.person_id)
             request = (
                 ContextBudgeter()
-                .budget(detail, additional_context=options.additional_context)
+                .budget(
+                    detail,
+                    note_type=options.note_type,
+                    additional_context=options.additional_context,
+                )
                 .request
+            )
+            # Inside the session: retrieval reads prior NCPs and writes any
+            # missing embeddings for explicit style examples.
+            retrieval = self.retrieval or NoteRetrievalService(session)
+            request.previous_ncp = retrieval.previous_note(options.person_id)
+            request.relevant_ncps = await retrieval.style_examples(
+                request.summary_text,
             )
 
         note_text, generated_by = await self._generate(request)
+        with controller_session(self.session) as session:
+            note = NCPNoteRepo(session).save(
+                NCPNote(
+                    person_id=options.person_id,
+                    facility_id=person.facility_id,
+                    note_type=options.note_type,
+                    content=note_text,
+                    status=NCPNoteStatus.DRAFT,
+                ),
+            )
+        if note.id is None:
+            msg = "Generated NCP draft did not receive a database ID"
+            raise RuntimeError(msg)
         return Output(
             result=NCPGenerateResult(
                 person_id=options.person_id,
                 person_name=request.person.name,
                 person_identifier=request.person_identifier,
+                ncp_note_id=note.id,
+                note_type=note.note_type,
                 note_text=note_text,
+                status=note.status,
                 generated_by=generated_by,
             ),
             controller=self.name,
@@ -106,13 +140,10 @@ class NCPGenerateController(BaseController):
         )
 
     async def _generate(self, request: NCPGenerationRequest) -> tuple[str, str]:
-        """Post the request to cloud-api, reporting which backend answered."""
-        client = self.client or CloudAPIClient(
-            str(SETTINGS.cloud_api_base_url),
-            api_key=SETTINGS.cloud_api_key,
-        )
-        ncp = await client.generate_ncp(request)
-        return ncp.note_text, "cloud-api"
+        """Generate the note here, reporting which model produced it."""
+        agent = self.agent or NCPAgent()
+        note = await agent.run(request)
+        return note, configured_provider()
 
 
 __all__ = [

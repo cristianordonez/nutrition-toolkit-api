@@ -7,19 +7,19 @@ import typing
 
 from pydantic import BaseModel, Field
 
+from engine.controllers.base import BaseController
 from engine.controllers.session import controller_session
+from engine.models.base import ConsoleRenderableModel
+from engine.models.output import Output
 from engine.pipelines.ncp.ingest.import_pipeline import (
     InvalidClinicalNoteReportError,
     NCPImportPipeline,
 )
-from ntk.controllers.base import BaseController
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.output import Output
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
 
-    from ntk.controllers.uploads import ReadableUpload
+    from engine.controllers.uploads import ReadableUpload
 
 
 class NCPImportOptions(BaseModel):
@@ -38,12 +38,7 @@ class NCPImportFailure(BaseModel):
 
 
 class NCPImportResult(ConsoleRenderableModel):
-    """Summary of clinical notes imported from one or more reports.
-
-    Note: this pass only performs local clinical-note ingestion. Promoting
-    matching notes into searchable cloud NCPs is deferred -- see the split
-    refactor plan, decision 7.
-    """
+    """Summary of clinical source reports imported for local extraction."""
 
     documents_ingested: int
     failures: list[NCPImportFailure] = Field(default_factory=list)

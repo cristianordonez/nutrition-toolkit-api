@@ -320,24 +320,18 @@ class PccLabResultsExtractor(PersonExtractor):
 
     def _facts(self, *, require_identity: bool) -> list[ExtractedFactCreate]:
         """Build facts using strict ingestion or relaxed demo identity rules."""
-        facility_name = self._parse_facility_name(
-            self._first_page_text,
-            "Lab Results Report",
-            "Laboratory Results",
-        )
         return [
             self._build_extracted_fact(
                 lab_result,
-                source_person_identifier=facility_resident_identifier,
+                source_person_identifier=resident_identifier,
                 source_person_name=source_person_name,
-                facility_name=facility_name,
                 date_of_birth=date_of_birth,
                 source_page=source_page,
                 source_system="pointclickcare",
             )
             for (
                 source_page,
-                facility_resident_identifier,
+                resident_identifier,
                 source_person_name,
                 date_of_birth,
                 lab_result,
@@ -554,13 +548,13 @@ class PccLabResultsExtractor(PersonExtractor):
         seen: set[PersonLabKey] = set()
         for (
             source_page,
-            facility_resident_identifier,
+            resident_identifier,
             source_person_name,
             date_of_birth,
             result,
         ) in results:
             key = (
-                facility_resident_identifier,
+                resident_identifier,
                 result.observed_at,
                 result.name.casefold(),
                 result.result,
@@ -570,7 +564,7 @@ class PccLabResultsExtractor(PersonExtractor):
                 unique.append(
                     (
                         source_page,
-                        facility_resident_identifier,
+                        resident_identifier,
                         source_person_name,
                         date_of_birth,
                         result,
@@ -623,7 +617,7 @@ class PccLabResultsExtractor(PersonExtractor):
         )
 
     @staticmethod
-    def _parse_facility_resident_identifier(text: str) -> str | None:
+    def _parse_resident_identifier(text: str) -> str | None:
         person = PccLabResultsExtractor._parse_person(text)
         return person[0] if person else None
 

@@ -8,10 +8,13 @@ pub fn run() {
             engine::engine_version,
             engine::ingest_documents,
             engine::list_persons,
+            engine::person_summary,
             engine::generate_ncp,
             engine::calculate_energy,
             engine::calculate_tubefeed,
             engine::list_formulas,
+            engine::get_settings,
+            engine::update_settings,
             engine::local_model_status,
             engine::local_model_ensure,
         ])

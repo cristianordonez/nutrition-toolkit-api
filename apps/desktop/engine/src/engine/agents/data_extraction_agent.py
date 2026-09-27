@@ -1,13 +1,14 @@
 """AI extraction of nutrition facts from document text.
 
-Runs on OpenAI by default. Setting ``use_local_extraction`` moves inference
-on-device through Ollama instead; the prompt, agent wiring, and output schema
-are identical either way, only the model changes.
+Runs on-device through Ollama by default, so a resident's documents are not
+sent anywhere. ``engine.services.ai_provider`` makes that choice for every
+agent alike; the prompt, agent wiring, and output schema are identical either
+way, only the model changes.
 
-Local extraction stays opt-in because this schema is demanding -- a twelve-way
+Worth measuring before trusting: this schema is demanding -- a twelve-way
 discriminated union across ~23 nested definitions -- and a model that cannot
-hold it returns confidently wrong facts rather than failing. Measure a local
-model against the hosted one on real documents before trusting it.
+hold it returns confidently wrong facts rather than failing. Compare a local
+model against a hosted one on real documents with ``engine eval extraction``.
 """
 
 from __future__ import annotations
@@ -20,16 +21,13 @@ from datetime import date, datetime  # noqa: TC003
 import logfire
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
-from pydantic_ai.providers.ollama import OllamaProvider
-from pydantic_ai.providers.openai import OpenAIProvider
 
 from engine.models.ai_extraction import (  # noqa: TC001
     AIExtractedFact,
     AIUnknownDocumentFact,
 )
-from engine.models.settings import SETTINGS
-from engine.services.local_model import resolve_model
+from engine.services.ai_provider import build_model as _build_model
+from engine.services.ai_provider import configured_provider as _configured_provider
 
 if typing.TYPE_CHECKING:
     from pydantic_ai.models import Model
@@ -41,35 +39,32 @@ DATA_EXTRACTION_MODEL = "gpt-5.6-luna"
 _PROMPT_PATH = pathlib.Path(__file__).parent / "prompts" / "data_extraction_prompt.md"
 _instructions = _PROMPT_PATH.read_text(encoding="utf-8")
 
+#: How many times to send a schema violation back to the model. The default of
+#: one is too few here: the extraction result is a list of facts, so a single
+#: omitted field on the fifth fact fails the whole response, and losing that
+#: response means losing a 600-token window of a clinical document outright.
+#: The retry carries the validation error, naming the field that was missed, so
+#: it usually succeeds -- and the chunk is skipped only when it does not.
+_MODEL_RETRIES = 3
+
 
 #: Where inference runs. "openai" is hosted, "ollama" is on-device.
 ExtractionProvider = typing.Literal["openai", "ollama"]
 
 
 def configured_provider() -> ExtractionProvider:
-    """Return the provider the settings select."""
-    return "ollama" if SETTINGS.use_local_extraction else "openai"
+    """Return the provider the user's settings select."""
+    return _configured_provider()
 
 
 def build_model(provider: ExtractionProvider | None = None) -> Model:
     """Build an extraction model, defaulting to the configured provider.
 
-    Deferred rather than built at import so neither provider's prerequisites
-    are needed just to import the engine: running on-device needs no OpenAI
-    key, and running hosted needs no Ollama daemon. Taking the provider as an
-    argument also lets one process build both, which is what comparing them
-    requires.
+    Delegates the choice to ``engine.services.ai_provider`` so extraction and
+    note generation can never disagree about where clinical data is sent,
+    while still naming the hosted model suited to extraction.
     """
-    if (provider or configured_provider()) == "ollama":
-        model_name = resolve_model(override=SETTINGS.ollama_model)
-        # Ollama serves the OpenAI-compatible API under /v1, and the provider
-        # does not append it.
-        base_url = f"{SETTINGS.ollama_host.rstrip('/')}/v1"
-        return OpenAIChatModel(model_name, provider=OllamaProvider(base_url=base_url))
-    return OpenAIResponsesModel(
-        DATA_EXTRACTION_MODEL,
-        provider=OpenAIProvider(api_key=SETTINGS.open_ai_api_key),
-    )
+    return _build_model(provider, cloud_model=DATA_EXTRACTION_MODEL)
 
 
 class ExtractionInput(BaseModel):
@@ -102,6 +97,7 @@ def build_unknown_document_agent(
         build_model(provider),
         output_type=UnknownDocumentExtractionResult,
         instructions=_instructions,
+        retries=_MODEL_RETRIES,
     )
     return typing.cast("Agent[None, UnknownDocumentExtractionResult]", agent)
 
@@ -113,6 +109,7 @@ def _fact_extraction_agent() -> Agent[None, ExtractedClinicalFacts]:
         build_model(),
         output_type=ExtractedClinicalFacts,
         instructions=_instructions,
+        retries=_MODEL_RETRIES,
     )
     return typing.cast("Agent[None, ExtractedClinicalFacts]", agent)
 

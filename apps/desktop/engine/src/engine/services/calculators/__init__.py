@@ -1,12 +1,8 @@
-"""Stateless clinical calculators that run entirely on-device.
-
-``NutritionCalculator`` (BMI/energy needs) has no local-data dependency and
-is dual-use, so it lives in ``ntk.calculators.nutrition_calculator`` instead
--- both apps import it from there.
-"""
+"""Stateless clinical calculators that run entirely on-device."""
 
 from __future__ import annotations
 
+from .nutrition_calculator import NutritionCalculator
 from .parenteral_nutrition_calculator import (
     ParenteralNutritionCalculationInput,
     ParenteralNutritionCalculator,
@@ -28,6 +24,7 @@ __all__ = [
     "ContinuousFeedingSchedule",
     "FeedingSchedule",
     "FreeWaterFlush",
+    "NutritionCalculator",
     "ParenteralNutritionCalculationInput",
     "ParenteralNutritionCalculator",
     "ProteinSupplementContribution",

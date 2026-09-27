@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy import inspect
 from sqlmodel import Session, SQLModel, create_engine
 
-from engine.models.sql.facility import Facility
 from engine.models.sql.person import Person
 from engine.repositories.person_repo import PersonRepo
 
@@ -17,24 +16,13 @@ def test_person_lookup_supports_all_three_identity_paths() -> None:
     birth_date = date(1940, 1, 2)
 
     with Session(engine) as session:
-        facility = Facility(facility_identifier="FAC-1", name="Facility One")
-        session.add(facility)
-        session.commit()
-        session.refresh(facility)
-        person = Person(
-            name="Doe, Jane",
-            date_of_birth=birth_date,
-            facility_id=facility.id,
-        )
+        person = Person(name="Doe, Jane", date_of_birth=birth_date)
         repository = PersonRepo(session)
         person = repository.create(person)
         repository.assign_identifier(person, " R-1 ")
 
         by_id = repository.get_by_id(person.id)  # ty: ignore[invalid-argument-type]
-        by_identifier = repository.get_by_identifier(
-            "R-1",
-            facility_id=facility.id,
-        )
+        by_identifier = repository.get_by_identifier("R-1")
         by_natural_identity = repository.get_by_name_and_birth_date(
             " jane ",
             "DOE",
@@ -48,44 +36,29 @@ def test_person_lookup_supports_all_three_identity_paths() -> None:
         assert by_natural_identity.id == person.id
 
 
-def test_identifier_is_scoped_by_source_and_facility() -> None:
+def test_one_identifier_cannot_name_two_people() -> None:
+    """An identifier identifies exactly one resident.
+
+    It used to be scoped by facility, because the same chart number could
+    legitimately recur at two facilities. With no facility to scope by, a
+    second claim on an identifier is a collision and has to be refused rather
+    than silently producing two residents that lookups cannot tell apart.
+    """
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        facilities = [
-            Facility(facility_identifier="FAC-1", name="Facility One"),
-            Facility(facility_identifier="FAC-2", name="Facility Two"),
-        ]
-        session.add_all(facilities)
-        session.commit()
-        for facility in facilities:
-            session.refresh(facility)
-        persons = [
-            Person(
-                name="Doe, Jane",
-                facility_id=facilities[0].id,
-            ),
-            Person(
-                name="Smith, John",
-                facility_id=facilities[1].id,
-            ),
-        ]
-        session.add_all(persons)
-        session.commit()
         repository = PersonRepo(session)
-        for person in persons:
-            session.refresh(person)
-            repository.assign_identifier(person, "SHARED")
+        jane = repository.create(Person(name="Doe, Jane"))
+        john = repository.create(Person(name="Smith, John"))
+        repository.assign_identifier(jane, "SHARED")
 
-        with pytest.raises(LookupError, match="ambiguous"):
-            repository.get_by_identifier("SHARED")
-        resolved = repository.get_by_identifier(
-            "SHARED",
-            facility_id=facilities[1].id,
-        )
+        with pytest.raises(ValueError, match="belongs to another person"):
+            repository.assign_identifier(john, "SHARED")
+
+        resolved = repository.get_by_identifier("SHARED")
         assert resolved is not None
-        assert resolved.name == "Smith, John"
+        assert resolved.name == "Doe, Jane"
 
 
 def test_identifier_is_stored_directly_on_person() -> None:

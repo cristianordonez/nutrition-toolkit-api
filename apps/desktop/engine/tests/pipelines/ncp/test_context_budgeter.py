@@ -4,16 +4,16 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from engine.models.person_detail import PersonDetail
-from engine.models.sql.clinical import PersonWeight
-from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
-from ntk.models.derived_calculations import (
+from engine.models.derived_calculations import (
     AnthropometricCalculations,
     DerivedPersonCalculations,
     NutritionNeedsCalculation,
     ParenteralNutritionCalculation,
     TubeFeedCalculation,
 )
+from engine.models.person_detail import PersonDetail
+from engine.models.clinical_facts import PersonWeight
+from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
 
 _BUDGETED_WEIGHT_COUNT = 12
 _MAX_PERCENT = 100
@@ -52,12 +52,11 @@ def test_budgeter_limits_history_and_reports_token_reduction() -> None:
         ],
     )
 
-    budgeted = ContextBudgeter().budget(detail, facility_identifier="FAC-1")
+    budgeted = ContextBudgeter().budget(detail)
 
     request = budgeted.request
     assert "person_id" not in type(request.person).model_fields
     assert request.person_identifier == "R1"
-    assert request.facility_identifier == "FAC-1"
     assert request.person.current_diet is None
     assert len(request.person.weight_history) == _BUDGETED_WEIGHT_COUNT
     assert budgeted.omitted_record_counts == {"weight_history": 8}

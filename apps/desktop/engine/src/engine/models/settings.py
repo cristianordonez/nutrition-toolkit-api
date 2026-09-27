@@ -5,11 +5,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field, HttpUrl
+from pydantic import Field
 
-from ntk.models.base import CustomBaseSettings
-from ntk.paths import data_dir, log_dir
-from ntk.utils.parallel import PoolMode
+from engine.models.base import CustomBaseSettings
+from engine.paths import data_dir, log_dir
 
 
 class Settings(CustomBaseSettings):
@@ -18,13 +17,9 @@ class Settings(CustomBaseSettings):
     Default path for .env file to source from comes from NTK_CONFIG_FILE env variable.
     """
 
-    facts_database_path: Path = Field(
+    database_path: Path = Field(
         default_factory=lambda: data_dir() / "facts.db",
-        description="Local SQLite database holding extracted person/clinical data.",
-    )
-    settings_database_path: Path = Field(
-        default_factory=lambda: data_dir() / "settings.db",
-        description="Local SQLite database holding app settings/preferences.",
+        description="Local SQLite database holding clinical data and app settings.",
     )
     log_file: Path | None = Field(
         default_factory=lambda: log_dir() / "engine.log",
@@ -57,18 +52,7 @@ class Settings(CustomBaseSettings):
         "extraction runs on-device; the hosted path fails at first use without it.",
     )
     debug: bool = Field(description="Enable debug logging.", default=False)
-    document_ingestion_pool_mode: PoolMode = Field(default=PoolMode.THREAD)
-    document_ingestion_workers: int = Field(default=3, ge=1)
     clinical_note_extraction_concurrency: int = Field(default=8, ge=1)
-    cloud_api_base_url: HttpUrl = Field(
-        default=HttpUrl("http://localhost:8000"),
-        description="Base URL of the cloud-api instance used for NCP generation.",
-    )
-    cloud_api_key: str = Field(
-        default="",
-        description="API key sent as a bearer token to cloud-api. Required for "
-        "note generation, which only cloud-api performs.",
-    )
 
 
 SETTINGS = Settings()

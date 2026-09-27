@@ -23,7 +23,6 @@ _REPORT_DATE_RE = re.compile(
     r"\b(?P<start>\d{1,2}/\d{1,2}/\d{4})"
     r"(?:\s*-\s*(?P<end>\d{1,2}/\d{1,2}/\d{4}))?\b",
 )
-_FACILITY_RE = re.compile(r"(?m)^Facility:\s*(?P<name>[^,\r\n]+)")
 
 PersonWound = tuple[str, str | None, WoundPayload]
 WoundIdentity = tuple[str, str | None, datetime | None]
@@ -52,7 +51,6 @@ class WoundReportExtractor(PersonExtractor):
     ) -> list[ExtractedFactCreate]:
         """Extract each wound row as a transient fact."""
         report_text = self._document_text if self._is_pdf(self.path) else self._csv_text
-        facility_name = self._parse_wound_facility_name(report_text)
         parsed_wounds = self._parse_report(
             report_text,
             source_person_identifier=source_person_identifier,
@@ -60,12 +58,11 @@ class WoundReportExtractor(PersonExtractor):
         return [
             self._build_extracted_fact(
                 wound,
-                source_person_identifier=facility_resident_identifier,
+                source_person_identifier=resident_identifier,
                 source_person_name=source_person_name,
-                facility_name=facility_name,
                 source_system="pointclickcare",
             )
-            for facility_resident_identifier, source_person_name, wound in parsed_wounds
+            for resident_identifier, source_person_name, wound in parsed_wounds
         ]
 
     def _extract_report(
@@ -109,27 +106,27 @@ class WoundReportExtractor(PersonExtractor):
         wounds: dict[WoundIdentity, PersonWound] = {}
         for row in rows:
             values = cls._row_values(header, row)
-            facility_resident_identifier = cls._optional_value(
+            resident_identifier = cls._optional_value(
                 values,
                 _HEADER_PATIENT_NUMBER,
             )
-            if facility_resident_identifier is None:
+            if resident_identifier is None:
                 continue
             if (
                 selected_id is not None
-                and facility_resident_identifier.casefold() != selected_id.casefold()
+                and resident_identifier.casefold() != selected_id.casefold()
             ):
                 continue
             wound = cls._wound_from_values(values, observed_at=observed_at)
             identity = (
-                facility_resident_identifier.casefold(),
+                resident_identifier.casefold(),
                 wound.wound_number.casefold() if wound.wound_number else None,
                 observed_at,
             )
             existing = wounds.get(identity)
             if existing is None:
                 wounds[identity] = (
-                    facility_resident_identifier,
+                    resident_identifier,
                     cls._optional_value(values, "Name"),
                     wound,
                 )
@@ -197,13 +194,6 @@ class WoundReportExtractor(PersonExtractor):
             return datetime(year, month, day, tzinfo=UTC)
         except ValueError:
             return None
-
-    @staticmethod
-    def _parse_wound_facility_name(text: str) -> str | None:
-        match = _FACILITY_RE.search(text)
-        if match is None:
-            return None
-        return match.group("name").strip()
 
     @staticmethod
     def _optional_value(values: dict[str, str], column: str) -> str | None:

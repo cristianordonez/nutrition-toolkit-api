@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from engine.models.sql.clinical.weight import PersonWeight
+from engine.models.clinical_facts import PersonWeight
 from engine.services.calculators.weight_history_calculator import (
     WeightHistoryCalculator,
 )
@@ -138,7 +138,7 @@ def test_invalid_weights_raise_clear_errors() -> None:
     with pytest.raises(ValueError, match="measurement date"):
         WeightHistoryCalculator.format_weights(
             [
-                PersonWeight(
+                PersonWeight.model_construct(
                     person_id=1,
                     measured_at=typing.cast("datetime", None),
                     weight_lb=100,

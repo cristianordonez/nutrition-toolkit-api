@@ -12,7 +12,7 @@ from __future__ import annotations
 from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
 
-from ntk.models.food_vocab import LiquidConsistency, PackageType  # noqa: TC001
+from engine.models.food_vocab import LiquidConsistency, PackageType  # noqa: TC001
 
 
 class EnteralFormulaNutrient(SQLModel, table=True):

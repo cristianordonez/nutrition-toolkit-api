@@ -5,6 +5,9 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from engine.clients.ollama_client import OllamaClient
+from engine.controllers.base import BaseController
+from engine.models.base import ConsoleRenderableModel
+from engine.models.output import Output
 from engine.models.settings import SETTINGS
 from engine.services.local_model import (
     UnsupportedMachineError,
@@ -12,9 +15,6 @@ from engine.services.local_model import (
     resolve_model,
     total_ram_gb,
 )
-from ntk.controllers.base import BaseController
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.output import Output
 
 
 class LocalModelStatusOptions(BaseModel):

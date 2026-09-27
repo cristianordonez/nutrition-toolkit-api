@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from engine.models.sql.clinical import LipidDeliveryType
+from engine.models.clinical_vocab import LipidDeliveryType
 from engine.services.calculators.parenteral_nutrition_calculator import (
     ParenteralNutritionCalculationInput,
     ParenteralNutritionCalculator,

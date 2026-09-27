@@ -9,6 +9,13 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 import engine.models.sql  # noqa: F401
 from engine.models.ai_extraction import AIExtractedFact
+from engine.models.clinical_fact_registry import FACT_DEFINITIONS
+from engine.models.clinical_facts import (
+    PersonClinicalFact,
+    PersonLab,
+    PersonSupplement,
+    PersonWeight,
+)
 from engine.models.extracted_fact_create import (
     ClinicalFactPayload,
     EdemaPayload,
@@ -20,27 +27,12 @@ from engine.models.extracted_fact_create import (
     WeightPayload,
     WoundPayload,
 )
-from engine.models.sql.clinical import (
-    AI_CAPABLE_STRUCTURED_MODELS,
-    DETERMINISTIC_FIRST_MODELS,
-    PersonClinicalFact,
-    PersonEdema,
-    PersonLab,
-    PersonMealIntake,
-    PersonMedication,
-    PersonSupplement,
-    PersonWeight,
-    PersonWound,
-)
-from engine.models.sql.document import DocumentSource, SourceAuthority
-from engine.models.sql.extracted_fact import ExtractedFact, ExtractionMethod
+from engine.models.sql.clinical_fact import ClinicalFact, ExtractionMethod
+from engine.models.sql.clinical_source import ClinicalSource, SourceAuthority
 from engine.models.sql.person import Person
-from engine.pipelines.person.ingestion.transformer import (
-    DOMAIN_MODEL_BY_FACT_TYPE,
-    ExtractedFactTransformer,
-)
+from engine.pipelines.person.ingestion.transformer import ClinicalFactTransformer
 from engine.repositories.person_repo import PersonRepo
-from ntk.utils.misc import require_id
+from engine.utils.misc import require_id
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -68,16 +60,11 @@ def _ai_fact(payload: object) -> ExtractedFactCreate:
 
 
 def test_domain_model_categories_are_explicit() -> None:
-    assert (PersonWeight, PersonLab) == DETERMINISTIC_FIRST_MODELS
-    assert {
-        PersonEdema,
-        PersonMealIntake,
-        PersonSupplement,
-        PersonWound,
-    }.issubset(AI_CAPABLE_STRUCTURED_MODELS)
-    assert DOMAIN_MODEL_BY_FACT_TYPE["clinical_fact"] is PersonClinicalFact
-    assert DOMAIN_MODEL_BY_FACT_TYPE["supplement"] is PersonSupplement
-    assert "order" not in DOMAIN_MODEL_BY_FACT_TYPE
+    assert FACT_DEFINITIONS["weight"].record_model is PersonWeight
+    assert FACT_DEFINITIONS["lab"].record_model is PersonLab
+    assert FACT_DEFINITIONS["clinical_observation"].record_model is PersonClinicalFact
+    assert FACT_DEFINITIONS["supplement"].record_model is PersonSupplement
+    assert "order" not in FACT_DEFINITIONS
 
 
 def test_typed_facts_route_to_domain_models_with_provenance(
@@ -157,22 +144,23 @@ def test_typed_facts_route_to_domain_models_with_provenance(
         for fact in ai_facts:
             fact.person_id = person_id
 
-        transformed = ExtractedFactTransformer().transform(
+        transformed = ClinicalFactTransformer().transform(
             document_path,
             [*deterministic_facts, *ai_facts],
             extractor_name="RoutingTestExtractor",
         )
         PersonRepo(session).load_transformed_documents([transformed])
 
-        assert len(session.exec(select(PersonWeight)).all()) == 1
-        assert len(session.exec(select(PersonLab)).all()) == 1
-        assert len(session.exec(select(PersonSupplement)).all()) == 1
-        assert len(session.exec(select(PersonEdema)).all()) == 1
-        assert len(session.exec(select(PersonMealIntake)).all()) == 1
-        assert len(session.exec(select(PersonWound)).all()) == 1
-        assert len(session.exec(select(PersonClinicalFact)).all()) == 1
-
-        facts = list(session.exec(select(ExtractedFact)).all())
+        facts = list(session.exec(select(ClinicalFact)).all())
+        assert {fact.fact_type for fact in facts} == {
+            "weight",
+            "lab",
+            "supplement",
+            "edema",
+            "meal_intake",
+            "wound",
+            "clinical_observation",
+        }
         deterministic = [fact for fact in facts if fact.model_name is None]
         ai_extracted = [fact for fact in facts if fact.model_name == _AI_MODEL]
         assert len(deterministic) == 3  # noqa: PLR2004
@@ -184,9 +172,7 @@ def test_typed_facts_route_to_domain_models_with_provenance(
         assert all(
             fact.extraction_method is ExtractionMethod.AI for fact in ai_extracted
         )
-        assert all(
-            record.extracted_fact is not None for record in transformed.related_models
-        )
+        assert all(fact.source is not None for fact in transformed.clinical_facts)
 
         context = PersonRepo(session).get_clinical_records(person_id)
         assert len(context.weights) == 1
@@ -203,7 +189,7 @@ def test_api_fact_uses_the_same_normalization_and_provenance_path(
 ) -> None:
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
-    document_path = tmp_path / "medication-api.txt"
+    document_path = tmp_path / "medication-server.txt"
     document_path.write_text("canonical API medication response", encoding="utf-8")
 
     with Session(engine) as session:
@@ -231,17 +217,20 @@ def test_api_fact_uses_the_same_normalization_and_provenance_path(
             source_authority=SourceAuthority.STRUCTURED_RECORD,
         )
 
-        transformed = ExtractedFactTransformer().transform(
+        transformed = ClinicalFactTransformer().transform(
             document_path,
             [api_fact],
             extractor_name="ExampleEmrMedicationAdapter",
         )
         PersonRepo(session).load_transformed_documents([transformed])
 
-        medication = session.exec(select(PersonMedication)).one()
-        fact = session.exec(select(ExtractedFact)).one()
-        source = session.exec(select(DocumentSource)).one()
-        assert medication.extracted_fact_id == fact.id
+        fact = session.exec(select(ClinicalFact)).one()
+        source = session.exec(select(ClinicalSource)).one()
+        medication = PersonRepo(session).get_clinical_records(
+            require_id(person.id),
+        ).medications[0]
+        assert medication.clinical_source_id == source.id
+        assert fact.clinical_source_id == source.id
         assert fact.extraction_method is ExtractionMethod.API
         assert source.source_system == "example-emr"
         assert source.source_record_type == "medication"

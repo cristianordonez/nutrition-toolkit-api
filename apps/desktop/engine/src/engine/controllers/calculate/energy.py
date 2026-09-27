@@ -9,16 +9,16 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ntk.calculators.nutrition_calculator import (
+from engine.controllers.base import BaseController
+from engine.models.base import ConsoleRenderableModel
+from engine.models.output import Output
+from engine.services.calculators.nutrition_calculator import (
     EnergyNeedsInput,
     EnergyNeedsResult,
     Gender,
     Goal,
     NutritionCalculator,
 )
-from ntk.controllers.base import BaseController
-from ntk.models.base import ConsoleRenderableModel
-from ntk.models.output import Output
 
 
 class EnergyOptions(BaseModel):

@@ -14,12 +14,12 @@ from engine.models.extracted_fact_create import (
     MiscOrderPayload,
     SupplementPayload,
 )
-from engine.models.sql.clinical import ClinicalStatus, FeedingMethod
+from engine.models.food_vocab import LiquidConsistency
+from engine.models.clinical_vocab import ClinicalStatus, FeedingMethod
 from engine.pipelines.person.ingestion.extract.order_classifier import (
     ClassifiedOrderPayload,
     OrderClassifier,
 )
-from ntk.models.food_vocab import LiquidConsistency
 
 _OBSERVED_AT = datetime(2026, 9, 1, tzinfo=UTC)
 

@@ -1,3 +1,3 @@
-"""HTTP clients for calling cloud-api from the desktop engine."""
+"""HTTP clients for calling server from the desktop engine."""
 
 from __future__ import annotations

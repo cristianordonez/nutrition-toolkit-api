@@ -15,9 +15,13 @@ from engine.models.extracted_fact_create import (
     ParenteralNutritionPayload,
     SupplementPayload,
 )
-from engine.models.sql.clinical import ClinicalStatus, FeedingMethod
-from engine.models.sql.clinical.common import LipidDeliveryType, ParenteralFormulaType
-from ntk.models.food_vocab import LiquidConsistency
+from engine.models.food_vocab import LiquidConsistency
+from engine.models.clinical_vocab import (
+    ClinicalStatus,
+    FeedingMethod,
+    LipidDeliveryType,
+    ParenteralFormulaType,
+)
 
 ClassifiedOrderPayload = (
     MedicationPayload

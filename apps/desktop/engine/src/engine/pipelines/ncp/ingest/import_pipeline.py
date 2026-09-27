@@ -1,11 +1,9 @@
-"""Workflow for importing clinical-note reports.
+"""Workflow for importing clinical-note reports as clinical source material.
 
-Historically this pipeline also promoted matching notes into searchable
-cloud NCPs (``NutritionCareProcessPipeline.sync_ncps()``). That promotion is
-deferred (see the split refactor plan, decision 7): NCP generation/storage
-now lives behind cloud-api's stateless HTTP boundary, and there is no
-device<->cloud sync design yet for imported notes. Local ingestion still
-works; only the promotion step is unimplemented.
+Imported progress notes retain their provenance in ``clinical_source`` and
+may yield structured clinical facts. They are deliberately not copied into
+``ncp_note``: that table contains generated NCP lifecycle records and curated
+style examples, not every nutrition-related progress note in a source report.
 """
 
 from __future__ import annotations
@@ -18,28 +16,17 @@ from engine.pipelines.person.ingestion.extract.pcc_progress_notes import (
     PccProgressNotesExtractor,
 )
 from engine.pipelines.person.ingestion.pipeline import PersonIngestionPipeline
-from engine.repositories.clinical_note_repo import ClinicalNoteRepo
-from engine.repositories.facility_repo import FacilityRepo
+from engine.repositories.clinical_source_repo import ClinicalSourceRepo
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
 
+    from engine.controllers.uploads import ReadableUpload
     from engine.pipelines.person.ingestion.transformer import (
         PersonTransformationResult,
     )
-
-
-class ReadableNCPUpload(typing.Protocol):
-    """Minimal uploaded-file interface required by ncp import."""
-
-    filename: str | None
-
-    async def read(self) -> bytes:
-        """Return the uploaded file contents."""
-        ...
 
 
 class InvalidClinicalNoteReportError(ValueError):
@@ -56,23 +43,18 @@ class NCPImportPipeline:
     @classmethod
     def from_session(cls, session: Session) -> NCPImportPipeline:
         """Build the import workflow from one request or CLI database session."""
-        facility_resolver = FacilityResolver(FacilityRepo(session))
-        person_service = PersonService(
-            PersonRepo(session),
-            facility_resolver,
-        )
-        clinical_note_repository = ClinicalNoteRepo(session)
+        person_service = PersonService(PersonRepo(session))
+        clinical_source_repository = ClinicalSourceRepo(session)
         return cls(
             PersonIngestionPipeline(
-                clinical_note_repository=clinical_note_repository,
+                clinical_source_repository=clinical_source_repository,
                 person_service=person_service,
-                facility_resolver=facility_resolver,
             ),
         )
 
     async def run_upload(
         self,
-        file: ReadableNCPUpload,
+        file: ReadableUpload,
         *,
         overwrite: bool = False,
         created_by: str | None = None,
@@ -122,5 +104,4 @@ class NCPImportPipeline:
 __all__ = [
     "InvalidClinicalNoteReportError",
     "NCPImportPipeline",
-    "ReadableNCPUpload",
 ]

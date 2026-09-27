@@ -128,16 +128,42 @@ fn preview(text: &str) -> String {
     }
 }
 
-/// The last non-empty, non-indented line, which for a Python traceback is the
-/// exception itself rather than the frames above it.
+/// The line of a Python traceback that names the failure.
+///
+/// Taking the last non-empty line is wrong for the errors that matter most
+/// here: SQLAlchemy prints the exception first and then appends `[SQL: ...]`,
+/// `[parameters: ...]` and a docs URL, so the tail of the output is a row of
+/// bound values rather than anything a reader can act on. So look for the
+/// exception line itself -- `package.module.SomeError: message` -- scanning
+/// from the end to get the outermost of a chained traceback, and fall back to
+/// the old behaviour when nothing matches.
 fn last_meaningful_line(stderr: &str) -> String {
     stderr
         .lines()
-        .rev()
         .map(str::trim)
-        .find(|line| !line.is_empty())
+        .filter(|line| is_exception_line(line))
+        .next_back()
+        .or_else(|| {
+            stderr.lines().map(str::trim).rev().find(|line| {
+                !line.is_empty() && !line.starts_with("(Background on this error at:")
+            })
+        })
         .unwrap_or(stderr)
         .to_string()
+}
+
+/// Whether a line reads as `SomeError: message`, the form Python uses to
+/// report an uncaught exception.
+fn is_exception_line(line: &str) -> bool {
+    let Some((name, rest)) = line.split_once(": ") else {
+        return false;
+    };
+    if rest.is_empty() || name.contains(char::is_whitespace) {
+        return false;
+    }
+    // The bare class name, after any dotted module path.
+    let class = name.rsplit('.').next().unwrap_or(name);
+    class.ends_with("Error") || class.ends_with("Exception")
 }
 
 /// Report the engine's version, proving the desktop shell can reach it.
@@ -170,6 +196,13 @@ pub fn list_persons() -> Result<serde_json::Value, String> {
     run_json(&["persons", "list"])
 }
 
+/// Summarize the local data available for one resident and identify gaps.
+#[tauri::command(async)]
+pub fn person_summary(person_id: i64) -> Result<serde_json::Value, String> {
+    let person_id = person_id.to_string();
+    run_json(&["persons", "summary", "--person-id", &person_id])
+}
+
 /// Generate a Nutrition Care Process for one resident.
 ///
 /// `additional_context` is the reviewer's own steer for this note -- a reason
@@ -179,13 +212,21 @@ pub fn list_persons() -> Result<serde_json::Value, String> {
 #[tauri::command(async)]
 pub fn generate_ncp(
     person_id: i64,
+    note_type: String,
     additional_context: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let person_id = person_id.to_string();
     let context = additional_context.unwrap_or_default();
     let context = context.trim();
 
-    let mut args = vec!["ncp", "generate", "--person-id", &person_id];
+    let mut args = vec![
+        "ncp",
+        "generate",
+        "--person-id",
+        &person_id,
+        "--note-type",
+        &note_type,
+    ];
     if !context.is_empty() {
         args.extend(["--additional-context", context]);
     }
@@ -295,6 +336,42 @@ pub fn calculate_tubefeed(
     Ok(output.stdout)
 }
 
+/// Read the device user's own settings.
+#[tauri::command(async)]
+pub fn get_settings() -> Result<serde_json::Value, String> {
+    run_json(&["settings", "show"])
+}
+
+/// Change the device user's own settings.
+///
+/// `dark_mode` is a three-state string rather than a bool: "on" and "off" are
+/// explicit choices and "system" follows the OS appearance, which is what a
+/// device that has never visited Settings does. `None` leaves the setting
+/// untouched, so this command can grow more fields without a caller that
+/// omits one wiping it.
+/// `cloud_api_token` is the user's own credential. It is passed straight
+/// through to the engine, which puts it in the OS keychain -- it is never
+/// written to the SQLite database and never read back out, so nothing downstream
+/// can log it. An empty string removes the stored token.
+#[tauri::command(async)]
+pub fn update_settings(
+    dark_mode: Option<String>,
+    use_cloud_model: Option<String>,
+    cloud_api_token: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut args = vec!["settings", "update"];
+    if let Some(mode) = dark_mode.as_deref() {
+        args.extend(["--dark-mode", mode]);
+    }
+    if let Some(cloud) = use_cloud_model.as_deref() {
+        args.extend(["--use-cloud-model", cloud]);
+    }
+    if let Some(token) = cloud_api_token.as_deref() {
+        args.extend(["--cloud-api-token", token]);
+    }
+    run_json(&args)
+}
+
 /// Report whether on-device extraction is ready on this machine.
 #[tauri::command(async)]
 pub fn local_model_status() -> Result<serde_json::Value, String> {
@@ -315,6 +392,42 @@ pub fn local_model_ensure() -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The shape of a constraint failure: SQLAlchemy puts the bound
+    /// parameters after the exception, so the tail of stderr is useless.
+    #[test]
+    fn exception_is_preferred_over_sqlalchemy_trailers() {
+        let stderr = "Traceback (most recent call last):\n  \
+             File \"repo.py\", line 9, in load\n    \
+             session.commit()\n\
+             sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE \
+             constraint failed: clinical_fact.clinical_source_id, \
+             clinical_fact.fact_type, clinical_fact.identity_hash\n\
+             [SQL: INSERT INTO clinical_fact (clinical_source_id, fact_type, \
+             identity_hash) VALUES (?, ?, ?)]\n\
+             [parameters: (95, 'lab', 'abc123')]\n\
+             (Background on this error at: https://sqlalche.me/e/20/gkpj)";
+
+        let line = last_meaningful_line(stderr);
+
+        assert!(line.starts_with("sqlalchemy.exc.IntegrityError:"), "got: {line}");
+        assert!(line.contains("UNIQUE constraint failed"), "got: {line}");
+    }
+
+    #[test]
+    fn a_plain_message_still_comes_through() {
+        assert_eq!(last_meaningful_line("could not start\n"), "could not start");
+    }
+
+    #[test]
+    fn a_bare_exception_line_is_found() {
+        let stderr = "Traceback (most recent call last):\n\
+             ValueError: A person identifier is required";
+        assert_eq!(
+            last_meaningful_line(stderr),
+            "ValueError: A person identifier is required"
+        );
+    }
 
     #[test]
     fn workspace_root_contains_the_engine_package() {
@@ -354,19 +467,41 @@ mod tests {
         assert!(error.contains("at least one file"), "got: {error}");
     }
 
+    #[test]
+    fn person_summary_reports_a_missing_person() {
+        let error = person_summary(987_654).expect_err("unknown person should fail");
+        assert!(error.contains("Person 987654 was not found"), "got: {error}");
+    }
+
+    #[test]
+    fn traceback_summary_skips_sqlalchemy_reference_trailer() {
+        let stderr = "sqlalchemy.exc.IntegrityError: UNIQUE constraint failed: document.checksum\n\
+                      (Background on this error at: https://sqlalche.me/e/20/gkpj)";
+
+        assert_eq!(
+            last_meaningful_line(stderr),
+            "sqlalchemy.exc.IntegrityError: UNIQUE constraint failed: document.checksum"
+        );
+    }
+
     /// A missing resident must surface as an error rather than silently
     /// succeeding, since the UI renders whatever comes back.
     #[test]
     fn generate_ncp_reports_a_missing_person() {
         let error =
-            generate_ncp(987_654, None).expect_err("unknown person should fail");
+            generate_ncp(987_654, "quarterly".to_string(), None)
+                .expect_err("unknown person should fail");
         assert!(error.contains("engine failed"), "got: {error}");
     }
 
     /// Whitespace-only context must not reach the model as an instruction.
     #[test]
     fn blank_context_is_not_passed_through() {
-        let error = generate_ncp(987_654, Some("   \n ".to_string()))
+        let error = generate_ncp(
+            987_654,
+            "quarterly".to_string(),
+            Some("   \n ".to_string()),
+        )
             .expect_err("unknown person should still fail");
         assert!(
             !error.contains("--additional-context"),

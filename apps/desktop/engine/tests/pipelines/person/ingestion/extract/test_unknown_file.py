@@ -35,7 +35,6 @@ def unknown_fact() -> AIUnknownDocumentFact:
         identity=AIExtractedIdentity(
             source_person_name="Jane Doe",
             source_person_identifier="RES-1",
-            facility_name="Sunrise Care",
         ),
         fact=AIExtractedFact(
             payload=MealIntakePayload(
@@ -105,9 +104,7 @@ def test_unknown_file_returns_unresolved_identity_clues(
     assert len(facts) == 1
     assert facts[0].source_person_identifier == "RES-1"
     assert facts[0].source_person_name == "Jane Doe"
-    assert facts[0].facility_name == "Sunrise Care"
     assert facts[0].person_id is None
-    assert facts[0].facility_id is None
     assert facts[0].source_page == 1
 
 

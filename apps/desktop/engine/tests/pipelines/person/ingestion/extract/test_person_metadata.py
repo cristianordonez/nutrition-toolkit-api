@@ -7,7 +7,6 @@ from datetime import date
 import pymupdf
 
 from engine.models.extracted_fact_create import DietPayload, MiscOrderPayload
-from engine.pipelines.person.ingestion.extract.base import PersonExtractor
 from engine.pipelines.person.ingestion.extract.pcc_lab_results import (
     PccLabResultsExtractor,
 )
@@ -24,22 +23,6 @@ from engine.pipelines.person.ingestion.extract.pcc_weight_history import (
 if typing.TYPE_CHECKING:
     import pathlib
 
-
-def test_facility_name_can_appear_before_or_after_report_title() -> None:
-    assert (
-        PersonExtractor._parse_facility_name(  # noqa: SLF001
-            "Weights and Vitals Summary\nEmbassy Manor at Edison\nTime: 07:51",
-            "Weights and Vitals Summary",
-        )
-        == "Embassy Manor at Edison"
-    )
-    assert (
-        PersonExtractor._parse_facility_name(  # noqa: SLF001
-            "Embassy Manor at Edison\nLab Results Report\nLaboratory: ACULABS",
-            "Lab Results Report",
-        )
-        == "Embassy Manor at Edison"
-    )
 
 
 def test_pcc_person_headers_return_identifier_and_name() -> None:
@@ -112,9 +95,9 @@ def test_order_rows_return_person_name_and_identifier() -> None:
     )
 
     assert len(orders) == 1
-    facility_resident_identifier, source_person_name, order = orders[0]
+    resident_identifier, source_person_name, order = orders[0]
     assert isinstance(order, DietPayload)
-    assert facility_resident_identifier == "EN140514"
+    assert resident_identifier == "EN140514"
     assert source_person_name == "Piros, Stephen"
     assert order.diet_type == "renal"
 
@@ -131,9 +114,9 @@ def test_order_rows_do_not_treat_diagnosis_codes_as_persons() -> None:
     )
 
     assert len(orders) == 1
-    facility_resident_identifier, _, order = orders[0]
+    resident_identifier, _, order = orders[0]
     assert isinstance(order, MiscOrderPayload)
-    assert facility_resident_identifier == "210757"
+    assert resident_identifier == "210757"
     assert (
         order.description == "Lab order related to ESSENTIAL PRIMARY HYPERTENSION (I10)"
     )

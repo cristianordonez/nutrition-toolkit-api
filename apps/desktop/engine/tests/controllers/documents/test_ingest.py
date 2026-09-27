@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import typing
 
@@ -12,8 +13,8 @@ from engine.controllers.documents.ingest import (
     DocumentIngestOptions,
     DocumentIngestResult,
 )
+from engine.models.sql.clinical_fact import ClinicalFact
 from engine.models.sql.document import Document
-from engine.models.sql.extracted_fact import ExtractedFact
 from engine.pipelines.person.ingestion.transformer import (
     PersonTransformationResult,
     TransformedDocument,
@@ -47,7 +48,7 @@ def test_document_ingest_accepts_multiple_uploads(
             assert all(path.is_file() for path in files)
             return PersonTransformationResult(documents=[])
 
-    monkeypatch.setattr(ingest, "ClinicalNoteRepo", lambda session: session)
+    monkeypatch.setattr(ingest, "ClinicalSourceRepo", lambda session: session)
     monkeypatch.setattr(ingest, "PersonRepo", lambda session: session)
     monkeypatch.setattr(ingest, "PersonIngestionPipeline", lambda **_: Service())
     controller = DocumentIngestController(session=object())  # ty: ignore[invalid-argument-type]
@@ -71,28 +72,38 @@ def test_document_ingest_accepts_multiple_uploads(
     assert all(not path.exists() for path in observed_paths)
 
 
-def test_document_ingest_uses_configured_parallel_pool(
+def test_document_ingest_uses_one_session_for_a_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    observed_configuration: list[tuple[object, int]] = []
+    observed_sessions: list[object] = []
+    observed_batches: list[list[pathlib.Path]] = []
 
-    class Handler:
-        def __init__(self, *, mode: object, workers: int) -> None:
-            observed_configuration.append((mode, workers))
+    @contextlib.contextmanager
+    def session_scope(session: object) -> typing.Iterator[object]:
+        assert session is None
+        shared_session = object()
+        observed_sessions.append(shared_session)
+        yield shared_session
 
+    class Service:
         @staticmethod
-        def map(
-            function: typing.Callable[[pathlib.Path], PersonTransformationResult],
-            paths: list[pathlib.Path],
-        ) -> list[PersonTransformationResult]:
-            return [function(path) for path in paths]
+        async def ingest(
+            files: list[pathlib.Path],
+            **_kwargs: object,
+        ) -> PersonTransformationResult:
+            assert all(path.is_file() for path in files)
+            observed_batches.append(files)
+            return PersonTransformationResult(documents=[])
 
-    def ingest_one(path: pathlib.Path) -> PersonTransformationResult:
-        assert path.is_file()
-        return PersonTransformationResult(documents=[])
-
-    monkeypatch.setattr(ingest, "ParallelPoolHandler", Handler)
-    monkeypatch.setattr(ingest, "_ingest_document", ingest_one)
+    monkeypatch.setattr(ingest, "controller_session", session_scope)
+    monkeypatch.setattr(ingest, "PersonRepo", lambda session: session)
+    monkeypatch.setattr(
+        ingest,
+        "PersonService",
+        lambda repository: repository,
+    )
+    monkeypatch.setattr(ingest, "ClinicalSourceRepo", lambda session: session)
+    monkeypatch.setattr(ingest, "PersonIngestionPipeline", lambda **_: Service())
     first_upload = Upload()
     first_upload.filename = "first.txt"
     second_upload = Upload()
@@ -105,12 +116,9 @@ def test_document_ingest_uses_configured_parallel_pool(
         ),
     )
 
-    assert observed_configuration == [
-        (
-            ingest.SETTINGS.document_ingestion_pool_mode,
-            ingest.SETTINGS.document_ingestion_workers,
-        ),
-    ]
+    assert len(observed_sessions) == 1
+    assert len(observed_batches) == 1
+    assert [path.name for path in observed_batches[0]] == ["first.txt", "second.txt"]
     assert output.result.documents == 0
 
 
@@ -141,7 +149,7 @@ def test_document_ingest_with_person_id_forwards_known_identity(
             observed_kwargs.update(kwargs)
             return PersonTransformationResult(documents=[])
 
-    monkeypatch.setattr(ingest, "ClinicalNoteRepo", lambda session: session)
+    monkeypatch.setattr(ingest, "ClinicalSourceRepo", lambda session: session)
     monkeypatch.setattr(ingest, "PersonRepo", PersonRepository)
     monkeypatch.setattr(ingest, "PersonIngestionPipeline", lambda **_: Service())
     controller = DocumentIngestController(session=object())  # ty: ignore[invalid-argument-type]
@@ -163,17 +171,23 @@ def test_ingest_result_summarizes_documents_facts_and_person_ids() -> None:
         return TransformedDocument(
             document=Document(
                 filename="report.pdf",
-                file_type="pdf",
+                media_type="application/pdf",
                 checksum=f"checksum-{person_ids}",
                 storage_uri="file:///report.pdf",
                 document_type="unknown",
             ),
-            document_sources=[],
-            extracted_facts=[
-                ExtractedFact(person_id=person_id, fact_type="weight")
+            clinical_sources=[],
+            clinical_facts=[
+                ClinicalFact(
+                    person_id=person_id,
+                    fact_type="weight",
+                    payload={},
+                    identity_hash=f"identity-{person_id}",
+                    content_hash=f"content-{person_id}",
+                )
                 for person_id in person_ids
+                if person_id is not None
             ],
-            related_models=[],
         )
 
     summary = DocumentIngestResult.from_transformation(
@@ -183,7 +197,7 @@ def test_ingest_result_summarizes_documents_facts_and_person_ids() -> None:
     )
 
     assert summary.documents == 2  # noqa: PLR2004
-    assert summary.facts == 4  # noqa: PLR2004
+    assert summary.facts == 3  # noqa: PLR2004
     assert summary.person_ids == [3, 7]
     assert json.loads(summary.to_console())["person_ids"] == [3, 7]
 
@@ -199,7 +213,7 @@ def test_document_ingest_with_unknown_person_id_raises_lookup_error(
         def get_by_id(_person_id: int) -> None:
             return None
 
-    monkeypatch.setattr(ingest, "ClinicalNoteRepo", lambda session: session)
+    monkeypatch.setattr(ingest, "ClinicalSourceRepo", lambda session: session)
     monkeypatch.setattr(ingest, "PersonRepo", PersonRepository)
     controller = DocumentIngestController(session=object())  # ty: ignore[invalid-argument-type]
 

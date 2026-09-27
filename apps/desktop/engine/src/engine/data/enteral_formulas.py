@@ -2,10 +2,10 @@
 
 Shipped with the desktop engine so tube-feed calculations and formula
 recommendations (``engine.services.calculators.tubefeed_calculator``) run
-entirely on-device -- no patient feeding record is ever sent to the cloud
+entirely on-device -- no patient feeding record is ever sent to the server
 merely to perform a calculation. This catalog is reference data, not patient
 data, and can be updated independently of the clinical workflow (e.g. shipped
-in an engine release, or later synced from a cloud-distributed, non-PHI
+in an engine release, or later synced from a server-distributed, non-PHI
 reference feed).
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ntk.models.food_vocab import LiquidConsistency, PackageType
+from engine.models.food_vocab import LiquidConsistency, PackageType
 
 CATALOG_VERSION = "1.0.0"
 

@@ -6,14 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from engine.models.sql.clinical import (
-    AppetiteLevel,
-    ClinicalStatus,
-    DialysisType,
-    GISymptom,
-    LipidDeliveryType,
-    NutritionGoalType,
-    ParenteralNutritionStatus,
+from engine.models.clinical_facts import (
     PersonAppetiteObservation,
     PersonDialysis,
     PersonDiet,
@@ -24,6 +17,15 @@ from engine.models.sql.clinical import (
     PersonOralFeedingStatus,
     PersonParenteralNutrition,
     PersonWeight,
+)
+from engine.models.clinical_vocab import (
+    AppetiteLevel,
+    ClinicalStatus,
+    DialysisType,
+    GISymptom,
+    LipidDeliveryType,
+    NutritionGoalType,
+    ParenteralNutritionStatus,
 )
 from engine.models.sql.person import Person
 from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
@@ -49,7 +51,7 @@ def _diet(
         observed_at=observed_at,
         created_at=created_at,
         state_key=name.casefold(),
-        extracted_fact_id=record_id,
+        clinical_source_id=record_id,
     )
 
 
@@ -104,7 +106,7 @@ def test_active_medications_keep_distinct_active_regimens() -> None:
                 observed_at=_OLDER,
                 created_at=_NEWER + timedelta(days=1),
                 state_key="lasix-20",
-                extracted_fact_id=1,
+                clinical_source_id=1,
             ),
             PersonMedication(
                 id=2,
@@ -116,7 +118,7 @@ def test_active_medications_keep_distinct_active_regimens() -> None:
                 observed_at=_NEWER,
                 created_at=_NEWER,
                 state_key="lasix-40",
-                extracted_fact_id=2,
+                clinical_source_id=2,
             ),
         ],
     )
@@ -155,7 +157,7 @@ def test_structured_dialysis_and_nutrition_goal_drive_needs_profile() -> None:
                 status=ClinicalStatus.ACTIVE,
                 observed_at=_NEWER,
                 state_key="hd-mwf",
-                extracted_fact_id=1,
+                clinical_source_id=1,
             ),
         ],
         nutrition_goals=[
@@ -166,7 +168,7 @@ def test_structured_dialysis_and_nutrition_goal_drive_needs_profile() -> None:
                 status=ClinicalStatus.ACTIVE,
                 observed_at=_NEWER,
                 state_key="gain",
-                extracted_fact_id=2,
+                clinical_source_id=2,
             ),
         ],
     )
@@ -208,7 +210,7 @@ def test_budgeter_keeps_current_state_and_bounds_history() -> None:
 
     person = budgeted.request.person
     assert person.current_diet is not None
-    assert person.current_diet.diet_type == "Diet 0"
+    assert person.current_diet.diet_type == "diet_0"
     assert len(person.weight_history) == 12
     assert budgeted.omitted_record_counts == {"weight_history": 8}
 
@@ -242,7 +244,7 @@ def test_context_keeps_new_domains_separate_and_calculates_pn() -> None:
                 status=ParenteralNutritionStatus.ACTIVE,
                 observed_at=_NEWER,
                 state_key="pn",
-                extracted_fact_id=2,
+                clinical_source_id=2,
             ),
         ],
         fluid_plans=[
@@ -253,7 +255,7 @@ def test_context_keeps_new_domains_separate_and_calculates_pn() -> None:
                 status=ClinicalStatus.ACTIVE,
                 observed_at=_NEWER,
                 state_key="fluid",
-                extracted_fact_id=3,
+                clinical_source_id=3,
             ),
         ],
         appetite_observations=[
@@ -263,7 +265,7 @@ def test_context_keeps_new_domains_separate_and_calculates_pn() -> None:
                 appetite=AppetiteLevel.POOR,
                 observed_at=_NEWER,
                 observation_key="appetite-new",
-                extracted_fact_id=4,
+                clinical_source_id=4,
             ),
             PersonAppetiteObservation(
                 id=5,
@@ -271,7 +273,7 @@ def test_context_keeps_new_domains_separate_and_calculates_pn() -> None:
                 appetite=AppetiteLevel.GOOD,
                 observed_at=_OLDER,
                 observation_key="appetite-old",
-                extracted_fact_id=5,
+                clinical_source_id=5,
             ),
         ],
         gi_observations=[
@@ -281,7 +283,7 @@ def test_context_keeps_new_domains_separate_and_calculates_pn() -> None:
                 symptom=GISymptom.NAUSEA,
                 observed_at=_NEWER,
                 observation_key="gi",
-                extracted_fact_id=6,
+                clinical_source_id=6,
             ),
         ],
         oral_feeding_status_history=[
@@ -292,7 +294,7 @@ def test_context_keeps_new_domains_separate_and_calculates_pn() -> None:
                 status=ClinicalStatus.ACTIVE,
                 observed_at=_NEWER,
                 state_key="oral",
-                extracted_fact_id=7,
+                clinical_source_id=7,
             ),
         ],
     )
@@ -321,7 +323,7 @@ def test_multiple_active_weight_directions_are_an_explicit_conflict() -> None:
             status=ClinicalStatus.ACTIVE,
             observed_at=_NEWER,
             state_key=goal_type.value,
-            extracted_fact_id=index,
+            clinical_source_id=index,
         )
         for index, goal_type in enumerate(
             (

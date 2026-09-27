@@ -4,8 +4,16 @@ import typing
 from datetime import UTC, datetime
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine, select
+from pydantic import BaseModel
+from sqlmodel import Session, SQLModel, create_engine
 
+from engine.models.clinical_facts import (
+    PersonAllergy,
+    PersonDiet,
+    PersonEdema,
+    PersonLab,
+)
+from engine.models.clinical_vocab import ClinicalStatus
 from engine.models.extracted_fact_create import (
     AllergyPayload,
     DietPayload,
@@ -14,12 +22,8 @@ from engine.models.extracted_fact_create import (
     LabPayload,
     PersonFactPayload,
 )
-from engine.models.sql.clinical import PersonAllergy, PersonDiet, PersonEdema, PersonLab
-from engine.models.sql.clinical.common import ClinicalStatus
-from engine.pipelines.person.ingestion.transformer import ExtractedFactTransformer
-from engine.repositories.facility_repo import FacilityRepo
+from engine.pipelines.person.ingestion.transformer import ClinicalFactTransformer
 from engine.repositories.person_repo import PersonRepo
-from engine.services.facility_resolver import FacilityResolver
 from engine.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
@@ -75,7 +79,7 @@ def test_constrained_incremental_fact_is_upserted(  # noqa: PLR0913
     tmp_path: pathlib.Path,
     first_payload: PersonFactPayload,
     second_payload: PersonFactPayload,
-    model: type[SQLModel],
+    model: type[BaseModel],
     field_name: str,
     expected: object,
 ) -> None:
@@ -88,14 +92,8 @@ def test_constrained_incremental_fact_is_upserted(  # noqa: PLR0913
 
     with Session(engine) as session:
         repository = PersonRepo(session)
-        facility_repository = FacilityRepo(session)
-        resolver = FacilityResolver(facility_repository)
-        resolver.register_trusted(name="Facility")
-        transformer = ExtractedFactTransformer(
-            PersonService(
-                repository,
-                resolver,
-            ),
+        transformer = ClinicalFactTransformer(
+            PersonService(repository),
         )
         first = transformer.transform(
             first_path,
@@ -110,7 +108,11 @@ def test_constrained_incremental_fact_is_upserted(  # noqa: PLR0913
 
         repository.load_transformed_documents([first, second])
 
-        records = list(session.exec(select(model)).all())
+        records = [
+            record
+            for record in repository.facts.list_records(person_id=1)
+            if isinstance(record, model)
+        ]
         assert len(records) == 1
         assert getattr(records[0], field_name) == expected
 
@@ -119,7 +121,6 @@ def _fact(payload: PersonFactPayload) -> ExtractedFactCreate:
     return ExtractedFactCreate(
         source_person_identifier="R-1",
         source_person_name="Person",
-        facility_name="Facility",
         payload=payload,
         confidence=1,
     )
@@ -139,9 +140,7 @@ def test_equivalent_diet_formatting_does_not_create_two_active_rows(
 
     with Session(engine) as session:
         repository = PersonRepo(session)
-        resolver = FacilityResolver(FacilityRepo(session))
-        resolver.register_trusted(name="Facility")
-        transformer = ExtractedFactTransformer(PersonService(repository, resolver))
+        transformer = ClinicalFactTransformer(PersonService(repository))
         order = transformer.transform(
             order_path,
             [
@@ -176,10 +175,14 @@ def test_equivalent_diet_formatting_does_not_create_two_active_rows(
         repository.load_transformed_documents([order])
         repository.load_transformed_documents([note])
 
-        diets = list(session.exec(select(PersonDiet)).all())
+        diets = [
+            record
+            for record in repository.facts.list_records(person_id=1)
+            if isinstance(record, PersonDiet)
+        ]
         assert len(diets) == 1
         assert diets[0].texture == "mechanical_soft"
-        assert diets[0].observed_at == order_time.replace(tzinfo=None)
+        assert diets[0].observed_at == order_time
 
 
 def test_newer_allergy_reconciliation_keeps_required_provenance_fk(
@@ -196,9 +199,7 @@ def test_newer_allergy_reconciliation_keeps_required_provenance_fk(
 
     with Session(engine) as session:
         repository = PersonRepo(session)
-        resolver = FacilityResolver(FacilityRepo(session))
-        resolver.register_trusted(name="Facility")
-        transformer = ExtractedFactTransformer(PersonService(repository, resolver))
+        transformer = ClinicalFactTransformer(PersonService(repository))
         first = transformer.transform(
             first_path,
             [
@@ -212,8 +213,12 @@ def test_newer_allergy_reconciliation_keeps_required_provenance_fk(
             extractor_name="AllergyExtractor",
         )
         repository.load_transformed_documents([first])
-        first_allergy = session.exec(select(PersonAllergy)).one()
-        first_fact_id = first_allergy.extracted_fact_id
+        first_allergy = next(
+            record
+            for record in repository.facts.list_records(person_id=1)
+            if isinstance(record, PersonAllergy)
+        )
+        first_fact_id = first_allergy.clinical_source_id
 
         second = transformer.transform(
             second_path,
@@ -238,7 +243,11 @@ def test_newer_allergy_reconciliation_keeps_required_provenance_fk(
         )
         repository.load_transformed_documents([second])
 
-        allergy = session.exec(select(PersonAllergy)).one()
-        assert allergy.observed_at == second_time.replace(tzinfo=None)
-        assert allergy.extracted_fact_id is not None
-        assert allergy.extracted_fact_id != first_fact_id
+        allergy = next(
+            record
+            for record in repository.facts.list_records(person_id=1)
+            if isinstance(record, PersonAllergy)
+        )
+        assert allergy.observed_at == second_time
+        assert allergy.clinical_source_id is not None
+        assert allergy.clinical_source_id != first_fact_id

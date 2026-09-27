@@ -1,103 +1,70 @@
-"""Persisted source document metadata."""
+"""Imported clinical source artifact metadata."""
 
 from __future__ import annotations
 
 import typing
-from datetime import UTC, datetime
-from enum import StrEnum
+from datetime import datetime  # noqa: TC003
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import JSON, Column, Index, text
 from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
 
+from engine.models.clinical_facts import utc_now
+
 if typing.TYPE_CHECKING:
-    from .extracted_fact import ExtractedFact
+    from .clinical_source import ClinicalSource
     from .facility import Facility
 
 
 class Document(SQLModel, table=True):
-    """A file imported for extraction or retrieval."""
+    """An imported file artifact, separate from its logical clinical sources."""
 
     __tablename__ = "document"
+    __table_args__ = (
+        Index(
+            "uq_document_unscoped_checksum",
+            "checksum",
+            unique=True,
+            sqlite_where=text("facility_id IS NULL"),
+        ),
+        Index(
+            "uq_document_facility_checksum",
+            "facility_id",
+            "checksum",
+            unique=True,
+            sqlite_where=text("facility_id IS NOT NULL"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
-    filename: str
-    file_type: str = Field(index=True)
-    checksum: str = Field(index=True, unique=True)
-    storage_uri: str
-    imported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    source_observed_at: datetime | None = Field(default=None, index=True)
-    document_type: str = Field(index=True)
     facility_id: int | None = Field(
         default=None,
         foreign_key="facility.id",
         index=True,
+        ondelete="RESTRICT",
     )
-    facility: Facility | None = Relationship(
-        sa_relationship=relationship("Facility", back_populates="documents"),
+    filename: str
+    media_type: str = Field(index=True)
+    checksum: str = Field(index=True)
+    storage_uri: str | None = None
+    byte_size: int | None = Field(default=None, ge=0)
+    source_observed_at: datetime | None = Field(default=None, index=True)
+    document_type: str = Field(index=True)
+    document_metadata: dict[str, typing.Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False),
     )
-    sources: list[DocumentSource] = Relationship(
+    imported_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    facility: Facility = Relationship(back_populates="documents")
+    sources: list[ClinicalSource] = Relationship(
         sa_relationship=relationship(
-            "DocumentSource",
+            "ClinicalSource",
             back_populates="document",
             collection_class=list,
         ),
     )
 
 
-class DocumentSourceType(StrEnum):
-    PDF = "pdf"
-    CSV = "csv"
-    TEXT = "text"
-    API = "api"
-
-
-class SourceAuthority(StrEnum):
-    """How strongly a source establishes a person's current clinical state."""
-
-    AUTHORITATIVE_SNAPSHOT = "authoritative_snapshot"
-    STRUCTURED_RECORD = "structured_record"
-    CLINICAL_DOCUMENT = "clinical_document"
-    HISTORICAL_DOCUMENT = "historical_document"
-    UNKNOWN = "unknown"
-
-
-class DocumentSource(SQLModel, table=True):
-    """A page, section, or API payload within an imported document."""
-
-    __tablename__ = "document_source"
-    __table_args__ = (UniqueConstraint("document_id", "source_page", "evidence_hash"),)
-
-    id: int | None = Field(default=None, primary_key=True)
-    document_id: int = Field(foreign_key="document.id", index=True)
-    source_type: DocumentSourceType = Field(index=True)
-    source_page: int | None = None
-    evidence_hash: str = Field(max_length=64, index=True)
-    source_section: str | None = None
-    source_system: str | None = Field(default=None, index=True)
-    source_record_type: str | None = Field(default=None, index=True)
-    source_record_id: str | None = Field(default=None, index=True)
-    source_record_version: str | None = None
-    source_document_id: str | None = Field(default=None, index=True)
-    source_endpoint: str | None = None
-    source_authority: SourceAuthority = Field(
-        default=SourceAuthority.UNKNOWN,
-        index=True,
-    )
-    received_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
-    document: Document = Relationship(back_populates="sources")
-    extracted_facts: list[ExtractedFact] = Relationship(
-        sa_relationship=relationship(
-            "ExtractedFact",
-            back_populates="source",
-            collection_class=list,
-        ),
-    )
-
-
-__all__ = [
-    "Document",
-    "DocumentSource",
-    "DocumentSourceType",
-    "SourceAuthority",
-]
+__all__ = ["Document"]

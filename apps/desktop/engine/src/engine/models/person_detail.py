@@ -11,13 +11,14 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from engine.models.sql import (
-    ExtractedFact,
-    Facility,
+from engine.models.derived_calculations import (
+    ClinicalConflict,
+    DerivedPersonCalculations,
+)
+from engine.models.clinical_facts import (
     PersonAllergy,
     PersonAppetiteObservation,
     PersonClinicalFact,
-    PersonClinicalNote,
     PersonDiagnosis,
     PersonDialysis,
     PersonDiet,
@@ -37,7 +38,7 @@ from engine.models.sql import (
     PersonWeight,
     PersonWound,
 )
-from ntk.models.derived_calculations import ClinicalConflict, DerivedPersonCalculations
+from engine.models.sql.clinical_source import ClinicalSource
 
 
 class PersonDetail(BaseModel):
@@ -85,8 +86,6 @@ class PersonDetail(BaseModel):
     age: int | None = None
     sex: str | None = None
     height_in: float | None = None
-    facility_id: int | None = None
-    facility: Facility | None = None
     person_identifier: str | None = None
 
     current_weight: PersonWeight | None = None
@@ -133,8 +132,7 @@ class PersonDetail(BaseModel):
     gi_observations: list[PersonGIObservation] = Field(default_factory=list)
     wounds: list[PersonWound] = Field(default_factory=list)
     clinical_facts: list[PersonClinicalFact] = Field(default_factory=list)
-    clinical_notes: list[PersonClinicalNote] = Field(default_factory=list)
-    extracted_facts: list[ExtractedFact] = Field(default_factory=list)
+    clinical_notes: list[ClinicalSource] = Field(default_factory=list)
 
     conflicts: list[ClinicalConflict] = Field(default_factory=list)
     derived_calculations: DerivedPersonCalculations

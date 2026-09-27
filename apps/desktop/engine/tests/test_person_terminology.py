@@ -7,7 +7,7 @@ from pathlib import Path
 
 _SOURCE_ROOTS = [
     Path(__file__).resolve().parents[4] / "packages/ntk-core/src",
-    Path(__file__).resolve().parents[4] / "apps/cloud-api/src",
+    Path(__file__).resolve().parents[4] / "apps/server/src",
     Path(__file__).resolve().parents[2] / "src",
 ]
 _LEGACY_PATTERN = re.compile(
@@ -34,7 +34,7 @@ def test_internal_source_uses_person_terminology() -> None:
                     "engine/pipelines/person/ingestion/extract/",
                 )
                 explicitly_external = (
-                    "facility_resident_identifier" in line
+                    "resident_identifier" in line
                     or '"Resident' in line
                     or 'r"Resident' in line
                     or 'r"\\bResident' in line

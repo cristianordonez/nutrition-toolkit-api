@@ -3,15 +3,15 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime, timedelta
 
-from engine.models.person_detail import PersonDetail
-from engine.models.sql.clinical import PersonWeight
-from ntk.models.derived_calculations import (
+from engine.models.derived_calculations import (
     AnthropometricCalculations,
     DerivedPersonCalculations,
     NutritionNeedsCalculation,
     ParenteralNutritionCalculation,
     TubeFeedCalculation,
 )
+from engine.models.person_detail import PersonDetail
+from engine.models.clinical_facts import PersonWeight
 
 EXPECTED_BMI = 23.9
 

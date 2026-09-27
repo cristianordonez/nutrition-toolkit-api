@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from engine.presentation.cli.app import main
+from engine.cli import main
 
 if __name__ == "__main__":
     main()

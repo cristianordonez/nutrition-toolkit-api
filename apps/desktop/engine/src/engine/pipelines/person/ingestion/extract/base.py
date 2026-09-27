@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date  # noqa: TC003
 
 from engine.models.extracted_fact_create import ExtractedFactCreate, PersonFactPayload
-from engine.models.sql.document import SourceAuthority
-from ntk.pipelines.extraction import DocumentExtractor
+from engine.models.sql.clinical_source import SourceAuthority
+from engine.pipelines.extraction import DocumentExtractor
 
 
 class PersonExtractor(DocumentExtractor[list[ExtractedFactCreate]]):
@@ -22,7 +22,6 @@ class PersonExtractor(DocumentExtractor[list[ExtractedFactCreate]]):
         *,
         source_person_identifier: str | None = None,
         source_person_name: str | None = None,
-        facility_name: str | None = None,
         date_of_birth: date | None = None,
         sex: str | None = None,
         height_in: float | None = None,
@@ -35,7 +34,6 @@ class PersonExtractor(DocumentExtractor[list[ExtractedFactCreate]]):
         return ExtractedFactCreate(
             source_person_identifier=source_person_identifier,
             source_person_name=source_person_name,
-            facility_name=facility_name,
             date_of_birth=date_of_birth,
             sex=sex,
             height_in=height_in,
@@ -47,35 +45,6 @@ class PersonExtractor(DocumentExtractor[list[ExtractedFactCreate]]):
             confidence=1.0,
             confidence_reason="Deterministic report extraction",
         )
-
-    @staticmethod
-    def _parse_facility_name(text: str, *report_titles: str) -> str | None:
-        """Return the facility name printed immediately below a PCC report title."""
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        titles = {title.casefold() for title in report_titles}
-        for index, line in enumerate(lines):
-            if line.casefold() not in titles:
-                continue
-            adjacent_lines = []
-            if index + 1 < len(lines):
-                adjacent_lines.append(lines[index + 1])
-            if index > 0:
-                adjacent_lines.append(lines[index - 1])
-            for candidate in adjacent_lines:
-                if not candidate.startswith(
-                    (
-                        "Facility",
-                        "Time:",
-                        "Date:",
-                        "Resident:",
-                        "User:",
-                        "Laboratory:",
-                        "Reviewed By",
-                        "Latest Version",
-                    ),
-                ):
-                    return candidate
-        return None
 
 
 __all__ = ["PersonExtractor"]

@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 import pytest
 
 from engine.models.extracted_fact_create import DietPayload, ExtractedFactCreate
-from engine.models.sql.person import ExtractionStatus, PersonClinicalNote
+from engine.models.sql.clinical_source import (
+    ClinicalSource,
+    ClinicalSourceKind,
+    ExtractionStatus,
+)
 from engine.pipelines.person.ingestion.extract.pcc_progress_notes import (
     ParsedProgressNote,
     PccProgressNotesExtractor,
@@ -20,7 +24,7 @@ from engine.pipelines.person.ingestion.pipeline import (
 if typing.TYPE_CHECKING:
     import pathlib
 
-    from engine.repositories.clinical_note_repo import ClinicalNoteRepo
+    from engine.repositories.clinical_source_repo import ClinicalSourceRepo
     from engine.services.person.person_service import PersonService
 
 
@@ -28,9 +32,8 @@ def test_constructor_exposes_only_supported_dependencies() -> None:
     parameters = inspect.signature(PersonIngestionPipeline).parameters
 
     assert list(parameters) == [
-        "clinical_note_repository",
+        "clinical_source_repository",
         "person_service",
-        "facility_resolver",
     ]
 
 
@@ -80,7 +83,7 @@ async def test_clinical_note_ingestion_keeps_resolution_in_pipeline(
             return None
 
         @staticmethod
-        def create(progress_note: PersonClinicalNote) -> PersonClinicalNote:
+        def create(progress_note: ClinicalSource) -> ClinicalSource:
             progress_note.id = 11
             return progress_note
 
@@ -91,20 +94,20 @@ async def test_clinical_note_ingestion_keeps_resolution_in_pipeline(
         def resolve_or_create_clinical_note(_note: object) -> object:
             return type("ResolvedPerson", (), {"id": 7})()
 
-    clinical_note_repository = typing.cast("ClinicalNoteRepo", Repository())
+    clinical_source_repository = typing.cast("ClinicalSourceRepo", Repository())
     person_service = typing.cast("PersonService", Resolver())
     extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
 
     async def extract_prepared(prepared: list[object]) -> list[typing.Never]:
         assert len(prepared) == 1
         assert prepared[0].person_id == 7  # noqa: PLR2004  # ty: ignore[unresolved-attribute]
-        assert prepared[0].clinical_note_id == 11  # noqa: PLR2004  # ty: ignore[unresolved-attribute]
+        assert prepared[0].clinical_source_id == 11  # noqa: PLR2004  # ty: ignore[unresolved-attribute]
         return []
 
     monkeypatch.setattr(extractor, "extract_notes", lambda: [note])
     monkeypatch.setattr(extractor, "extract_prepared", extract_prepared)
     service = PersonIngestionPipeline(
-        clinical_note_repository=clinical_note_repository,
+        clinical_source_repository=clinical_source_repository,
         person_service=person_service,
     )
     monkeypatch.setattr(service, "_find_extractor", lambda _path: extractor)
@@ -144,7 +147,7 @@ async def test_filtered_clinical_notes_still_update_header_demographics(
     extractor._last_parsed_notes = [note]  # noqa: SLF001
     monkeypatch.setattr(extractor, "extract_notes", list)
     service = PersonIngestionPipeline(
-        clinical_note_repository=typing.cast("ClinicalNoteRepo", object()),
+        clinical_source_repository=typing.cast("ClinicalSourceRepo", object()),
         person_service=typing.cast("PersonService", Service()),
     )
     monkeypatch.setattr(service, "_find_extractor", lambda _path: extractor)
@@ -160,7 +163,7 @@ async def test_clinical_note_ingestion_requires_service(
 ) -> None:
     extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
     service = PersonIngestionPipeline(
-        clinical_note_repository=typing.cast("ClinicalNoteRepo", object()),
+        clinical_source_repository=typing.cast("ClinicalSourceRepo", object()),
     )
     note = ParsedProgressNote(
         source_person_identifier="R-7",
@@ -183,13 +186,14 @@ async def test_clinical_note_status_changes_after_fact_persistence(
     events: list[str] = []
     path = tmp_path / "notes.pdf"
     path.write_bytes(b"progress notes")
-    note = PersonClinicalNote(
+    note = ClinicalSource(
         id=1,
         person_id=7,
-        note_date=datetime(2026, 8, 20, tzinfo=UTC),
-        note_text="Person's appetite remains stable.",
-        raw_text="Person's appetite remains stable.",
-        note_key="note-key",
+        source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+        effective_at=datetime(2026, 8, 20, tzinfo=UTC),
+        content="Person's appetite remains stable.",
+        raw_content="Person's appetite remains stable.",
+        source_key="note-key",
         extraction_status=ExtractionStatus.PENDING,
     )
     extractor = PccProgressNotesExtractor(path)
@@ -200,31 +204,38 @@ async def test_clinical_note_status_changes_after_fact_persistence(
             return False
 
         @staticmethod
+        def document_ingestion_is_complete(_checksum: str) -> bool:
+            # A stub that reports the document as present also
+            # reports it as finished, which is the state these
+            # tests are describing.
+            return False
+
+        @staticmethod
         def load_transformed_documents(_documents: object) -> None:
             events.append("facts persisted")
 
     class Service:
         repository = PersonRepository()
 
-    class ClinicalNoteRepository:
+    class ClinicalSourceRepository:
         @staticmethod
         def set_extraction_status(
-            progress_note: PersonClinicalNote,
+            progress_note: ClinicalSource,
             status: ExtractionStatus,
-        ) -> PersonClinicalNote:
+        ) -> ClinicalSource:
             assert events == ["facts persisted"]
             progress_note.extraction_status = status
             events.append("note extracted")
             return progress_note
 
     service = PersonIngestionPipeline(
-        clinical_note_repository=typing.cast(
-            "ClinicalNoteRepo",
-            ClinicalNoteRepository(),
+        clinical_source_repository=typing.cast(
+            "ClinicalSourceRepo",
+            ClinicalSourceRepository(),
         ),
         person_service=typing.cast("PersonService", Service()),
     )
-    service._processed_clinical_notes[path.resolve()] = [note]  # noqa: SLF001
+    service._processed_clinical_sources[path.resolve()] = [note]  # noqa: SLF001
 
     async def extract_report(
         _path: pathlib.Path,
@@ -255,6 +266,13 @@ async def test_existing_document_is_skipped_before_extraction(
             return True
 
         @staticmethod
+        def document_ingestion_is_complete(_checksum: str) -> bool:
+            # What actually gates the skip: a finished document is skipped, an
+            # unfinished one is re-processed so a failed run can be retried.
+            events.append("completeness checked")
+            return True
+
+        @staticmethod
         def load_transformed_documents(_documents: object) -> None:
             message = "existing documents must not be loaded"
             raise AssertionError(message)
@@ -276,7 +294,7 @@ async def test_existing_document_is_skipped_before_extraction(
     monkeypatch.setattr(service, "_extract_report", extract_report)
     result = await service.ingest([path])
     assert result.documents == []
-    assert events == ["existence checked"]
+    assert events == ["completeness checked"]
 
 
 @pytest.mark.anyio
@@ -295,6 +313,13 @@ async def test_duplicate_content_is_extracted_once_per_request(
     class PersonRepository:
         @staticmethod
         def document_exists(_checksum: str) -> bool:
+            return False
+
+        @staticmethod
+        def document_ingestion_is_complete(_checksum: str) -> bool:
+            # A stub that reports the document as present also
+            # reports it as finished, which is the state these
+            # tests are describing.
             return False
 
         @staticmethod

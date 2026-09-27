@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import typing
 
+from engine.controllers.base import BaseControllerGroup
 from engine.controllers.ncp.generate import NCPGenerateController
 from engine.controllers.ncp.import_ncps import NCPImportController
-from ntk.controllers.base import BaseControllerGroup
-from ntk.controllers.registry import register_command_group
-
-logger = logging.getLogger(__name__)
+from engine.controllers.registry import register_command_group
 
 
 @register_command_group

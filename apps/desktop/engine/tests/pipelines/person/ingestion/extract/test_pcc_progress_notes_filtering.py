@@ -17,8 +17,12 @@ from engine.models.extracted_fact_create import (
     LabPayload,
     WoundPayload,
 )
-from engine.models.sql.document import SourceAuthority
-from engine.models.sql.person import ExtractionStatus, PersonClinicalNote
+from engine.models.sql.clinical_source import (
+    ClinicalSource,
+    ClinicalSourceKind,
+    ExtractionStatus,
+    SourceAuthority,
+)
 from engine.pipelines.person.ingestion.extract.pcc_progress_notes import (
     ExtractedNote,
     ParsedHeaderDiagnosis,
@@ -328,7 +332,6 @@ def test_progress_note_is_persisted_before_ai_extraction(
     note = ParsedProgressNote(
         source_person_identifier="RES1",
         source_person_name="Person",
-        facility_name="Facility",
         source_page=2,
         note_date=datetime(2026, 8, 20, tzinfo=UTC),
         note_type="MD Progress Note",
@@ -341,21 +344,21 @@ def test_progress_note_is_persisted_before_ai_extraction(
 
     class PersistingClinicalNoteRepo:
         def __init__(self) -> None:
-            self.note: PersonClinicalNote | None = None
+            self.note: ClinicalSource | None = None
 
         def get_by_key(self, _note_key: str) -> None:
             return None
 
-        def create(self, progress_note: PersonClinicalNote) -> PersonClinicalNote:
+        def create(self, progress_note: ClinicalSource) -> ClinicalSource:
             events.append("persisted")
             self.note = progress_note
             return progress_note
 
         def set_extraction_status(
             self,
-            progress_note: PersonClinicalNote,
+            progress_note: ClinicalSource,
             status: ExtractionStatus,
-        ) -> PersonClinicalNote:
+        ) -> ClinicalSource:
             events.append(status.value)
             progress_note.extraction_status = status
             return progress_note
@@ -372,13 +375,14 @@ def test_progress_note_is_persisted_before_ai_extraction(
         events.append("agent")
         return ExtractedClinicalFacts()
 
-    progress_note = PersonClinicalNote(
+    progress_note = ClinicalSource(
         id=1,
         person_id=7,
-        note_date=note.note_date,  # ty: ignore[invalid-argument-type]
-        note_text=note.note_text,
-        raw_text=note.raw_text,
-        note_key="key",
+        source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+        effective_at=note.note_date,
+        content=note.note_text,
+        raw_content=note.raw_text,
+        source_key="key",
         extraction_status=ExtractionStatus.PENDING,
     )
     repository.create(progress_note)
@@ -445,7 +449,6 @@ def test_progress_notes_use_bounded_async_concurrency_with_isolated_failures(
         return ParsedProgressNote(
             source_person_identifier="RES1",
             source_person_name="Person One",
-            facility_name="Facility One",
             source_page=source_page,
             note_date=note_date,
             note_type="MD Progress Note",
@@ -502,7 +505,11 @@ def test_progress_notes_use_bounded_async_concurrency_with_isolated_failures(
 
     monkeypatch.setattr(extractor, "_run_data_extraction_agent", run_agent)
     prepared = [
-        PreparedProgressNoteExtraction(note=item, person_id=7, clinical_note_id=index)
+        PreparedProgressNoteExtraction(
+            note=item,
+            person_id=7,
+            clinical_source_id=index,
+        )
         for index, (_key, item) in enumerate(
             extractor.deduplicate_notes(notes),
             start=1,
@@ -530,7 +537,7 @@ def test_progress_notes_use_bounded_async_concurrency_with_isolated_failures(
         "Successful note C",
     ]
     assert [fact.source_page for fact in facts] == [1, 2, 4]
-    assert [fact.clinical_note_id for fact in facts] == [1, 2, 4]
+    assert [fact.clinical_source_id for fact in facts] == [1, 2, 4]
     assert all(fact.person_id == 7 for fact in facts)  # noqa: PLR2004
     assert len([outcome for outcome in outcomes if outcome.error]) == 1
     assert "notes=4 concurrency=2" in caplog.text
@@ -544,7 +551,6 @@ def test_ai_clinical_fact_does_not_carry_demographic_updates(
     note = ParsedProgressNote(
         source_person_identifier="RES-7",
         source_person_name="Person Seven",
-        facility_name="Facility Seven",
         date_of_birth=date(1946, 2, 1),
         sex="f",
         height_in=64.5,
@@ -552,13 +558,14 @@ def test_ai_clinical_fact_does_not_carry_demographic_updates(
         raw_text="Person has fair intake.",
         source_filename="notes.pdf",
     )
-    progress_note = PersonClinicalNote(
+    progress_note = ClinicalSource(
         id=1,
         person_id=7,
-        note_date=datetime(2026, 8, 20, tzinfo=UTC),
-        note_text=note.note_text,
-        raw_text=note.raw_text,
-        note_key="note-key",
+        source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+        effective_at=datetime(2026, 8, 20, tzinfo=UTC),
+        content=note.note_text,
+        raw_content=note.raw_text,
+        source_key="note-key",
         extraction_status=ExtractionStatus.PENDING,
     )
     ai_fact = AIExtractedFact(
@@ -581,7 +588,6 @@ def test_ai_clinical_fact_does_not_carry_demographic_updates(
     assert extracted_fact.height_in is None
     assert extracted_fact.source_person_identifier == "RES-7"
     assert extracted_fact.source_person_name == "Person Seven"
-    assert extracted_fact.facility_name == "Facility Seven"
 
 
 def test_ai_wound_uses_progress_note_date_when_observed_at_is_missing(
@@ -597,13 +603,14 @@ def test_ai_wound_uses_progress_note_date_when_observed_at_is_missing(
         raw_text="Pressure injury documented without a separate wound date.",
         source_filename="notes.pdf",
     )
-    progress_note = PersonClinicalNote(
+    progress_note = ClinicalSource(
         id=1,
         person_id=7,
-        note_date=note_date,
-        note_text=note.note_text,
-        raw_text=note.raw_text,
-        note_key="wound-note-key",
+        source_kind=ClinicalSourceKind.PROGRESS_NOTE,
+        effective_at=note_date,
+        content=note.note_text,
+        raw_content=note.raw_text,
+        source_key="wound-note-key",
         extraction_status=ExtractionStatus.PENDING,
     )
     ai_fact = AIExtractedFact(
@@ -672,7 +679,6 @@ def test_split_progress_notes_preserves_continuations_and_person_changes() -> No
             page_end=1,
             source_person_identifier="R-1",
             source_person_name="Person One",
-            facility_name="Facility",
         ),
         ExtractedNote(
             raw_text="continued text",
@@ -680,7 +686,6 @@ def test_split_progress_notes_preserves_continuations_and_person_changes() -> No
             page_end=2,
             source_person_identifier="R-1",
             source_person_name="Person One",
-            facility_name="Facility",
         ),
         ExtractedNote(
             raw_text="Effective Date: 08/03/2026\nNote Text: Third",
@@ -688,7 +693,6 @@ def test_split_progress_notes_preserves_continuations_and_person_changes() -> No
             page_end=3,
             source_person_identifier="R-2",
             source_person_name="Person Two",
-            facility_name="Facility",
         ),
     ]
 

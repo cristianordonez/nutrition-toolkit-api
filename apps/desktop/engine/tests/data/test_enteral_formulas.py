@@ -6,7 +6,7 @@ from engine.data.enteral_formulas import (
     FormulaNutrientAmount,
     LocalFormulaCatalog,
 )
-from ntk.models.food_vocab import PackageType
+from engine.models.food_vocab import PackageType
 
 _DEFAULT_FORMULA_COUNT = 19
 

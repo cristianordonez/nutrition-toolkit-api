@@ -15,7 +15,9 @@ def test_sqlalchemy_mappers_configure() -> None:
 
 def test_person_forward_relationships_are_collections() -> None:
     """Keep one-to-many relationships declared before their models as lists."""
-    assert Person.clinical_notes.property.uselist is True  # ty: ignore[unresolved-attribute]
+    assert Person.clinical_sources.property.uselist is True  # ty: ignore[unresolved-attribute]
+    assert Person.clinical_facts.property.uselist is True  # ty: ignore[unresolved-attribute]
+    assert Person.ncp_notes.property.uselist is True  # ty: ignore[unresolved-attribute]
 
 
 def test_all_table_primary_keys_are_integers() -> None:
@@ -31,7 +33,13 @@ def test_all_table_primary_keys_are_integers() -> None:
         ), table.name
 
 
-def test_person_dialysis_has_a_dedicated_domain_table() -> None:
-    assert "person_dialysis" in SQLModel.metadata.tables
-    assert "person_clinical_fact" in SQLModel.metadata.tables
-    assert "person_order" not in SQLModel.metadata.tables
+def test_clinical_domains_share_one_fact_table() -> None:
+    assert "clinical_fact" in SQLModel.metadata.tables
+    for removed in (
+        "person_dialysis",
+        "person_clinical_fact",
+        "person_order",
+        "person_weight",
+        "person_lab",
+    ):
+        assert removed not in SQLModel.metadata.tables

@@ -2,9 +2,9 @@
 
 This is the device-side half of context budgeting. It projects a complete
 ``PersonDetail`` onto the wire-safe ``BudgetedPersonDetail`` and assembles the
-full request engine sends to cloud-api's generate endpoint. Cloud-api runs
+full request engine sends to server's generate endpoint. The server runs
 its own, much smaller trimming pass over ``relevant_ncps`` after it looks
-those up locally -- see ``api.pipelines.ncp.create.context_budgeter``.
+those up locally -- see ``server.pipelines.ncp.create.context_budgeter``.
 """
 
 from __future__ import annotations
@@ -13,8 +13,9 @@ import typing
 
 from pydantic import BaseModel
 
-from ntk.models.ncp_context import BudgetedPersonDetail, NCPGenerationRequest
-from ntk.utils.tokens import count_tokens, truncate_to_tokens
+from engine.models.ncp_context import BudgetedPersonDetail, NCPGenerationRequest
+from engine.models.ncp_note import NCPNoteType
+from engine.utils.tokens import count_tokens, truncate_to_tokens
 
 if typing.TYPE_CHECKING:
     from engine.models.person_detail import PersonDetail
@@ -45,7 +46,6 @@ class NCPContextBuilder:
             age=detail.age,
             sex=detail.sex,
             height_in=detail.height_in,
-            facility_name=detail.facility.name if detail.facility is not None else None,
             current_weight=detail.current_weight,
             current_diet=detail.current_diet,
             current_enteral_feeding=detail.current_enteral_feeding,
@@ -107,7 +107,7 @@ class ContextBudgeter:
         self,
         detail: PersonDetail,
         *,
-        facility_identifier: str | None = None,
+        note_type: NCPNoteType = NCPNoteType.QUARTERLY,
         additional_context: str | None = None,
     ) -> ContextBudgetResult:
         """Build the request payload and apply all deterministic size limits."""
@@ -139,7 +139,7 @@ class ContextBudgeter:
         )
         request = NCPGenerationRequest(
             person_identifier=person_identifier,
-            facility_identifier=facility_identifier,
+            note_type=note_type,
             summary_text=summary_text,
             person=person,
             additional_context=normalized_context,
