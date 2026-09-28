@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
+from engine.models.clinical_facts import PersonWeight
 from engine.models.derived_calculations import (
     AnthropometricCalculations,
     DerivedPersonCalculations,
@@ -12,7 +13,6 @@ from engine.models.derived_calculations import (
     TubeFeedCalculation,
 )
 from engine.models.person_detail import PersonDetail
-from engine.models.clinical_facts import PersonWeight
 from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
 
 _BUDGETED_WEIGHT_COUNT = 12

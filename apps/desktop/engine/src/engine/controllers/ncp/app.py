@@ -1,4 +1,4 @@
-"""Controller group for local clinical-note-report import commands."""
+"""Controller group for Nutrition Care Process commands."""
 
 from __future__ import annotations
 
@@ -6,22 +6,24 @@ import typing
 
 from engine.controllers.base import BaseControllerGroup
 from engine.controllers.ncp.generate import NCPGenerateController
-from engine.controllers.ncp.import_ncps import NCPImportController
+from engine.controllers.ncp.ingest import NCPIngestController
+from engine.controllers.ncp.search import NCPVectorSearchController
 from engine.controllers.registry import register_command_group
 
 
 @register_command_group
 class NCPControllerGroup(BaseControllerGroup):
-    """Expose local Nutrition Care Process import commands."""
+    """Expose local Nutrition Care Process commands."""
 
     name = "ncp"
-    help = "Import clinical-note reports"
+    help = "Generate, ingest and search Nutrition Care Process notes"
 
     def __init__(self) -> None:
         """Initialize class."""
         self._subcommands = [
             NCPGenerateController(),
-            NCPImportController(),
+            NCPIngestController(),
+            NCPVectorSearchController(),
         ]
 
     @property

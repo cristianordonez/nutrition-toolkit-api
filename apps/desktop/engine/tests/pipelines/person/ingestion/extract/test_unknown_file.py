@@ -102,7 +102,9 @@ def test_unknown_file_returns_unresolved_identity_clues(
     facts = asyncio.run(extractor.extract())
 
     assert len(facts) == 1
-    assert facts[0].source_person_identifier == "RES-1"
+    # The document's identifier belongs to another system, so it is dropped;
+    # the resident is matched by name and date of birth.
+    assert facts[0].source_person_identifier is None
     assert facts[0].source_person_name == "Jane Doe"
     assert facts[0].person_id is None
     assert facts[0].source_page == 1
@@ -258,3 +260,129 @@ async def _async_result(
     value: list[AIUnknownDocumentFact],
 ) -> list[AIUnknownDocumentFact]:
     return value
+
+
+def _fact_on(day: int) -> AIUnknownDocumentFact:
+    fact = unknown_fact()
+    fact.fact.payload.observed_at = datetime(2026, 8, day, tzinfo=UTC)  # ty: ignore[invalid-assignment]
+    return fact
+
+
+def test_each_page_is_one_call_run_concurrently_and_kept_in_order(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "unknown.pdf"
+    create_pdf(path)
+    pages = [(page, f"page {page} text") for page in range(1, 7)]
+    in_flight = 0
+    peak = 0
+    seen: list[str] = []
+
+    async def run_agent(
+        extraction_input: ExtractionInput,
+    ) -> list[AIUnknownDocumentFact]:
+        nonlocal in_flight, peak
+        seen.append(extraction_input.text)
+        in_flight += 1
+        peak = max(peak, in_flight)
+        page = int(extraction_input.text.split()[1])
+        # Later pages finish first, so order must come from the page, not
+        # from completion.
+        await asyncio.sleep(0.01 * (7 - page))
+        in_flight -= 1
+        return [_fact_on(page)]
+
+    extractor = UnknownFileExtractor(path, concurrency=3)
+    monkeypatch.setattr(extractor, "_run_data_extraction_agent", run_agent)
+    monkeypatch.setattr(extractor, "_get_document_pages", lambda: pages)
+
+    facts = asyncio.run(extractor.extract())
+
+    assert sorted(seen) == [text for _, text in pages]
+    assert peak == 3  # noqa: PLR2004
+    assert [fact.source_page for fact in facts] == [1, 2, 3, 4, 5, 6]
+
+
+def test_only_an_oversized_page_is_split(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "unknown.pdf"
+    create_pdf(path)
+    pages_sent: list[str] = []
+    ordinary = "Weight 150 lb. " * 200  # well under one call's budget
+    huge = "Albumin 3.1 g/dL. " * 3_000  # far over it
+
+    async def run_agent(
+        extraction_input: ExtractionInput,
+    ) -> list[AIUnknownDocumentFact]:
+        pages_sent.append(
+            "ordinary" if extraction_input.text.startswith("Weight") else "huge",
+        )
+        return []
+
+    extractor = UnknownFileExtractor(path)
+    monkeypatch.setattr(extractor, "_run_data_extraction_agent", run_agent)
+    monkeypatch.setattr(
+        extractor,
+        "_get_document_pages",
+        lambda: [(1, ordinary), (2, huge)],
+    )
+
+    asyncio.run(extractor.extract())
+
+    assert pages_sent.count("ordinary") == 1
+    assert pages_sent.count("huge") > 1
+
+
+def test_concurrency_must_be_positive(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "unknown.pdf"
+    create_pdf(path)
+
+    with pytest.raises(ValueError, match="at least 1"):
+        UnknownFileExtractor(path, concurrency=0)
+
+
+def test_an_outside_identifier_never_blocks_attribution(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two systems' MRNs for one patient must not read as two people."""
+    path = tmp_path / "hospital-packet.pdf"
+    create_pdf(path)
+
+    def fact_with(identifier: str | None, *, named: bool) -> AIUnknownDocumentFact:
+        return AIUnknownDocumentFact(
+            identity=AIExtractedIdentity(
+                source_person_name="Jane Doe" if named else None,
+                source_person_identifier=identifier,
+                date_of_birth=date(1950, 1, 1) if named else None,
+            ),
+            fact=unknown_fact().fact,
+        )
+
+    by_page = {
+        1: [fact_with("H-0001", named=True)],
+        2: [fact_with("ACCT-77", named=True)],
+        3: [fact_with(None, named=False)],
+    }
+
+    async def run_agent(
+        extraction_input: ExtractionInput,
+    ) -> list[AIUnknownDocumentFact]:
+        return by_page[int(extraction_input.text)]
+
+    extractor = UnknownFileExtractor(path)
+    monkeypatch.setattr(extractor, "_run_data_extraction_agent", run_agent)
+    monkeypatch.setattr(
+        extractor,
+        "_get_document_pages",
+        lambda: [(page, str(page)) for page in by_page],
+    )
+
+    facts = asyncio.run(extractor.extract())
+
+    assert [fact.source_person_identifier for fact in facts] == [None, None, None]
+    assert all(fact.source_person_name == "Jane Doe" for fact in facts)
+    assert all(fact.date_of_birth == date(1950, 1, 1) for fact in facts)

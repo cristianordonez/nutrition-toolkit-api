@@ -20,6 +20,7 @@ if typing.TYPE_CHECKING:
 
     import pytest
 
+
 def _pipeline(session: Session) -> PersonIngestionPipeline:
     return PersonIngestionPipeline(
         clinical_source_repository=ClinicalSourceRepo(session),

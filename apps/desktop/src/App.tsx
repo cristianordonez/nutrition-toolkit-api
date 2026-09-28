@@ -59,7 +59,14 @@ function App() {
   // Context is per resident: a batch usually mixes review reasons, and one
   // shared note would put the wrong steer on every other resident.
   const [contexts, setContexts] = useState<Record<number, string>>({});
-  const [noteType, setNoteType] = useState<NCPNoteType>("quarterly");
+  // So is the assessment type: one batch can hold an annual for one resident
+  // and a significant change for another. Residents without their own choice
+  // use the default, which "Set all selected to" also updates.
+  const [noteTypes, setNoteTypes] = useState<Record<number, NCPNoteType>>({});
+  const [defaultNoteType, setDefaultNoteType] =
+    useState<NCPNoteType>("quarterly");
+  const noteTypeFor = (personId: number) =>
+    noteTypes[personId] ?? defaultNoteType;
 
   const [elapsed, setElapsed] = useState(0);
 
@@ -261,6 +268,7 @@ function App() {
     setResults(
       chosen.map((person) => ({
         person,
+        noteType: noteTypeFor(person.id),
         context: contexts[person.id]?.trim() || undefined,
         status: "pending",
       })),
@@ -268,7 +276,11 @@ function App() {
 
     for (const person of chosen) {
       try {
-        const note = await generateNcp(person.id, noteType, contexts[person.id]);
+        const note = await generateNcp(
+          person.id,
+          noteTypeFor(person.id),
+          contexts[person.id],
+        );
         setResults((current) =>
           current.map((entry) =>
             entry.person.id === person.id
@@ -332,7 +344,8 @@ function App() {
           persons={persons}
           selected={selected}
           contexts={contexts}
-          noteType={noteType}
+          noteTypes={noteTypes}
+          defaultNoteType={defaultNoteType}
           generating={generating}
           results={results}
           focusedPersonId={focusedPersonId}
@@ -344,7 +357,17 @@ function App() {
           onContextChange={(personId, value) =>
             setContexts((current) => ({ ...current, [personId]: value }))
           }
-          onNoteTypeChange={setNoteType}
+          onNoteTypeChange={(personId, value) =>
+            setNoteTypes((current) => ({ ...current, [personId]: value }))
+          }
+          onNoteTypeForAll={(value) => {
+            setDefaultNoteType(value);
+            setNoteTypes((current) => {
+              const next = { ...current };
+              for (const personId of selected) next[personId] = value;
+              return next;
+            });
+          }}
           onGenerate={generateSelected}
           onAddDocuments={() => setTab("documents")}
         />

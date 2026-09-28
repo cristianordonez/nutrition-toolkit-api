@@ -37,8 +37,8 @@ from engine.models.derived_calculations import (
     ClinicalConflict,
     DerivedPersonCalculations,
 )
-from engine.models.ncp_note import NCPNoteType
 from engine.models.food_vocab import LiquidConsistency, PackageType
+from engine.models.ncp_note import NCPNoteType
 
 
 class _ClinicalRecordDTO(BaseModel):
@@ -325,7 +325,7 @@ class BudgetedPersonDetail(BaseModel):
 
 
 class PreviousNCPNote(BaseModel):
-    """This resident's own most recent note, for measuring change against."""
+    """The resident's own most recent note, for measuring change against."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -353,8 +353,11 @@ class NCPGenerationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     person_identifier: str
-    note_type: NCPNoteType = NCPNoteType.QUARTERLY
-    summary_text: str
+    note_type: NCPNoteType = NCPNoteType.FOLLOW_UP
+    #: The unbudgeted record, used only as the style-example search query. It
+    #: is never serialized to the model: ``person`` carries the same facts
+    #: within budget, and this alone can outgrow a local model's context.
+    summary_text: str = Field(exclude=True)
     person: BudgetedPersonDetail
     #: This resident's own latest note. Continuity is measured against it.
     previous_ncp: PreviousNCPNote | None = None

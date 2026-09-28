@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import math
+import typing
 
 from pydantic import BaseModel, Field
 
-from engine.models.derived_calculations import ParenteralNutritionCalculationResult
-from engine.models.clinical_facts import PersonParenteralNutrition
 from engine.models.clinical_vocab import LipidDeliveryType
+from engine.models.derived_calculations import ParenteralNutritionCalculationResult
+
+if typing.TYPE_CHECKING:
+    from engine.models.clinical_facts import PersonParenteralNutrition
 
 _DEXTROSE_KCAL_PER_G = 3.4
 _AMINO_ACID_KCAL_PER_G = 4.0

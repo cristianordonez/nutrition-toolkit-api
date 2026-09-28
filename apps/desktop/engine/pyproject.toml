@@ -14,6 +14,7 @@ authors = [
 ]
 requires-python = ">= 3.11"
 dependencies = [
+    "alembic>=1.16.5",
     "platformdirs>=4.3",
     "pyyaml>=6.0.3",
     "pydantic>=2.13.4",
@@ -25,24 +26,35 @@ dependencies = [
     "tiktoken>=0.14.0",
     "pymupdf>=1.28.2",
     "httpx>=0.28",
+    # The HTTP client openai and pydantic-ai use; Local AI injects one in tests.
+    "httpx2>=2.12",
     "logfire>=4.41.0",
     "keyring>=25.7.0",
     "sentence-transformers>=6.0.0",
+    "tokenizers>=0.23.1",
     "sqlite-vec>=0.1.9",
 ]
 
 [project.scripts]
 engine = "engine.cli:main"
 
+[project.entry-points.pyinstaller40]
+hook-dirs = "engine._pyinstaller:get_hook_dirs"
 
 [tool.hatch]
 version.source = "vcs"
 version.raw-options = { root = "../../..", search_parent_directories = true }
 build.hooks.vcs.version-file = "src/engine/_version.py"
+build.hooks.custom.path = "hatch_build.py"
 build.dev-mode-dirs = [
   "src",
 ]
 build.targets.sdist.include = [
     "src",
+    "scripts/prepare_embedding_model.py",
+    "scripts/build_reference_database.py",
+    "scripts/verify_offline_embeddings.py",
+    "hatch_build.py",
+    "README.md",
 ]
 build.targets.wheel.packages = [ "src/engine" ]

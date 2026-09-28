@@ -36,7 +36,5 @@ def test_knowledge_ingest_response_renders_created_chunk_count() -> None:
     )
 
     assert response.to_console() == (
-        "# diet-manual.pdf\n"
-        "# nutrition-care-manual.pdf\n"
-        "Created 4 chunk(s)."
+        "# diet-manual.pdf\n# nutrition-care-manual.pdf\nCreated 4 chunk(s)."
     )

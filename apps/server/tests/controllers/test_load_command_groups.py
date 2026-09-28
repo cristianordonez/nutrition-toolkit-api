@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import pytest
+import typing
 
 from server import controllers
+
+if typing.TYPE_CHECKING:
+    import pytest
 
 
 def test_load_command_groups_imports_configured_modules(

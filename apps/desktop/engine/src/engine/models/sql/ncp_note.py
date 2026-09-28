@@ -6,7 +6,6 @@ import typing
 from datetime import datetime  # noqa: TC003
 
 from sqlalchemy import CheckConstraint, Column, Enum, Index
-from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
 
 from engine.models.clinical_facts import utc_now
@@ -14,7 +13,6 @@ from engine.models.ncp_note import NCPNoteStatus, NCPNoteType
 
 if typing.TYPE_CHECKING:
     from .facility import Facility
-    from .ncp_note_embedding import NCPNoteEmbedding
     from .person import Person
 
 
@@ -85,14 +83,6 @@ class NCPNote(SQLModel, table=True):
 
     person: Person = Relationship(back_populates="ncp_notes")
     facility: Facility = Relationship(back_populates="ncp_notes")
-    embeddings: list[NCPNoteEmbedding] = Relationship(
-        sa_relationship=relationship(
-            "NCPNoteEmbedding",
-            back_populates="note",
-            collection_class=list,
-            cascade="all, delete-orphan",
-        ),
-    )
 
 
 __all__ = ["NCPNote", "NCPNoteStatus", "NCPNoteType"]

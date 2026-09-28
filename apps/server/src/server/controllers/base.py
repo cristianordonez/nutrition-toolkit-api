@@ -97,7 +97,7 @@ class BaseController(ABC, typing.Generic[T]):
             kwargs.update(_annotation_kwargs(field.annotation))
             parser.add_argument(
                 f"--{name.replace('_', '-')}",
-                **kwargs,  # ty: ignore[invalid-argument-type]
+                **kwargs,
             )
 
     @abstractmethod

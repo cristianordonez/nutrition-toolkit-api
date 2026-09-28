@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime, timedelta
 
+from engine.models.clinical_facts import PersonWeight
 from engine.models.derived_calculations import (
     AnthropometricCalculations,
     DerivedPersonCalculations,
@@ -11,7 +12,6 @@ from engine.models.derived_calculations import (
     TubeFeedCalculation,
 )
 from engine.models.person_detail import PersonDetail
-from engine.models.clinical_facts import PersonWeight
 
 EXPECTED_BMI = 23.9
 

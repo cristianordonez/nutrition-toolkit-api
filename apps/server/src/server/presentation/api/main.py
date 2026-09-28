@@ -17,15 +17,9 @@ except ImportError as err:
     raise SystemExit(msg) from err
 
 
-from server.logger import setup_logging
 from server.database.db import initialize_database
+from server.logger import setup_logging
 from server.presentation.cli.app import create_root_parser
-
-from .routers import (
-    calculate,
-    knowledge,
-    nutrition_care_processes,
-)
 
 app = FastAPI()
 
@@ -35,27 +29,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logfire.configure()
 logfire.instrument_fastapi(app)
-
-
-app.include_router(
-    calculate.router,
-    prefix="/api/v1",
-    tags=["calculate"],
-)
-
-
-app.include_router(
-    knowledge.router,
-    prefix="/api/v1",
-    tags=["knowledge"],
-)
-
-
-app.include_router(
-    nutrition_care_processes.router,
-    prefix="/api/v1",
-    tags=["nutrition-care-processes"],
-)
 
 
 @app.exception_handler(Exception)

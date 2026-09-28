@@ -11,11 +11,11 @@ import typing
 
 import logfire
 
-from server.controllers.registry import COMMAND_REGISTRY
-from server.logger import setup_logging
 from server import __version__
 from server.controllers import load_command_groups
+from server.controllers.registry import COMMAND_REGISTRY
 from server.database.db import initialize_database
+from server.logger import setup_logging
 
 if typing.TYPE_CHECKING:
     from server.models.output import Output

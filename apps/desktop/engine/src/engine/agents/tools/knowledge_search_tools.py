@@ -24,7 +24,7 @@ if typing.TYPE_CHECKING:
     from collections.abc import Sequence
 
     from engine.models.rag import RagSearchMatch
-    from engine.services.knowledge_service import KnowledgeService
+    from engine.services.embedding_service import EmbeddingService
 
 #: Enough passages to answer a focused question without crowding the context
 #: budget the note itself needs.
@@ -42,7 +42,7 @@ class KnowledgeSearchToolDependencies:
     facts do not depend on the manuals.
     """
 
-    knowledge_service: KnowledgeService | None = None
+    knowledge_service: EmbeddingService | None = None
 
 
 class RagSearchInput(BaseModel):
@@ -120,10 +120,10 @@ async def _search(
             "matches": [],
             "unavailable": "No manuals are installed on this device.",
         }
-    matches = await service.search(
+    matches = await service.search_knowledge(
         query,
         top_k=_KNOWLEDGE_MATCH_LIMIT,
-        knowledge_type=knowledge_type,
+        document_type=knowledge_type,
     )
     return _search_payload(source, query, matches)
 

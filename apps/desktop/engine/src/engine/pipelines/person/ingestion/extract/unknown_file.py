@@ -5,17 +5,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time as clock
 import typing
 from datetime import UTC, datetime, time
 
 import pymupdf
 
 from engine.agents.data_extraction_agent import (
-    DATA_EXTRACTION_MODEL,
     DataExtractionAgent,
     ExtractionInput,
 )
 from engine.models.extracted_fact_create import ExtractedFactCreate
+from engine.models.settings import SETTINGS
 from engine.models.sql.clinical_fact import ExtractionMethod
 from engine.utils.tokens import sliding_window
 
@@ -33,7 +34,11 @@ if typing.TYPE_CHECKING:
 #: provenance below is optional rather than assumed.
 _SUPPORTED_SUFFIXES = {".pdf", ".txt"}
 _PLAIN_TEXT_SUFFIXES = {".txt"}
-_UNKNOWN_DOCUMENT_CHUNK_TOKENS = 600
+#: Each page is one model call; only a page longer than this is split. Sized
+#: so a call still fits Local AI's context window beside the instructions and
+#: output schema. A page keeps its own facts on its own page number.
+_UNKNOWN_DOCUMENT_CHUNK_TOKENS = 3_000
+_UNKNOWN_DOCUMENT_CHUNK_OVERLAP = 100
 _MAX_UNKNOWN_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
 # Matches common EHR date-of-record labels so an otherwise-undated chunk can
@@ -67,20 +72,32 @@ class UnknownFileExtractor(PersonExtractor):
         *,
         max_file_size_bytes: int = _MAX_UNKNOWN_FILE_SIZE_BYTES,
         extraction_agent: DataExtractionAgent | None = None,
+        concurrency: int | None = None,
     ) -> None:
         """Store the document to read.
 
         ``extraction_agent`` lets a caller supply an agent bound to a specific
         provider, which is how the same document can be run through more than
-        one model for comparison.
+        one model for comparison. ``concurrency`` bounds how many pages are
+        extracted at once; it defaults to the setting progress notes use.
         """
         super().__init__(file)
         if max_file_size_bytes <= 0:
             msg = "Unknown file size limit must be greater than zero"
             raise ValueError(msg)
+        self.concurrency = (
+            SETTINGS.clinical_note_extraction_concurrency
+            if concurrency is None
+            else concurrency
+        )
+        if self.concurrency < 1:
+            msg = "Unknown-document extraction concurrency must be at least 1"
+            raise ValueError(msg)
         self.file = file
         self.max_file_size_bytes = max_file_size_bytes
         self._extraction_agent = extraction_agent
+        #: The model that extracted this file's facts, recorded on each one.
+        self._model_name: str | None = None
         self._validate_file_size()
         self._validate_file_type()
 
@@ -108,44 +125,49 @@ class UnknownFileExtractor(PersonExtractor):
         given, is stamped directly onto every resulting fact so downstream
         persistence skips name/DOB matching entirely.
         """
-        facts: list[ExtractedFactCreate] = []
-        for source_page, page_text in self._get_document_pages():
-            note_date = self._detect_note_date(page_text)
+        units = [
+            (
+                source_page,
+                ExtractionInput(
+                    text=chunk,
+                    document_filename=self.file.name,
+                    note_date=note_date,
+                    known_person_name=known_person_name,
+                    known_date_of_birth=known_date_of_birth,
+                ),
+            )
+            for source_page, page_text in self._get_document_pages()
+            for note_date in (self._detect_note_date(page_text),)
             for chunk in sliding_window(
                 page_text,
                 chunk_size=_UNKNOWN_DOCUMENT_CHUNK_TOKENS,
-                overlap=25,
-            ):
-                if not chunk.strip():
-                    continue
-                try:
-                    extracted_facts = await self._run_data_extraction_agent(
-                        ExtractionInput(
-                            text=chunk,
-                            document_filename=self.file.name,
-                            note_date=note_date,
-                            known_person_name=known_person_name,
-                            known_date_of_birth=known_date_of_birth,
-                        ),
-                    )
-                except asyncio.CancelledError:
-                    raise
-                except Exception:  # isolate one chunk's failure
-                    logger.exception(
-                        "Unknown-document AI extraction failed for %s page %s; "
-                        "skipping this chunk",
-                        self.file.name,
-                        source_page,
-                    )
-                    continue
-                facts.extend(
-                    self._build_extracted_fact_create(
-                        fact,
-                        source_page,
-                        person_id=person_id,
-                    )
-                    for fact in extracted_facts
-                )
+                overlap=_UNKNOWN_DOCUMENT_CHUNK_OVERLAP,
+            )
+            if chunk.strip()
+        ]
+        # Pages are independent calls, so they run concurrently. Identity is
+        # settled only after every page is back (see
+        # `_attribute_to_document_subject`), so the order they finish in does
+        # not matter; `gather` still returns them in page order.
+        started = clock.perf_counter()
+        semaphore = asyncio.Semaphore(max(1, min(self.concurrency, len(units))))
+        results = await asyncio.gather(
+            *(self._extract_unit(page, unit, semaphore) for page, unit in units),
+        )
+        facts: list[ExtractedFactCreate] = [
+            self._build_extracted_fact_create(fact, source_page, person_id=person_id)
+            for (source_page, _), extracted in zip(units, results, strict=True)
+            if extracted is not None
+            for fact in extracted
+        ]
+        logger.info(
+            "Unknown-document AI extraction completed: calls=%s concurrency=%s "
+            "duration_seconds=%.3f failures=%s",
+            len(units),
+            min(self.concurrency, len(units)),
+            clock.perf_counter() - started,
+            sum(1 for extracted in results if extracted is None),
+        )
         return self._attribute_to_document_subject(facts, self.file.name)
 
     @staticmethod
@@ -200,6 +222,30 @@ class UnknownFileExtractor(PersonExtractor):
             fact.date_of_birth = fact.date_of_birth or subject.birth_date
         return facts
 
+    async def _extract_unit(
+        self,
+        source_page: int | None,
+        extraction_input: ExtractionInput,
+        semaphore: asyncio.Semaphore,
+    ) -> list[AIUnknownDocumentFact] | None:
+        """Extract one page, or return None if it failed (logged, not raised).
+
+        One page's failure -- a validation error from the model, a timeout --
+        must not cost the rest of the document.
+        """
+        async with semaphore:
+            try:
+                return await self._run_data_extraction_agent(extraction_input)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "Unknown-document AI extraction failed for %s page %s; skipping it",
+                    self.file.name,
+                    source_page,
+                )
+                return None
+
     def _validate_file_size(self) -> None:
         """Reject oversized files before reading content or calling the agent."""
         file_size = self.file.stat().st_size
@@ -225,6 +271,7 @@ class UnknownFileExtractor(PersonExtractor):
     ) -> list[AIUnknownDocumentFact]:
         """Run the agent and enforce its transient-fact result contract."""
         agent = self._extraction_agent or DataExtractionAgent()
+        self._model_name = getattr(agent, "unknown_document_model_name", None)
         return await agent.run_unknown_document(extraction_input)
 
     def _build_extracted_fact_create(
@@ -240,9 +287,13 @@ class UnknownFileExtractor(PersonExtractor):
             payload=extracted.fact.payload,
             confidence=extracted.fact.confidence,
             confidence_reason=extracted.fact.confidence_reason,
-            model_name=DATA_EXTRACTION_MODEL,
+            model_name=self._model_name,
             extraction_method=ExtractionMethod.AI,
-            source_person_identifier=identity.source_person_identifier,
+            # An outside record's identifier is another system's (a hospital
+            # MRN, an account number), not this facility's resident ID, so it
+            # never identifies a resident here: outside records match by name
+            # and date of birth only, and PCC reports own the facility ID.
+            source_person_identifier=None,
             source_person_name=identity.source_person_name,
             date_of_birth=identity.date_of_birth,
             source_page=source_page,

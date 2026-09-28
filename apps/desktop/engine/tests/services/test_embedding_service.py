@@ -5,17 +5,19 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-import sqlite_vec
-from sqlalchemy import event
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlalchemy import select, update
+from sqlmodel import Session, col, delete
 
+from engine.database.bootstrap import upgrade_database
+from engine.database.db import create_database_engine
+from engine.database.vectors import EMBEDDING_DIMENSIONS, ncp_vectors
 from engine.models.ncp_note import NCPNoteStatus, NCPNoteType
 from engine.models.sql.ncp_note import NCPNote
-from engine.models.sql.ncp_note_embedding import NCPNoteEmbedding
+from engine.models.sql.person import Person
+from engine.repositories.ncp_note_repo import NCPNoteRepo
 from engine.services.embedding_service import EmbeddingService
-from engine.utils.vector import pack_vector
 
-_DIMENSIONS = 4
+_DIMENSIONS = EMBEDDING_DIMENSIONS
 _NOTE_COUNT = 3
 _TOP_K = 3
 
@@ -48,21 +50,18 @@ class _StubEmbeddings(EmbeddingService):
                     1.0,
                 ],
             )
-        return vectors
+        return [_padded(vector) for vector in vectors]
 
 
 def _vec_session() -> Session:
     """Return a session with sqlite-vec loaded as it is in production."""
-    engine = create_engine("sqlite://")
-
-    @event.listens_for(engine, "connect")
-    def _load(dbapi_connection, _record) -> None:  # noqa: ANN001
-        dbapi_connection.enable_load_extension(True)  # noqa: FBT003
-        sqlite_vec.load(dbapi_connection)
-        dbapi_connection.enable_load_extension(False)  # noqa: FBT003
-
-    SQLModel.metadata.create_all(engine)
+    engine = create_database_engine("sqlite://")
+    upgrade_database(engine)
     return Session(engine)
+
+
+def _padded(vector: list[float]) -> list[float]:
+    return vector + [0.0] * (_DIMENSIONS - len(vector))
 
 
 def _session_with_examples() -> Session:
@@ -96,12 +95,16 @@ def test_indexing_stores_one_packed_vector_per_example() -> None:
 
         added = asyncio.run(service.index_examples())
 
-        stored = session.exec(select(NCPNoteEmbedding)).all()
+        stored = (
+            session.connection()
+            .execute(select(ncp_vectors.c.embedding))
+            .scalars()
+            .all()
+        )
         assert added == len(stored) == _NOTE_COUNT
         for row in stored:
-            assert row.dimensions == _DIMENSIONS
-            assert len(row.vector) == _DIMENSIONS * 4
-            assert len(row.to_list()) == _DIMENSIONS
+            assert len(row) == _DIMENSIONS * 4
+            assert len(memoryview(row).cast("f")) == _DIMENSIONS
 
 
 def test_indexing_is_incremental() -> None:
@@ -127,6 +130,31 @@ def test_search_ranks_only_explicit_examples() -> None:
 
         assert matches[0].chunk_text.startswith("weight")
         assert all("draft content" not in match.chunk_text for match in matches)
+
+
+def test_search_can_be_restricted_to_one_note_type() -> None:
+    """The filter narrows candidates before vec0 applies k, not after."""
+    with _session_with_examples() as session:
+        session.add(
+            NCPNote(
+                note_type=NCPNoteType.WOUND,
+                content="wound wound wound staging",
+                status=NCPNoteStatus.EXAMPLE,
+            ),
+        )
+        session.commit()
+        service = _StubEmbeddings(session)
+        asyncio.run(service.index_examples())
+
+        matches = asyncio.run(
+            service.search_examples_async(
+                "weight weight weight",
+                top_k=1,
+                note_type=NCPNoteType.WOUND,
+            ),
+        )
+
+        assert [match.chunk_text for match in matches] == ["wound wound wound staging"]
 
 
 def test_search_without_any_stored_vectors_returns_nothing() -> None:
@@ -162,19 +190,15 @@ def _stored(
             status=status,
         ),
     )
-    session.add(
-        NCPNoteEmbedding(
-            ncp_note_id=note_id,
-            model="stub-model",
-            dimensions=len(vector),
-            vector=pack_vector(vector),
-        ),
-    )
+    session.flush()
+    note = session.get(NCPNote, note_id)
+    assert note is not None
+    NCPNoteRepo(session).store_embeddings([note], [_padded(vector)], "stub-model")
     session.commit()
 
 
 def _search(session: Session, query: list[float], top_k: int) -> list[int]:
-    matches = _StubEmbeddings(session)._search_examples(query, top_k)  # noqa: SLF001
+    matches = NCPNoteRepo(session).search_examples(_padded(query), top_k, "stub-model")
     return [match.document_id for match in matches]
 
 
@@ -187,22 +211,28 @@ def test_ranking_orders_by_similarity() -> None:
         assert _search(session, [1.0, 0.0], 3) == [2, 3, 1]
 
 
-def test_ranking_skips_zero_vectors() -> None:
+def test_zero_vectors_are_rejected_and_zero_queries_return_no_matches() -> None:
     with _vec_session() as session:
-        _stored(session, 1, [0.0, 0.0])
+        with pytest.raises(ValueError, match="nonzero"):
+            _stored(session, 1, [0.0, 0.0])
         _stored(session, 2, [1.0, 0.0])
-
-        assert _search(session, [1.0, 0.0], 2) == [2]
         assert _search(session, [0.0, 0.0], 2) == []
 
 
-def test_ranking_skips_vectors_of_another_width() -> None:
-    """sqlite-vec raises on a width mismatch; one such row must not fail search."""
+def test_vectors_of_another_width_are_rejected() -> None:
     with _vec_session() as session:
-        _stored(session, 1, [1.0, 0.0, 0.0])
-        _stored(session, 2, [1.0, 0.0])
-
-        assert _search(session, [1.0, 0.0], 5) == [2]
+        note = NCPNote(
+            note_type=NCPNoteType.ANNUAL,
+            content="Example",
+            status=NCPNoteStatus.EXAMPLE,
+        )
+        session.add(note)
+        session.flush()
+        with pytest.raises(ValueError, match="384 embedding dimensions"):
+            NCPNoteRepo(session).store_embeddings([note], [[1.0, 0.0]], "stub-model")
+        assert (
+            session.connection().execute(select(ncp_vectors.c.ncp_note_id)).all() == []
+        )
 
 
 def test_ranking_returns_at_most_top_k() -> None:
@@ -219,4 +249,59 @@ def test_ranking_ignores_notes_that_are_not_examples() -> None:
         _stored(session, 1, [1.0, 0.0])
         _stored(session, 2, [1.0, 0.0], status=NCPNoteStatus.DRAFT)
 
-        assert _search(session, [1.0, 0.0], 5) == [1]
+        assert _search(session, [1.0, 0.0], 1) == [1]
+
+
+def test_ranking_excludes_another_model_before_limiting() -> None:
+    with _vec_session() as session:
+        _stored(session, 1, [1.0, 0.0])
+        _stored(session, 2, [0.5, 1.0])
+        session.exec(
+            update(ncp_vectors)
+            .where(ncp_vectors.c.ncp_note_id == 1)
+            .values(model="other-model"),
+        )
+        session.commit()
+        assert _search(session, [1.0, 0.0], 1) == [2]
+
+
+def test_changed_content_invalidates_vector_and_can_be_reindexed() -> None:
+    with _session_with_examples() as session:
+        service = _StubEmbeddings(session)
+        asyncio.run(service.index_examples())
+        note = session.get(NCPNote, 1)
+        assert note is not None
+        note.content = "wound care"
+        NCPNoteRepo(session).save(note)
+        pending = service.notes.unembedded_examples(service.model, limit=None)
+        assert [item.id for item in pending] == [1]
+        assert asyncio.run(service.index_examples()) == 1
+
+
+def test_deleting_person_cascades_to_note_vectors_and_rollback_restores_them() -> None:
+    with _vec_session() as session:
+        person = Person(name="Example person")
+        session.add(person)
+        session.flush()
+        note = NCPNote(
+            person_id=person.id,
+            note_type=NCPNoteType.ANNUAL,
+            content="weight review",
+            status=NCPNoteStatus.EXAMPLE,
+        )
+        session.add(note)
+        session.flush()
+        repo = NCPNoteRepo(session)
+        repo.store_embeddings([note], [_padded([1.0, 0.0])], "stub-model")
+        session.commit()
+        # Core deletion exercises SQLite's FK cascade, including the trigger.
+        delete_person = delete(Person).where(col(Person.id) == person.id)
+        session.exec(delete_person)
+        assert not repo.has_example_embeddings("stub-model")
+        session.rollback()
+        assert repo.has_example_embeddings("stub-model")
+        session.exec(delete_person)
+        session.commit()
+        assert (
+            session.connection().execute(select(ncp_vectors.c.ncp_note_id)).all() == []
+        )

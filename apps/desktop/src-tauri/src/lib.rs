@@ -15,8 +15,7 @@ pub fn run() {
             engine::list_formulas,
             engine::get_settings,
             engine::update_settings,
-            engine::local_model_status,
-            engine::local_model_ensure,
+            engine::ai_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

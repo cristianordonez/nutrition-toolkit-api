@@ -7,10 +7,8 @@ step with the rows it indexes. Here they are the same object: ingesting chunks
 and searching them share `self.model`, and a write that invalidates the index
 is the same call that repairs it.
 
-Chunk vectors are packed ``float32`` BLOBs in ``knowledge_chunk_embedding``,
-and search scores them in the query with sqlite-vec's ``vec_distance_cosine``;
-there is no separate ``vec0`` index to keep in step. Restricting a search to
-one manual is a ``WHERE`` applied *before* ranking --
+Chunk vectors live directly in the Alembic-managed ``knowledge_chunk_vector``
+vec0 table. A manual filter is applied inside vec0 before ranking --
 the agent has one tool per manual, and filtering afterwards would let the
 other manual's passages eat the ``k`` slots before the right ones were
 considered.
@@ -22,17 +20,18 @@ import logging
 import typing
 from hashlib import sha256
 
+from sqlalchemy import insert
+from sqlalchemy import select as sql_select
 from sqlmodel import col, delete, select
 
+from engine.database.vectors import knowledge_vectors, pack_embedding
 from engine.models.clinical_facts import utc_now
 from engine.models.rag import RagSearchMatch
 from engine.models.sql.knowledge import (
     Knowledge,
     KnowledgeChunk,
-    KnowledgeChunkEmbedding,
 )
 from engine.utils.misc import require_id
-from engine.utils.vector import cosine_distance, pack_vector
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -101,6 +100,7 @@ class KnowledgeRepo:
         not get chunked and embedded again.
         """
         self._validate(chunks, embeddings)
+        packed = [pack_embedding(embedding) for embedding in embeddings]
         existing = self.find_existing_knowledge(
             knowledge.knowledge_type,
             knowledge.file_hash,
@@ -131,15 +131,18 @@ class KnowledgeRepo:
         ]
         self.session.add_all(chunk_models)
         self.session.flush()
-        self.session.add_all(
-            KnowledgeChunkEmbedding(
-                knowledge_chunk_id=require_id(chunk.id),
-                model=self.model,
-                dimensions=len(embedding),
-                vector=pack_vector(embedding),
+        if chunk_models:
+            self.session.exec(
+                insert(knowledge_vectors),
+                params=[
+                    {
+                        "knowledge_chunk_id": require_id(chunk.id),
+                        "model": self.model,
+                        "embedding": embedding,
+                    }
+                    for chunk, embedding in zip(chunk_models, packed, strict=True)
+                ],
             )
-            for chunk, embedding in zip(chunk_models, embeddings, strict=True)
-        )
         self.session.commit()
         self.session.refresh(knowledge, attribute_names=["chunks"])
         return knowledge
@@ -164,26 +167,36 @@ class KnowledgeRepo:
         knowledge_type: KnowledgeType | None = None,
     ) -> list[RagSearchMatch]:
         """Return the manual passages nearest ``query_vector``, best first."""
-        distance = cosine_distance(
-            col(KnowledgeChunkEmbedding.vector),
-            col(KnowledgeChunkEmbedding.dimensions),
-            query_vector,
+        if top_k < 1:
+            msg = "top_k must be positive"
+            raise ValueError(msg)
+        if not any(query_vector):
+            return []
+        candidates = select(KnowledgeChunk.id).join(Knowledge)
+        if knowledge_type is not None:
+            candidates = candidates.where(Knowledge.knowledge_type == knowledge_type)
+        nearest = (
+            sql_select(
+                knowledge_vectors.c.knowledge_chunk_id,
+                knowledge_vectors.c.distance,
+            )
+            .where(
+                knowledge_vectors.c.embedding.op("MATCH")(pack_embedding(query_vector)),
+            )
+            .where(knowledge_vectors.c.model == self.model)
+            .where(knowledge_vectors.c.knowledge_chunk_id.in_(candidates))
+            .where(knowledge_vectors.c.k == top_k)
+            .cte("nearest")
         )
         statement = (
-            select(KnowledgeChunk, Knowledge, distance)
+            select(KnowledgeChunk, Knowledge, nearest.c.distance)
             .join(
-                KnowledgeChunkEmbedding,
-                col(KnowledgeChunkEmbedding.knowledge_chunk_id)
-                == col(KnowledgeChunk.id),
+                nearest,
+                nearest.c.knowledge_chunk_id == col(KnowledgeChunk.id),
             )
             .join(Knowledge, col(KnowledgeChunk.knowledge_id) == col(Knowledge.id))
-            .where(KnowledgeChunkEmbedding.model == self.model)
-            .where(distance.is_not(None))
-            .order_by(distance)
-            .limit(top_k)
+            .order_by(nearest.c.distance)
         )
-        if knowledge_type is not None:
-            statement = statement.where(Knowledge.knowledge_type == knowledge_type)
         return [
             RagSearchMatch(
                 document_id=require_id(knowledge.id),
@@ -201,18 +214,7 @@ class KnowledgeRepo:
     # ---------------------------------------------------------------- private
 
     def _delete_chunks(self, knowledge_id: int) -> None:
-        """Drop one manual's chunks and their vectors."""
-        chunk_ids = self.session.exec(
-            select(KnowledgeChunk.id).where(
-                KnowledgeChunk.knowledge_id == knowledge_id,
-            ),
-        ).all()
-        if chunk_ids:
-            self.session.exec(
-                delete(KnowledgeChunkEmbedding).where(
-                    col(KnowledgeChunkEmbedding.knowledge_chunk_id).in_(chunk_ids),
-                ),
-            )
+        """Drop one manual's chunks; migration triggers delete their vectors."""
         self.session.exec(
             delete(KnowledgeChunk).where(
                 col(KnowledgeChunk.knowledge_id) == knowledge_id,

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pymupdf
 import pytest
 
+from engine.models.clinical_vocab import FeedingMethod
 from engine.models.extracted_fact_create import (
     DietPayload,
     EnteralFeedingPayload,
@@ -15,7 +16,6 @@ from engine.models.extracted_fact_create import (
     MiscOrderPayload,
     SupplementPayload,
 )
-from engine.models.clinical_vocab import FeedingMethod
 from engine.pipelines.person.ingestion.extract import pcc_order_report
 from engine.pipelines.person.ingestion.extract.pcc_order_report import (
     OrderReportMode,
@@ -275,6 +275,14 @@ def test_demo_extracts_orders_when_identity_column_was_removed(
             "clinic address, area code and phone",
         ),
         ("Cardiologist Iselin, NJ (732) 283-0440", "provider address and phone"),
+        (
+            "118 &104, Edison, NJ 08837 Phone: (732)",
+            "address whose phone number wraps to the next line",
+        ),
+        (
+            "Physician : Dr. Alan B. Smith, MD 1.1 (9)",
+            "labelled header line",
+        ),
     ],
 )
 def test_coded_text_is_not_mistaken_for_a_resident(line: str, reason: str) -> None:
@@ -303,6 +311,8 @@ def test_coded_text_is_not_mistaken_for_a_resident(line: str, reason: str) -> No
         "Smith, John (06353)",
         # An identifier that merely starts like a code is still a resident.
         "Doe, Jane (R69412) Protein supplement",
+        # Punctuation real names carry is not a digit or a colon.
+        "O'Brien-Smith Jr., Mary Ann (123456)",
     ],
 )
 def test_real_resident_rows_are_still_recognized(line: str) -> None:

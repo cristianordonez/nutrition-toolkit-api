@@ -6,6 +6,7 @@ import threading
 import typing
 from datetime import UTC, date, datetime
 
+import pymupdf
 import pytest
 
 from engine.agents.data_extraction_agent import ExtractedClinicalFacts, ExtractionInput
@@ -172,7 +173,7 @@ def test_extract_notes_removes_filtered_notes_before_ai_or_persistence(
             source_person_identifier="RES1",
         ),
     ]
-    monkeypatch.setattr(extractor, "_extract_document", list)
+    monkeypatch.setattr(extractor, "_extract_document", lambda **_: [])
     monkeypatch.setattr(extractor, "_split_progress_notes", lambda _pages: split_notes)
 
     notes = extractor.extract_notes()
@@ -199,7 +200,7 @@ def test_extract_nutrition_notes_filters_by_note_type(
             "MD Progress Note",
         )
     ]
-    monkeypatch.setattr(extractor, "_parse_report_notes", lambda: notes)
+    monkeypatch.setattr(extractor, "_parse_report_notes", lambda **_: notes)
 
     result = extractor.extract_nutrition_notes()
 
@@ -304,7 +305,7 @@ def test_demo_progress_note_parsing_does_not_require_identity(
         page_start=1,
         page_end=1,
     )
-    monkeypatch.setattr(extractor, "_extract_document", lambda: [page])
+    monkeypatch.setattr(extractor, "_extract_document", lambda **_: [page])
 
     with pytest.raises(ValueError, match="Unable to determine the person"):
         extractor._parse_report_notes()  # noqa: SLF001
@@ -314,6 +315,66 @@ def test_demo_progress_note_parsing_does_not_require_identity(
     assert len(notes) == 1
     assert notes[0].source_person_identifier is None
     assert notes[0].note_text == "Resident consumed 75% of lunch."
+
+
+def test_deidentified_report_skips_identity_and_accepts_redacted_date(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    extractor = PccProgressNotesExtractor(tmp_path / "notes.pdf")
+    page = ExtractedNote(
+        # Redaction removes the date, leaving only the time.
+        raw_text=(
+            "Effective Date: 08:45\n"
+            "Type: Dietician\n"
+            "Note Text: Quarterly review. Intake 75%.\n"
+            "Author:\n"
+            "[eSIGNED]Signature:"
+        ),
+        page_start=1,
+        page_end=1,
+    )
+    calls: list[dict[str, object]] = []
+
+    def extract_document(**kwargs: object) -> list[ExtractedNote]:
+        calls.append(kwargs)
+        return [page]
+
+    monkeypatch.setattr(extractor, "_extract_document", extract_document)
+
+    notes = extractor.extract_nutrition_notes(deidentified=True)
+
+    assert calls == [{"parse_identity": False, "mark_redactions": True}]
+    assert len(notes) == 1
+    assert notes[0].note_type == "Dietician"
+    assert notes[0].note_date is None
+    assert notes[0].note_text == "Quarterly review. Intake 75%."
+
+
+def test_redaction_boxes_are_marked_in_line_only_when_requested() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 100), "A nutritional diagnosis is currently in effect")
+        page.insert_text((320, 100), ".")
+        # Redaction tools often draw the same box twice, in abutting pieces.
+        for rect in ((260, 91, 290, 102), (260, 91, 290, 102), (290, 91, 315, 102)):
+            page.draw_rect(pymupdf.Rect(rect), color=None, fill=(0, 0, 0))
+        # Neither a section rule nor a large block is a redacted span.
+        page.draw_rect(pymupdf.Rect(20, 120, 590, 121), color=None, fill=(0, 0, 0))
+        page.draw_rect(pymupdf.Rect(20, 200, 590, 400), color=None, fill=(0, 0, 0))
+
+        marked = PccProgressNotesExtractor._page_lines(  # noqa: SLF001
+            page,
+            mark_redactions=True,
+        )
+        plain = PccProgressNotesExtractor._page_lines(page)  # noqa: SLF001
+
+    assert [line["text"] for line in marked] == [
+        "A nutritional diagnosis is currently in effect [REDACTED] .",
+    ]
+    assert [line["text"] for line in plain] == [
+        "A nutritional diagnosis is currently in effect .",
+    ]
 
 
 def test_progress_note_extractor_has_no_persistence_dependencies(
@@ -642,6 +703,26 @@ def test_clean_note_text_removes_page_and_duplicate_author_signature() -> None:
     )
 
     assert clean_note_text(text) == "Person consumed 75% of lunch."
+
+
+@pytest.mark.parametrize(
+    "signature",
+    [
+        # The PDF's columns interleave "[e-SIGNED]" with "Signature:".
+        (
+            "Author Dietary/Food and Nutrition Services - Dietitian "
+            "[e- Signature: ____\nSIGNED]"
+        ),
+        (
+            "Author 3rd Floor Unit (East, West) - Signature: ____\n"
+            "Dietary/Manager [e-SIGNED]"
+        ),
+    ],
+)
+def test_clean_note_text_removes_redacted_signature(signature: str) -> None:
+    text = f"Quarterly review. Intake 75%.\n{signature}\nPage 2 of 9"
+
+    assert clean_note_text(text) == "Quarterly review. Intake 75%."
 
 
 def test_parse_note_uses_cleaned_note_text(tmp_path: pathlib.Path) -> None:

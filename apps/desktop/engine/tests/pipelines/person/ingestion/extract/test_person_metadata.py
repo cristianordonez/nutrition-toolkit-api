@@ -24,7 +24,6 @@ if typing.TYPE_CHECKING:
     import pathlib
 
 
-
 def test_pcc_person_headers_return_identifier_and_name() -> None:
     text = "Resident: Zheng, Jing (120046)"
     assert PccWeightHistoryExtractor._parse_person(text) == (  # noqa: SLF001

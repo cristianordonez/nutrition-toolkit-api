@@ -1,5 +1,4 @@
 import { type IngestSummary, SUPPORTED_EXTENSIONS } from "./engine";
-import { LocalModelPanel } from "./LocalModelPanel";
 
 /**
  * Bringing documents into the device: choosing files, ingesting them, and the
@@ -150,14 +149,9 @@ export function DocumentsPage({
       <section className="panel panel--note">
         <h2 className="panel__title">Extraction</h2>
         <p className="hint">
-          Documents are read on this device. {residentCount} resident
-          {residentCount === 1 ? "" : "s"} on file.
+          Documents are read by the AI provider chosen in Settings.{" "}
+          {residentCount} resident{residentCount === 1 ? "" : "s"} on file.
         </p>
-
-        <h2 className="panel__title panel__title--spaced">
-          On-device extraction
-        </h2>
-        <LocalModelPanel />
       </section>
     </div>
   );

@@ -7,15 +7,16 @@ import typing
 from pydantic import BaseModel, Field
 
 from engine.controllers.base import BaseController
-from engine.controllers.session import controller_session
+from engine.database.sessions import controller_session
 from engine.models.output import Output
-from engine.models.person_summary import PersonDataSummary
 from engine.repositories.person_repo import PersonRepo
 from engine.services.person.person_service import PersonService
 from engine.services.person.summary_service import PersonSummaryService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
+
+    from engine.models.person_summary import PersonDataSummary
 
 
 class PersonSummaryOptions(BaseModel):

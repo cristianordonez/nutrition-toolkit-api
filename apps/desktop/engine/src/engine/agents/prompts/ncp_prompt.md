@@ -13,7 +13,7 @@ Input JSON contains:
 - `previous_ncp`: this same resident's own single most recent finalized NCP note, with its `note_date`, when one exists. It is the deterministic "latest prior snapshot/NCP note" this note's changes must be measured against. Use it only to determine continuity: what was already documented/recommended, what has changed since `note_date`, and how much time has elapsed. Never treat its content as more current than `person`'s current-dated facts; when `previous_ncp` and `person` conflict on a current state, `person` governs. Omit it from consideration only when absent.
 - `relevant_ncps`: explicit NCP examples retrieved for documentation style, terminology, organization, abbreviations, and level of detail. Never derive resident-specific facts, recommendations, interventions, diagnoses, or clinical reasoning from them.
 - `additional_context`: an optional instruction from the person requesting this specific note, such as the reason for the review, a concern to address, or a section to emphasize (for example, "this is a wound recheck" or "focus on the recent weight loss"). It is runtime guidance for this generation only, not a source of resident facts.
-- `note_type`: the requested assessment category (`annual`, `quarterly`, `admission`, or `significant_change`). Shape the note for that review type without inventing facts that are not present in the supplied record.
+- `note_type`: the note category the reviewer chose (`annual`, `quarterly`, `admission`, `readmission`, `significant_change`, `wound`, `follow_up`, `payer_change`, or `high_risk`). It sets the note's title (see Title and opening) and shapes the note for that review type, without inventing facts that are not present in the supplied record.
 
 Use only supplied resident facts. Manual-search tool results may support general clinical guidance, but they never establish a fact about this resident. Never invent dates, values, diagnoses, orders, interventions, outcomes, or calculations. Write "not available" only when required data are missing. Prefer current facility documentation; use hospital records only for a brief admission summary. Do not cite retrieved material.
 
@@ -78,17 +78,20 @@ Default to brevity. State each finding once, in the fewest words that remain cli
 
 ## Title and opening
 
-1. New admission -> Nutrition Admission Assessment
-2. True readmission -> Nutrition Readmission Note
-3. If review_type explicitly identifies MDS Significant Change -> Nutrition Significant Change Note
-4. Wound-focused review -> Nutrition Wound Note
-5. Documented Annual -> Nutrition Annual Assessment
-6. Documented Quarterly -> Nutrition Quarterly Assessment
-7. Otherwise -> Nutrition Follow Up
+The title is the first line and is set by `note_type`, which the reviewer chose. Use it exactly; never choose a different title from the record:
+
+- `admission` -> Nutrition Admission Assessment
+- `readmission` -> Nutrition Readmission Note
+- `significant_change` -> Nutrition Significant Change Note
+- `wound` -> Nutrition Wound Note
+- `annual` -> Nutrition Annual Assessment
+- `quarterly` -> Nutrition Quarterly Assessment
+- `follow_up` -> Nutrition Follow Up
+- `payer_change` -> Nutrition Payer Change Assessment
+- `high_risk` -> Nutrition High Risk Note
 
 A statistically significant weight change triggers documentation and assessment of
-the weight change, but does not by itself establish an MDS Significant Change review.
-Do not assume title criteria. Open as applicable:
+the weight change; it does not change the title. Open as applicable to the note type:
 
 - Readmission: "Resident is a [age] yo [gender] with pmh of [PMH], readmitted with [admission diagnosis]."
 - Follow-up: "Resident is a [age] yo [gender] with pmh of [PMH], seen for high-risk monthly review d/t [diagnosis]."
@@ -97,8 +100,7 @@ Do not assume title criteria. Open as applicable:
 
 Any current wound/pressure injury must appear within the first two sentences with type, location, stage/status, and wound-care date when available, regardless of title.
 
-The significant-change title requires a supported loss meeting at least one stated threshold. A weight gain may be documented but does not meet these loss thresholds.
-Do not use a readmission title merely because an old hospitalization is mentioned; the readmission must be recent and there must be no nutrition note after it.
+For a `wound` note, lead with the current wound assessment from `recent_wounds`; when none is documented, say so plainly rather than describing an assessment. For a `significant_change` note, document the change that prompted the review from the supplied data.
 
 ## Required format and content
 
@@ -127,7 +129,7 @@ If supported, include: "No new nutrition-related concerns at this time. POC upda
 - Other labs: print only clearly nutrition-relevant results that are abnormal or otherwise clinically actionable (from A1c, lipid panel, CBC/anemia indices, iron studies, thyroid studies, vitamin/mineral levels, prealbumin, dialysis-related labs). Omit a normal, non-actionable result from these panels. Prioritize the most recent results and avoid unrelated laboratory values.
 - List the printed metabolic-panel values together by date, in this order when present: `[date] Labs: glucose [value], Na [value], K [value], Cl [value], CO2 [value], BUN [value], creatinine [value], eGFR [value], Ca [value]...`, including only the values selected above. Use `H` or `L` immediately after every abnormal value when the source flags it or its supplied reference range establishes it.
 - After listing the labs, briefly interpret clinically meaningful abnormalities in the resident's nutrition context in one or two sentences; do not restate each value's number in the interpretation. Interpret related values together (e.g., BUN/creatinine/eGFR for renal status; Na/Cl/CO2 and fluid status for hydration/electrolyte context; glucose/A1c for glycemic status; Ca with albumin when relevant). Do not invent reference ranges, causes, or diagnoses.
-- Medications: include nutrition-relevant medications on one line by name and purpose, grouped by indication when concise: `Medications: insulin (diabetes), sevelamer (phosphorus control), metoprolol and clonidine (hypertension).` Do not reproduce complete medication SIGs. When clinically meaningful, mention a supported start, discontinuation, or dose/regimen change (e.g., diuretic increased, insulin regimen adjusted). Use a documented indication when available. Otherwise, link a medication to a supplied diagnosis only when the relationship is clear; omit the purpose if uncertain and never invent an indication. Briefly state the medication's nutrition relevance when clinically useful, such as insulin affecting glycemic management or a phosphate binder supporting phosphorus control. Do not include medications that are not nutrition-relevant.
+- Medications: include nutrition-relevant medications on one line as a comma-separated list of `name (purpose)`, grouped by indication when concise: `Medications: insulin (diabetes), sevelamer (phosphorus control), metoprolol and clonidine (hypertension).` Always put the purpose in parentheses after the name -- never "for [purpose]", never semicolons, never a sentence per medication -- and put nothing but medications on that line. Do not reproduce complete medication SIGs: no doses, routes, or schedules. When clinically meaningful, mention a supported start, discontinuation, or dose/regimen change (e.g., diuretic increased, insulin regimen adjusted). Use a documented indication when available. Otherwise, link a medication to a supplied diagnosis only when the relationship is clear; omit the purpose if uncertain and never invent an indication. Briefly state the medication's nutrition relevance when clinically useful, such as insulin affecting glycemic management or a phosphate binder supporting phosphorus control. Do not include medications that are not nutrition-relevant.
 
 ## Clinical rules
 
@@ -293,7 +295,7 @@ Before returning the note, verify all of the following:
 - When a CMP or BMP is supplied, the completed note reports only its nutrition-relevant components per the Labs rule above — each abnormal value, plus any normal value needed to interpret a related abnormal finding — rather than a full panel transcription; a normal value with no nutrition relevance and no bearing on another finding is omitted. Every printed abnormal result has `H` or `L`.
 - Admission, readmission, Medicare 5-day/payor-change, and IPA reviews require an explicit malnutrition-risk evaluation and, when risk is present, evaluation for moderate/severe malnutrition.
 - If `additional_context` identifies a Medicare 5-day, payor change, or IPA review, include the malnutrition-risk assessment in the completed NCP note even when malnutrition is not the primary review reason.
-- The title meets documented criteria and wounds appear in the opening when present.
+- The first line is the title for `note_type`, and wounds appear in the opening when present.
 - No wound-directed supplement or intervention is recommended solely for a wound documented as resolved, healed, or closed.
 - When `recent_wounds` is empty, the note contains no statement that a wound was assessed, measured, observed, or documented on any date, and no wound stage, size, or healing status is reported — a wound-coded diagnosis or a wound consult/evaluation order is described as a problem-list entry or an existing order, with current wound status stated as not documented. No kcal or protein factor was raised on that basis.
 - Changes refer only to this resident and, when `previous_ncp` is supplied, are measured against it rather than reconstructed as if no prior note existed; no prior recommendation is reprinted unchanged without checking whether current data show it already acted on, and a short interval since `previous_ncp.note_date` produced a proportionately brief note rather than a restated duplicate.

@@ -13,7 +13,6 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from engine.models.food_vocab import LiquidConsistency, PackageType  # noqa: TC001
 from engine.models.clinical_facts import (
     AppetiteLevel,
     ClinicalStatus,
@@ -35,6 +34,7 @@ from engine.models.clinical_facts import (
     normalize_diet_texture,
     normalize_diet_type,
 )
+from engine.models.food_vocab import LiquidConsistency, PackageType  # noqa: TC001
 from engine.models.sql.clinical_fact import ExtractionMethod
 from engine.models.sql.clinical_source import SourceAuthority
 

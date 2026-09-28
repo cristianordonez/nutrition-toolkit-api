@@ -7,16 +7,15 @@ import typing
 from pydantic import BaseModel, Field
 
 from engine.controllers.base import BaseController
-from engine.controllers.session import controller_session
+from engine.database.sessions import controller_session
 from engine.models.base import ConsoleRenderableModel
 from engine.models.output import Output
+from engine.models.rag import RagSearchMatch  # noqa: TC001
 from engine.models.sql.knowledge import KnowledgeType  # noqa: TC001
 from engine.services.embedding_service import EmbeddingService
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
-
-    from engine.models.rag import RagSearchMatch
 
 
 class KnowledgeSearchOptions(BaseModel):

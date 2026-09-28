@@ -32,6 +32,8 @@ if typing.TYPE_CHECKING:
     import pathlib
     from datetime import date
 
+    from sqlmodel import Session
+
     from engine.models.extracted_fact_create import ExtractedFactCreate
     from engine.repositories.clinical_source_repo import ClinicalSourceRepo
     from engine.repositories.person_repo import PersonRepo
@@ -156,9 +158,6 @@ class PersonIngestionPipeline:
         extractors that resolve identity from structured source data.
         """
         transformed_documents: list[TransformedDocument] = []
-        active_order_documents: list[TransformedDocument] = []
-        incremental_documents: list[TransformedDocument] = []
-        ingested_files: list[pathlib.Path] = []
         request_checksums: set[str] = set()
         person_repository = self._person_repository()
         for path in files:
@@ -179,49 +178,95 @@ class PersonIngestionPipeline:
                     path,
                 )
             request_checksums.add(checksum)
-            extractor = self._find_extractor(path)
-            extracted_facts = await self._extract_report(
+            # Each file is extracted and saved on its own: finished files
+            # survive a later failure, and a file that fails -- unreadable,
+            # conflicting resident identity, facts matching no resident --
+            # is skipped without undoing the others.
+            try:
+                transformed = await self._ingest_file(
+                    path,
+                    person_id=person_id,
+                    source_person_name=source_person_name,
+                    date_of_birth=date_of_birth,
+                )
+            except Exception as error:  # noqa: BLE001 - one file must not sink the batch
+                if (session := self._session()) is not None:
+                    session.rollback()
+                self._processed_clinical_sources.pop(path.resolve(), None)
+                logger.error(  # noqa: TRY400 - the traceback would carry resident details
+                    "Could not ingest %s (%s); its notes stay pending for a retry",
+                    path.name,
+                    type(error).__name__,
+                )
+                continue
+            transformed_documents.append(transformed)
+        return PersonTransformationResult(documents=transformed_documents)
+
+    async def _ingest_file(
+        self,
+        path: pathlib.Path,
+        *,
+        person_id: int | None,
+        source_person_name: str | None,
+        date_of_birth: date | None,
+    ) -> TransformedDocument:
+        """Extract, resolve, persist and mark one file done."""
+        extractor = self._find_extractor(path)
+        self._release_write_lock()
+        facts = self._filter_source_owned_facts(
+            extractor,
+            await self._extract_report(
                 path,
                 person_id=person_id,
                 source_person_name=source_person_name,
                 date_of_birth=date_of_birth,
-            )
-            extracted_facts = self._filter_source_owned_facts(
-                extractor,
-                extracted_facts,
-            )
-            transformed = self._fact_transformer().transform(
-                path,
-                extracted_facts,
-                extractor_name=self._get_extractor_name(path),
-                source_observed_at=getattr(
-                    extractor,
-                    "source_observed_at",
-                    None,
-                ),
-                existing_sources=self._processed_clinical_sources.get(
-                    path.resolve(),
-                    (),
-                ),
-            )
-            transformed_documents.append(transformed)
-            if (
-                isinstance(extractor, PccOrderReportExtractor)
-                and extractor.report_mode is OrderReportMode.ACTIVE_SNAPSHOT
-            ):
-                active_order_documents.append(transformed)
-            else:
-                incremental_documents.append(transformed)
-            ingested_files.append(path)
-        if incremental_documents:
-            person_repository.load_transformed_documents(incremental_documents)
-        if active_order_documents:
-            person_repository.reconcile_active_order_documents(
-                active_order_documents,
-            )
-        if transformed_documents:
-            self._mark_clinical_sources_extracted(ingested_files)
-        return PersonTransformationResult(documents=transformed_documents)
+            ),
+        )
+        return self._persist_file(path, extractor, facts)
+
+    def _persist_file(
+        self,
+        path: pathlib.Path,
+        extractor: PersonExtractor,
+        facts: list[ExtractedFactCreate],
+    ) -> TransformedDocument:
+        """Resolve one file's facts to residents, save them, mark notes done."""
+        person_repository = self._person_repository()
+        transformed = self._fact_transformer().transform(
+            path,
+            facts,
+            extractor_name=self._get_extractor_name(path),
+            source_observed_at=getattr(extractor, "source_observed_at", None),
+            existing_sources=self._processed_clinical_sources.get(
+                path.resolve(),
+                (),
+            ),
+        )
+        if (
+            isinstance(extractor, PccOrderReportExtractor)
+            and extractor.report_mode is OrderReportMode.ACTIVE_SNAPSHOT
+        ):
+            person_repository.reconcile_active_order_documents([transformed])
+        else:
+            person_repository.load_transformed_documents([transformed])
+        self._mark_clinical_sources_extracted([path])
+        return transformed
+
+    def _release_write_lock(self) -> None:
+        """Commit before slow model calls, so SQLite's writer lock is free.
+
+        SQLite holds its single writer lock from the first unsaved write until
+        commit. Pending notes are written (flushed) before extraction; left
+        uncommitted, every other engine command -- listing residents, settings,
+        a second ingest -- would wait on minutes of model calls and fail with
+        "database is locked".
+        """
+        if (session := self._session()) is not None:
+            session.commit()
+
+    def _session(self) -> Session | None:
+        """Return the batch's shared session (absent for in-memory stubs)."""
+        return getattr(self._person_repository(), "session", None)
 
     @staticmethod
     def _filter_source_owned_facts(
@@ -342,6 +387,8 @@ class PersonIngestionPipeline:
                 ),
             )
         facts = extractor.extract_header_facts()
+        # The notes above were flushed; commit them before the model calls.
+        self._release_write_lock()
         for outcome in await extractor.extract_prepared(prepared):
             note_key = extractor.get_note_key(
                 source_person_identifier=outcome.prepared.note.source_person_identifier,

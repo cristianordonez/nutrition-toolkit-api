@@ -5,6 +5,12 @@ from __future__ import annotations
 import re
 from datetime import date, datetime  # noqa: TC003
 
+from engine.models.clinical_vocab import (
+    ClinicalStatus,
+    FeedingMethod,
+    LipidDeliveryType,
+    ParenteralFormulaType,
+)
 from engine.models.extracted_fact_create import (
     DietPayload,
     EnteralFeedingPayload,
@@ -16,12 +22,6 @@ from engine.models.extracted_fact_create import (
     SupplementPayload,
 )
 from engine.models.food_vocab import LiquidConsistency
-from engine.models.clinical_vocab import (
-    ClinicalStatus,
-    FeedingMethod,
-    LipidDeliveryType,
-    ParenteralFormulaType,
-)
 
 ClassifiedOrderPayload = (
     MedicationPayload

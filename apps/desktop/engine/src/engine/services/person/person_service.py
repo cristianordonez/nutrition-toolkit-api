@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import typing
 
 from engine.models.sql.person import Person, parse_person_name
@@ -16,6 +17,9 @@ if typing.TYPE_CHECKING:
         ParsedProgressNote,
     )
     from engine.repositories.person_repo import PersonRepo
+
+
+logger = logging.getLogger(__name__)
 
 
 class PersonService:
@@ -104,8 +108,19 @@ class PersonService:
             and identifier_match is not None
             and natural_match.id != identifier_match.id
         ):
-            msg = "Person name and birth date conflict with person identifier"
-            raise ValueError(msg)
+            if not self._same_resident_recorded_twice(identifier_match, natural_match):
+                msg = "Person name and birth date conflict with person identifier"
+                raise ValueError(msg)
+            logger.info(
+                "Merging resident %s into %s: one record had the facility ID, "
+                "the other the birth date",
+                natural_match.id,
+                identifier_match.id,
+            )
+            natural_match = self.repository.merge_duplicate(
+                identifier_match,
+                natural_match,
+            )
         if natural_match is not None:
             natural_match = self.repository.update_demographics(
                 natural_match,
@@ -221,6 +236,27 @@ class PersonService:
     ) -> PersonDetail:
         records = self.repository.get_clinical_records(require_id(person.id))
         return self.person_detail_builder.build(person, records)
+
+    @staticmethod
+    def _same_resident_recorded_twice(by_identifier: Person, by_birth: Person) -> bool:
+        """Whether two records are one resident seen by two sources.
+
+        A PCC report states a resident's facility ID together with their name
+        and birth date. When that ID belongs to a record with no birth date
+        yet -- created from a report that lacks one -- and the name and birth
+        date belong to a record with no ID -- created from an outside document
+        -- with the same name, neither record contradicts the other: the
+        report shows they are the same person. Any real disagreement (a birth
+        date on both, an ID on both, a different name or facility) is not
+        merged and still fails.
+        """
+        return (
+            by_identifier.date_of_birth is None
+            and by_birth.person_identifier is None
+            and by_identifier.normalized_first_name == by_birth.normalized_first_name
+            and by_identifier.normalized_last_name == by_birth.normalized_last_name
+            and by_identifier.facility_id == by_birth.facility_id
+        )
 
     @staticmethod
     def _validate_identity(person: Person, *, date_of_birth: date | None) -> None:

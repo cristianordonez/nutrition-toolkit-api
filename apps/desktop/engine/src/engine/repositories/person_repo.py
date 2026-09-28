@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import SQLModel, col, select
+from sqlmodel import SQLModel, col, delete, select, update
 
 from engine.models.clinical_fact_registry import hydrate_fact
 from engine.models.clinical_facts import (
@@ -43,6 +43,7 @@ from engine.models.sql.clinical_source import (
     ExtractionStatus,
 )
 from engine.models.sql.document import Document
+from engine.models.sql.ncp_note import NCPNote
 from engine.models.sql.person import (
     Person,
     normalize_person_name_part,
@@ -123,14 +124,17 @@ class PersonRepo:
     """Persist residents and query their generic clinical facts."""
 
     def __init__(self, session: Session) -> None:
+        """Bind the repository and its fact/source repositories to one session."""
         self.session = session
         self.facts = ClinicalFactRepo(session)
         self.sources = ClinicalSourceRepo(session)
 
     def get_by_id(self, person_id: int) -> Person | None:
+        """Return one person by primary key, if present."""
         return self.session.get(Person, person_id)
 
     def get_by_identifier(self, person_identifier: str) -> Person | None:
+        """Return the person with this facility identifier, if any."""
         identifier = self._normalize_identifier(person_identifier)
         if identifier is None:
             return None
@@ -151,16 +155,20 @@ class PersonRepo:
         *,
         replace: bool = False,
     ) -> Person:
+        """Give ``person`` an identifier no other person holds."""
         identifier = self._normalize_identifier(person_identifier)
         if identifier is None:
-            raise ValueError("Person identifier cannot be empty")
+            msg = "Person identifier cannot be empty"
+            raise ValueError(msg)
         existing = self.get_by_identifier(identifier)
         if existing is not None and existing.id != person.id:
-            raise ValueError("Person identifier belongs to another person")
+            msg = "Person identifier belongs to another person"
+            raise ValueError(msg)
         if person.person_identifier == identifier:
             return person
         if person.person_identifier is not None and not replace:
-            raise ValueError("Person already has a different identifier")
+            msg = "Person already has a different identifier"
+            raise ValueError(msg)
         person.person_identifier = identifier
         person.updated_at = utc_now()
         return self._persist(person)
@@ -171,6 +179,7 @@ class PersonRepo:
         last_name: str,
         birth_date: date,
     ) -> Person | None:
+        """Return the one person matching this name and date of birth."""
         normalized_first = normalize_person_name_part(first_name)
         normalized_last = normalize_person_name_part(last_name)
         if not normalized_first or not normalized_last:
@@ -200,6 +209,7 @@ class PersonRepo:
         birth_date: date | None = None,
         person_identifier: str | None = None,
     ) -> Person | None:
+        """Return the one person by name whose known details do not conflict."""
         normalized_first = normalize_person_name_part(first_name)
         normalized_last = normalize_person_name_part(last_name)
         if not normalized_first or not normalized_last:
@@ -233,7 +243,8 @@ class PersonRepo:
             identifier=identifier,
         )
         if len(compatible) > 1:
-            raise LookupError(f"Person name {first_name!r} {last_name!r} is ambiguous")
+            msg = f"Person name {first_name!r} {last_name!r} is ambiguous"
+            raise LookupError(msg)
         return compatible[0] if compatible else None
 
     @staticmethod
@@ -259,6 +270,7 @@ class PersonRepo:
         return candidates
 
     def create(self, person: Person) -> Person:
+        """Store a new person, or fill in the matching existing one."""
         self._normalize_person(person)
         existing = self._find_existing_identity(person)
         if existing is not None:
@@ -284,6 +296,53 @@ class PersonRepo:
                 person_identifier=person.person_identifier,
             )
 
+    def merge_duplicate(self, keep: Person, duplicate: Person) -> Person:
+        """Move everything recorded for ``duplicate`` onto ``keep``, then drop it.
+
+        Demographics ``keep`` lacks are taken from ``duplicate``. A fact the two
+        both hold without a source (same type and identity) is kept once, on
+        ``keep``. Committed as one unit, so a failure leaves both unchanged.
+        """
+        keep_id, duplicate_id = keep.id, duplicate.id
+        try:
+            held = self.session.exec(
+                select(ClinicalFact.fact_type, ClinicalFact.identity_hash)
+                .where(ClinicalFact.person_id == keep_id)
+                .where(col(ClinicalFact.clinical_source_id).is_(None)),
+            ).all()
+            for fact_type, identity_hash in held:
+                self.session.exec(
+                    delete(ClinicalFact)
+                    .where(col(ClinicalFact.person_id) == duplicate_id)
+                    .where(col(ClinicalFact.clinical_source_id).is_(None))
+                    .where(col(ClinicalFact.fact_type) == fact_type)
+                    .where(col(ClinicalFact.identity_hash) == identity_hash),
+                )
+            for table in (ClinicalFact, ClinicalSource, NCPNote):
+                self.session.exec(
+                    update(table)
+                    .where(col(table.person_id) == duplicate_id)
+                    .values(person_id=keep_id),
+                )
+            inherited = {
+                name: getattr(duplicate, name)
+                for name in ("date_of_birth", "sex", "height_in")
+                if getattr(keep, name) is None and getattr(duplicate, name) is not None
+            }
+            self.session.delete(duplicate)
+            # The duplicate goes first: its name and birth date are unique.
+            self.session.flush()
+            for name, value in inherited.items():
+                setattr(keep, name, value)
+            keep.updated_at = utc_now()
+            self.session.add(keep)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        self.session.refresh(keep)
+        return keep
+
     def update_demographics(
         self,
         person: Person,
@@ -293,6 +352,7 @@ class PersonRepo:
         height_in: float | None = None,
         person_identifier: str | None = None,
     ) -> Person:
+        """Fill in demographics the person is missing; never overwrite them."""
         incoming = {
             "date_of_birth": date_of_birth,
             "sex": self._normalize_sex(sex),
@@ -310,6 +370,7 @@ class PersonRepo:
         return person
 
     def get_all(self) -> list[Person]:
+        """Return every person ordered by name."""
         return list(
             self.session.exec(
                 select(Person).order_by(col(Person.name), col(Person.id)),
@@ -320,6 +381,7 @@ class PersonRepo:
         self,
         person_ids: Sequence[int],
     ) -> list[PersonWeight]:
+        """Return the weight records of the given people."""
         return typing.cast(
             "list[PersonWeight]",
             self.facts.list_records(person_ids=person_ids, fact_types={"weight"}),
@@ -329,6 +391,7 @@ class PersonRepo:
         self,
         person_ids: Sequence[int],
     ) -> list[PersonClinicalFact]:
+        """Return the narrative clinical facts of the given people."""
         return typing.cast(
             "list[PersonClinicalFact]",
             self.facts.list_records(
@@ -338,6 +401,7 @@ class PersonRepo:
         )
 
     def get_clinical_records(self, person_id: int) -> PersonClinicalRecords:
+        """Return a person's recent clinical records grouped by domain."""
         rows = self.facts.list_rows(
             person_id=person_id,
             limit=1_000,
@@ -437,6 +501,7 @@ class PersonRepo:
         self,
         documents: Sequence[TransformedDocument],
     ) -> None:
+        """Store transformed documents and their facts in one transaction."""
         try:
             for transformed in documents:
                 self._persist_document_graph(transformed)
@@ -449,6 +514,7 @@ class PersonRepo:
         self,
         documents: Sequence[TransformedDocument],
     ) -> None:
+        """Replace each resident's active orders with newer order snapshots."""
         try:
             for transformed in documents:
                 self._reconcile_active_order_document(transformed)
@@ -463,18 +529,23 @@ class PersonRepo:
     ) -> None:
         incoming = transformed.clinical_facts
         if not incoming:
-            raise ValueError("Refusing to reconcile an empty active-order snapshot")
+            msg = "Refusing to reconcile an empty active-order snapshot"
+            raise ValueError(msg)
         if any(fact.fact_type not in _ORDER_FACT_TYPES for fact in incoming):
-            raise TypeError("Active-order snapshots may contain only order facts")
+            msg = "Active-order snapshots may contain only order facts"
+            raise TypeError(msg)
         if any(fact.person_id is None for fact in incoming):
-            raise ValueError("Active-order snapshots require a resolved person")
+            msg = "Active-order snapshots require a resolved person"
+            raise ValueError(msg)
         if any(
             fact.lifecycle_status != ClinicalStatus.ACTIVE.value for fact in incoming
         ):
-            raise ValueError("Active-order snapshots may contain only active orders")
+            msg = "Active-order snapshots may contain only active orders"
+            raise ValueError(msg)
         observed_at = transformed.document.source_observed_at
         if observed_at is None:
-            raise ValueError("Active-order reconciliation requires a source timestamp")
+            msg = "Active-order reconciliation requires a source timestamp"
+            raise ValueError(msg)
 
         person_ids = {fact.person_id for fact in incoming}
         existing = self.facts.list_rows(
@@ -554,6 +625,18 @@ class PersonRepo:
             document.updated_at = utc_now()
             self.session.add(document)
 
+        source_map = self._persist_sources(transformed, document)
+        for fact in transformed.clinical_facts:
+            self._attach_fact_source(fact, source_map, document)
+            self.facts.upsert(fact)
+        self.session.flush()
+
+    def _persist_sources(
+        self,
+        transformed: TransformedDocument,
+        document: Document,
+    ) -> dict[int, ClinicalSource]:
+        """Store new sources and map each transient source to its stored row."""
         source_map: dict[int, ClinicalSource] = {}
         for source in transformed.clinical_sources:
             # The transformed graph may already link this transient source to
@@ -573,31 +656,40 @@ class PersonRepo:
                 stored.updated_at = utc_now()
                 self.session.add(stored)
             source_map[id(source)] = stored
+        return source_map
 
-        for fact in transformed.clinical_facts:
-            if fact.source is not None:
-                stored_source = source_map[id(fact.source)]
-                fact.source = stored_source
-                fact.clinical_source_id = stored_source.id
-            elif fact.clinical_source_id is not None:
-                stored_source = self.sources.get_by_id(fact.clinical_source_id)
-                if stored_source is None:
-                    raise ValueError(
-                        f"Clinical source {fact.clinical_source_id} was not found",
-                    )
-                if stored_source.document_id is None:
-                    stored_source.document_id = document.id
-                    stored_source.updated_at = utc_now()
-                    self.session.add(stored_source)
-                if stored_source.person_id not in {None, fact.person_id}:
-                    raise ValueError("Clinical fact person does not match its source")
-            self.facts.upsert(fact)
-        self.session.flush()
+    def _attach_fact_source(
+        self,
+        fact: ClinicalFact,
+        source_map: dict[int, ClinicalSource],
+        document: Document,
+    ) -> None:
+        """Point a fact at its stored source, checking it is the same person's."""
+        if fact.source is not None:
+            stored_source = source_map[id(fact.source)]
+            fact.source = stored_source
+            fact.clinical_source_id = stored_source.id
+            return
+        if fact.clinical_source_id is None:
+            return
+        stored_source = self.sources.get_by_id(fact.clinical_source_id)
+        if stored_source is None:
+            msg = f"Clinical source {fact.clinical_source_id} was not found"
+            raise ValueError(msg)
+        if stored_source.document_id is None:
+            stored_source.document_id = document.id
+            stored_source.updated_at = utc_now()
+            self.session.add(stored_source)
+        if stored_source.person_id not in {None, fact.person_id}:
+            msg = "Clinical fact person does not match its source"
+            raise ValueError(msg)
 
     def document_exists(self, checksum: str) -> bool:
+        """Report whether a document with this checksum is stored."""
         return self.get_document_by_checksum(checksum) is not None
 
     def document_ingestion_is_complete(self, checksum: str) -> bool:
+        """Report whether every source of this document finished extraction."""
         document = self.get_document_by_checksum(checksum)
         if document is None or document.id is None:
             return False
@@ -615,11 +707,13 @@ class PersonRepo:
         )
 
     def get_document_by_checksum(self, checksum: str) -> Document | None:
+        """Return the stored document with this checksum, if any."""
         return self.session.exec(
             select(Document).where(Document.checksum == checksum),
         ).first()
 
     def get_person_ids_by_document_checksum(self, checksum: str) -> list[int]:
+        """Return the people with facts sourced from this document."""
         statement = (
             select(ClinicalFact.person_id)
             .join(
@@ -648,7 +742,8 @@ class PersonRepo:
     def _normalize_person(self, person: Person) -> None:
         person.name = " ".join(person.name.split())
         if not person.name:
-            raise ValueError("Person name cannot be empty")
+            msg = "Person name cannot be empty"
+            raise ValueError(msg)
         if not person.first_name and not person.last_name:
             person.first_name, person.last_name = parse_person_name(person.name)
         person.normalized_first_name = normalize_person_name_part(person.first_name)
@@ -677,7 +772,8 @@ class PersonRepo:
         try:
             return values[sex.strip().casefold()]
         except KeyError as error:
-            raise ValueError(f"Unsupported person sex: {sex!r}") from error
+            msg = f"Unsupported person sex: {sex!r}"
+            raise ValueError(msg) from error
 
     @staticmethod
     def _clinical_sort_key(record: ClinicalRecord) -> tuple[datetime, int]:

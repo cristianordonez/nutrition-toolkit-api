@@ -7,6 +7,15 @@ from datetime import UTC, date, datetime
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
+from engine.models.clinical_fact_registry import hydrate_fact
+from engine.models.clinical_facts import (
+    PersonAppetiteObservation,
+    PersonDiet,
+    PersonEdema,
+    PersonGIObservation,
+    PersonLab,
+)
+from engine.models.clinical_vocab import AppetiteLevel, GISymptom
 from engine.models.extracted_fact_create import (
     AppetitePayload,
     DietPayload,
@@ -16,14 +25,6 @@ from engine.models.extracted_fact_create import (
     LabPayload,
     MealIntakePayload,
 )
-from engine.models.clinical_fact_registry import hydrate_fact
-from engine.models.clinical_facts import (
-    PersonAppetiteObservation,
-    PersonEdema,
-    PersonGIObservation,
-    PersonLab,
-)
-from engine.models.clinical_vocab import AppetiteLevel, GISymptom
 from engine.models.sql.person import Person
 from engine.pipelines.person.ingestion.transformer import ClinicalFactTransformer
 from engine.repositories.person_repo import PersonRepo
@@ -127,8 +128,6 @@ def test_transformer_persists_identity_and_demographics(
         assert related.location == "Unspecified"
 
 
-
-
 def test_identical_payloads_for_different_persons_are_retained(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -219,6 +218,7 @@ def test_transformer_keeps_observed_and_effective_times_distinct(
         tzinfo=UTC,
     )
     related = hydrate_fact(transformed.clinical_facts[0])
+    assert isinstance(related, PersonDiet)
     assert related.effective_at == datetime(
         2026,
         8,

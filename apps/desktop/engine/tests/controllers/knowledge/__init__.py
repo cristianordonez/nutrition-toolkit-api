@@ -1,0 +1,1 @@
+"""Knowledge controller tests."""

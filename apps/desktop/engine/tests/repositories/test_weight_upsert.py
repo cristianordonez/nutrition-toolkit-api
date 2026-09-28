@@ -56,7 +56,8 @@ def test_overlapping_weight_history_upserts_existing_observation(
             repository.load_transformed_documents([second])
 
         person = repository.get_by_identifier("R-1")
-        assert person is not None and person.id is not None
+        assert person is not None
+        assert person.id is not None
         weights = repository.get_weights_by_person_ids([person.id])
         assert len(weights) == 1
         assert weights[0].weight_lb == expected_weight
@@ -146,7 +147,8 @@ def test_ai_weight_does_not_overwrite_a_parsed_weight(
         )
 
         person = repository.get_by_identifier("R-1")
-        assert person is not None and person.id is not None
+        assert person is not None
+        assert person.id is not None
         weights = repository.get_weights_by_person_ids([person.id])
 
     assert len(weights) == 1
@@ -177,7 +179,8 @@ def test_ai_weight_is_kept_when_no_parsed_weight_exists(
         )
 
         person = repository.get_by_identifier("R-1")
-        assert person is not None and person.id is not None
+        assert person is not None
+        assert person.id is not None
         weights = repository.get_weights_by_person_ids([person.id])
 
     assert len(weights) == 1

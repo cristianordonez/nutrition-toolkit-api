@@ -8,8 +8,25 @@ import type {
 } from "./engine";
 import { PatientSummary } from "./PatientSummary";
 
+/** Assessment types a note can be written as, in the order offered. */
+export const NOTE_TYPE_OPTIONS: { value: NCPNoteType; label: string }[] = [
+  { value: "annual", label: "Annual" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "admission", label: "Admission" },
+  { value: "significant_change", label: "Significant change" },
+  { value: "wound", label: "Wound" },
+  { value: "follow_up", label: "Follow up" },
+];
+
+const noteTypeLabel = (value: NCPNoteType) =>
+  NOTE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+
 /** One resident's generation outcome, kept so a failure does not hide others. */
-export type NoteResult = { person: Person; context?: string } & (
+export type NoteResult = {
+  person: Person;
+  noteType: NCPNoteType;
+  context?: string;
+} & (
   | { status: "pending" }
   | { status: "done"; note: GeneratedNCP }
   | { status: "failed"; detail: string }
@@ -26,7 +43,8 @@ export function AssessmentsPage({
   persons,
   selected,
   contexts,
-  noteType,
+  noteTypes,
+  defaultNoteType,
   generating,
   results,
   focusedPersonId,
@@ -37,13 +55,16 @@ export function AssessmentsPage({
   onToggleAll,
   onContextChange,
   onNoteTypeChange,
+  onNoteTypeForAll,
   onGenerate,
   onAddDocuments,
 }: {
   persons: Person[];
   selected: Set<number>;
   contexts: Record<number, string>;
-  noteType: NCPNoteType;
+  /** Each selected resident's assessment type; unset means the default. */
+  noteTypes: Record<number, NCPNoteType>;
+  defaultNoteType: NCPNoteType;
   generating: boolean;
   results: NoteResult[];
   focusedPersonId: number | null;
@@ -53,7 +74,8 @@ export function AssessmentsPage({
   onToggle: (personId: number) => void;
   onToggleAll: (visible: Person[]) => void;
   onContextChange: (personId: number, value: string) => void;
-  onNoteTypeChange: (value: NCPNoteType) => void;
+  onNoteTypeChange: (personId: number, value: NCPNoteType) => void;
+  onNoteTypeForAll: (value: NCPNoteType) => void;
   onGenerate: () => void;
   onAddDocuments: () => void;
 }) {
@@ -66,6 +88,12 @@ export function AssessmentsPage({
   const hiddenSelected = selected.size - visible.filter(isIn(selected)).length;
   const allVisibleChosen =
     visible.length > 0 && visible.every((person) => selected.has(person.id));
+  const typeOf = (personId: number) => noteTypes[personId] ?? defaultNoteType;
+  // The "all" control shows a type only when every selected resident has it;
+  // otherwise it reads "Mixed" rather than claiming one type for the batch.
+  const selectedTypes = new Set([...selected].map(typeOf));
+  const sharedType =
+    selectedTypes.size === 1 ? [...selectedTypes][0] : undefined;
 
   return (
     <div className="app__columns">
@@ -149,17 +177,37 @@ export function AssessmentsPage({
                   )}
                 </label>
                 {selected.has(person.id) && (
-                  <input
-                    type="text"
-                    className="resident__context"
-                    value={contexts[person.id] ?? ""}
-                    onChange={(event) =>
-                      onContextChange(person.id, event.target.value)
-                    }
-                    placeholder="Context for this note (optional)"
-                    aria-label={`Context for ${person.name}`}
-                    disabled={generating}
-                  />
+                  <div className="resident__options">
+                    <select
+                      className="resident__type"
+                      value={typeOf(person.id)}
+                      onChange={(event) =>
+                        onNoteTypeChange(
+                          person.id,
+                          event.target.value as NCPNoteType,
+                        )
+                      }
+                      aria-label={`Assessment type for ${person.name}`}
+                      disabled={generating}
+                    >
+                      {NOTE_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      className="resident__context"
+                      value={contexts[person.id] ?? ""}
+                      onChange={(event) =>
+                        onContextChange(person.id, event.target.value)
+                      }
+                      placeholder="Context for this note (optional)"
+                      aria-label={`Context for ${person.name}`}
+                      disabled={generating}
+                    />
+                  </div>
                 )}
               </li>
             ))}
@@ -169,19 +217,25 @@ export function AssessmentsPage({
         {persons.length > 0 && (
           <>
             <label className="field">
-              <span className="field__label">Assessment type</span>
+              <span className="field__label">Set all selected to</span>
               <select
                 className="field__input"
-                value={noteType}
+                value={selected.size === 0 ? defaultNoteType : (sharedType ?? "")}
                 onChange={(event) =>
-                  onNoteTypeChange(event.target.value as NCPNoteType)
+                  onNoteTypeForAll(event.target.value as NCPNoteType)
                 }
                 disabled={generating}
               >
-                <option value="annual">Annual</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="admission">Admission</option>
-                <option value="significant_change">Significant change</option>
+                {selected.size > 0 && sharedType === undefined && (
+                  <option value="" disabled>
+                    Mixed
+                  </option>
+                )}
+                {NOTE_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
             <button
@@ -223,6 +277,9 @@ export function AssessmentsPage({
                   </span>
                 )}
               </h3>
+              <p className="noteblock__context">
+                {noteTypeLabel(entry.noteType)} assessment
+              </p>
               {entry.context && (
                 <p className="noteblock__context">Context: {entry.context}</p>
               )}

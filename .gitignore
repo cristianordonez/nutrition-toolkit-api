@@ -32,6 +32,14 @@ MANIFEST
 *.manifest
 *.spec
 
+# Prepared from the pinned manifest; included explicitly in engine packages.
+apps/desktop/engine/src/engine/assets/models/all-MiniLM-L6-v2/
+# Local AI: GGUF models are installed per machine, never committed, and the
+# llama-server sidecar is built by apps/desktop/scripts/build-llama-server.*.
+*.gguf
+*.gguf.part
+apps/desktop/src-tauri/binaries/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -215,4 +223,3 @@ tmp
 
 # logfire
 .logfire
-

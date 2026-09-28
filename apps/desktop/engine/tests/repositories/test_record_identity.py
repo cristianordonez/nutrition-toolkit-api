@@ -15,7 +15,7 @@ from engine.models.clinical_facts import PersonLab, PersonWeight
 
 
 def _identity(record: PersonLab | PersonWeight, fact_type: str) -> str:
-    return fact_envelope(record, fact_type)["identity_hash"]  # ty: ignore[invalid-return-type]
+    return fact_envelope(record, fact_type)["identity_hash"]
 
 
 def test_a_lab_is_one_record_whether_or_not_its_date_carries_a_timezone() -> None:

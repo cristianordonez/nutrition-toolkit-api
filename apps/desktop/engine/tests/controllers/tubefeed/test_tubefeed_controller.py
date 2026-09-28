@@ -8,9 +8,9 @@ from engine.controllers.tubefeed.calculate import (
     CalculateTubefeedResponse,
 )
 from engine.data.enteral_formulas import Formula, LocalFormulaCatalog
-from engine.models.food_vocab import PackageType
 from engine.models.clinical_facts import PersonEnteralFeeding
 from engine.models.clinical_vocab import ClinicalStatus, FeedingMethod
+from engine.models.food_vocab import PackageType
 from engine.services.calculators.tubefeed_calculator import TubeFeedCalculator
 
 _READY_TO_HANG_SERVING_ML = 1000

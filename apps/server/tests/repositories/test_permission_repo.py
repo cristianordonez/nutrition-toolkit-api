@@ -5,10 +5,10 @@ import typing
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from server.utils.misc import require_id
 from server.defaults import DEFAULT_PERMISSIONS
 from server.models.sql.api_key import APIKey, APIKeyPermission, Permission
 from server.repositories.permission_repo import PermissionRepo
+from server.utils.misc import require_id
 
 
 @pytest.fixture
@@ -58,15 +58,9 @@ def test_seed_defaults_adds_missing_permissions(session: Session) -> None:
     assert seeded_names >= set(DEFAULT_PERMISSIONS)
 
 
-def test_default_permissions_cover_api_routes() -> None:
-    assert set(DEFAULT_PERMISSIONS) == {
-        "admin",
-        "ncp:read",
-        "ncp:write",
-        "calculate:read",
-        "knowledge:read",
-        "knowledge:write",
-    }
+def test_default_permissions_are_admin_only() -> None:
+    # No feature routes remain on the server, so only admin is seeded.
+    assert set(DEFAULT_PERMISSIONS) == {"admin"}
 
 
 def test_add_permission_to_api_key_persists_link(session: Session) -> None:

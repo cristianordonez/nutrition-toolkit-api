@@ -14,7 +14,7 @@ import logfire
 from engine import __version__
 from engine.controllers import load_command_groups
 from engine.controllers.registry import COMMAND_REGISTRY
-from engine.database.db import initialize_database
+from engine.database.bootstrap import initialize_database
 from engine.logger import setup_logging
 from engine.models.settings import SETTINGS
 from engine.paths import ensure_dir

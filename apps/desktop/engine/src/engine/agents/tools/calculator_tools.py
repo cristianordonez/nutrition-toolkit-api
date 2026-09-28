@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
 
 from pydantic_ai import FunctionToolset
@@ -14,7 +15,9 @@ class CalculatorToolDependencies:
     """No runtime dependencies are required by calculation tools."""
 
 
-CALCULATOR_TOOLSET = FunctionToolset[CalculatorToolDependencies](id="calculators")
+#: Typed for any dependencies: the calculators never read them, and an agent
+#: combines this toolset with others whose dependency type it must share.
+CALCULATOR_TOOLSET = FunctionToolset[typing.Any](id="calculators")
 CALCULATOR_TOOLSET.add_function(
     NutritionCalculator.calculate,
     name="calculate_nutrition_needs",

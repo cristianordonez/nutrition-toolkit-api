@@ -206,7 +206,7 @@ def test_get_person_detail_by_internal_id_includes_clinical_notes() -> None:
         )
         note = ClinicalSourceRepo(session).create(
             ClinicalSource(
-                person_id=person.id,  # ty: ignore[invalid-argument-type]
+                person_id=person.id,
                 source_kind=ClinicalSourceKind.PROGRESS_NOTE,
                 effective_at=datetime(2026, 9, 7, tzinfo=UTC),
                 note_type="Nutrition/Dietary",

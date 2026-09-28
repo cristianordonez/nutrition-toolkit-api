@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from engine.models.clinical_vocab import ClinicalStatus, FeedingMethod
 from engine.models.extracted_fact_create import (
     DietPayload,
     EnteralFeedingPayload,
@@ -15,7 +16,6 @@ from engine.models.extracted_fact_create import (
     SupplementPayload,
 )
 from engine.models.food_vocab import LiquidConsistency
-from engine.models.clinical_vocab import ClinicalStatus, FeedingMethod
 from engine.pipelines.person.ingestion.extract.order_classifier import (
     ClassifiedOrderPayload,
     OrderClassifier,

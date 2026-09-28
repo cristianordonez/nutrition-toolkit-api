@@ -71,12 +71,8 @@ def test_weight_history_exposes_each_prior_weight_compared_to_latest() -> None:
         "3 months",
     ]
     assert [comparison.comparison_text for comparison in comparisons] == [
-        (
-            "07/04/26: 174 lbs; 2.8 lbs gain (1.61%) over 1 month"
-        ),
-        (
-            "05/04/26: 171.6 lbs; 5.2 lbs gain (3.03%) over 3 months"
-        ),
+        ("07/04/26: 174 lbs; 2.8 lbs gain (1.61%) over 1 month"),
+        ("05/04/26: 171.6 lbs; 5.2 lbs gain (3.03%) over 3 months"),
     ]
     assert all("month" in comparison.comparison_text for comparison in comparisons)
 
@@ -157,7 +153,6 @@ def test_repeated_medication_regimen_keeps_the_newest_record() -> None:
 
     assert [medication.id for medication in detail.active_medications] == [2]
     assert not any(conflict.concept == "medication" for conflict in detail.conflicts)
-
 
 
 def test_person_detail_contains_demographics_and_derived_age() -> None:

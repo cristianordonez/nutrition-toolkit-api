@@ -6,9 +6,9 @@ import typing
 from datetime import UTC, datetime
 from secrets import token_urlsafe
 
-from server.utils.misc import require_id
 from server.models.sql.api_key import APIKey
 from server.repositories.permission_repo import PermissionRepo
+from server.utils.misc import require_id
 
 if typing.TYPE_CHECKING:
     from server.repositories.api_key_repo import APIKeyRepo

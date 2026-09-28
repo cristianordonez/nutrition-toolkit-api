@@ -16,7 +16,6 @@ import typing
 import pgvector.sqlalchemy
 import sqlalchemy as sa
 import sqlmodel
-
 from alembic import op
 
 if typing.TYPE_CHECKING:
@@ -78,7 +77,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_food_sync_state_source"), "food_sync_state", ["source"], unique=True,
+        op.f("ix_food_sync_state_source"),
+        "food_sync_state",
+        ["source"],
+        unique=True,
     )
     op.create_table(
         "knowledge",
@@ -100,7 +102,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_knowledge_file_hash"), "knowledge", ["file_hash"], unique=False,
+        op.f("ix_knowledge_file_hash"),
+        "knowledge",
+        ["file_hash"],
+        unique=False,
     )
     op.create_index(
         op.f("ix_knowledge_knowledge_type"),
@@ -118,7 +123,10 @@ def upgrade() -> None:
         sa.Column(
             "classification",
             sa.Enum(
-                "MACRONUTRIENT", "VITAMIN", "MINERAL", name="nutrientclassification",
+                "MACRONUTRIENT",
+                "VITAMIN",
+                "MINERAL",
+                name="nutrientclassification",
             ),
             nullable=True,
         ),
@@ -128,10 +136,14 @@ def upgrade() -> None:
         "nutrition_care_process",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column(
-            "person_identifier", sqlmodel.sql.sqltypes.AutoString(), nullable=False,
+            "person_identifier",
+            sqlmodel.sql.sqltypes.AutoString(),
+            nullable=False,
         ),
         sa.Column(
-            "facility_identifier", sqlmodel.sql.sqltypes.AutoString(), nullable=True,
+            "facility_identifier",
+            sqlmodel.sql.sqltypes.AutoString(),
+            nullable=True,
         ),
         sa.Column("note_text", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("content_hash", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -151,7 +163,10 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "draft", "finalized", "discarded", name="nutrition_care_process_status",
+                "draft",
+                "finalized",
+                "discarded",
+                name="nutrition_care_process_status",
             ),
             nullable=False,
         ),
@@ -160,7 +175,9 @@ def upgrade() -> None:
         sa.Column("finalized_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "person_identifier", "content_hash", name="uq_ncp_person_content_hash",
+            "person_identifier",
+            "content_hash",
+            name="uq_ncp_person_content_hash",
         ),
     )
     op.create_index(
@@ -449,7 +466,8 @@ def downgrade() -> None:
     )
     op.drop_table("nutrition_care_process_embeddings")
     op.drop_index(
-        op.f("ix_knowledge_chunks_knowledge_id"), table_name="knowledge_chunks",
+        op.f("ix_knowledge_chunks_knowledge_id"),
+        table_name="knowledge_chunks",
     )
     op.drop_table("knowledge_chunks")
     op.drop_table("food")
@@ -457,7 +475,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_permission_name"), table_name="permission")
     op.drop_table("permission")
     op.drop_index(
-        op.f("ix_nutrition_care_process_status"), table_name="nutrition_care_process",
+        op.f("ix_nutrition_care_process_status"),
+        table_name="nutrition_care_process",
     )
     op.drop_index(
         op.f("ix_nutrition_care_process_source_filename"),

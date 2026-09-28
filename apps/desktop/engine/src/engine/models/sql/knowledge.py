@@ -1,15 +1,14 @@
 """The diet and nutrition-care manuals, stored on the device for retrieval.
 
 Reference content, not patient content. Every other table in this database
-describes one device's residents; these three describe published manuals that
+describes one device's residents; these tables describe published manuals that
 are identical on every install, ship inside the application bundle, and carry
 no PHI. Keeping them in their own tables is what lets a factory reset, a
 backup, or a "delete all patient data" act on one set without touching the
 other.
 
-Ported from the server's pgvector version. The shape is the same; the vector
-is a packed ``float32`` BLOB rather than a ``VECTOR`` column, scored directly
-at search time rather than through a separate index.
+Chunk vectors live in an Alembic-managed sqlite-vec virtual table, outside
+SQLModel's relational metadata.
 """
 
 from __future__ import annotations
@@ -73,33 +72,8 @@ class KnowledgeChunk(SQLModel, table=True):
     )
 
 
-class KnowledgeChunkEmbedding(SQLModel, table=True):
-    """One chunk's embedding under one model.
-
-    ``model`` and ``dimensions`` are per row for the same reason they are on
-    ``NCPNoteEmbedding``: vectors from different models are not comparable, so
-    a search filters to the model it is querying with instead of silently
-    ranking across them. It matters more here -- the bundled manuals are
-    embedded at build time with one model, and a device configured for the
-    other must re-embed rather than compare against them.
-    """
-
-    __tablename__ = "knowledge_chunk_embedding"
-
-    id: int | None = Field(default=None, primary_key=True)
-    knowledge_chunk_id: int = Field(
-        foreign_key="knowledge_chunk.id",
-        index=True,
-    )
-    model: str = Field(index=True)
-    dimensions: int
-    vector: bytes
-    created_at: datetime = Field(default_factory=utc_now)
-
-
 __all__ = [
     "Knowledge",
     "KnowledgeChunk",
-    "KnowledgeChunkEmbedding",
     "KnowledgeType",
 ]

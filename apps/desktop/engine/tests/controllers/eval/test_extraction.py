@@ -10,6 +10,7 @@ from engine.controllers.eval import extraction as eval_module
 from engine.controllers.eval.extraction import (
     EvalExtractionController,
     EvalExtractionOptions,
+    EvalExtractionResult,
 )
 
 
@@ -60,7 +61,10 @@ def _isolate(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _run(providers: list[str], files: list[str] | None = None) -> object:
+def _run(
+    providers: list[str],
+    files: list[str] | None = None,
+) -> EvalExtractionResult:
     controller = EvalExtractionController()
     options = EvalExtractionOptions(
         files=[pathlib.Path(name) for name in (files or ["note.pdf"])],
@@ -94,15 +98,15 @@ def test_a_blocked_provider_explains_itself_instead_of_reporting_zero(
         EvalExtractionController,
         "_preflight",
         staticmethod(
-            lambda _provider: asyncio.sleep(0, result="Ollama is not running."),
+            lambda _provider: asyncio.sleep(0, result="Local AI is not running."),
         ),
     )
 
-    run = _run(["ollama"]).runs[0]
+    run = _run(["local"]).runs[0]
 
     # The distinction that matters: nothing ran, so this must not look like a
     # model that found no facts.
-    assert run.error == "Ollama is not running."
+    assert run.error == "Local AI is not running."
     assert run.total_facts == 0
     assert run.documents == []
     assert _Extractor.calls == []
@@ -134,12 +138,12 @@ def test_console_output_compares_providers_side_by_side(
         staticmethod(lambda _provider: asyncio.sleep(0, result=None)),
     )
 
-    rendered = _run(["openai", "ollama"]).to_console()
+    rendered = _run(["openai", "local"]).to_console()
 
     assert "provider" in rendered
     assert rendered.count("test-model") >= 2  # noqa: PLR2004
     assert "openai" in rendered
-    assert "ollama" in rendered
+    assert "local" in rendered
 
 
 def test_counting_agent_records_failures_before_they_are_swallowed() -> None:

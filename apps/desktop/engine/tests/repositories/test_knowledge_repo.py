@@ -1,7 +1,7 @@
 """Retrieval over the bundled manuals, against real sqlite-vec scoring.
 
 Deliberately not mocked. What is being checked is that the pieces line up: the
-``float32`` BLOB the application writes is what ``vec_distance_cosine`` reads,
+``float32`` BLOB the application writes is what vec0's MATCH query reads,
 the per-manual filter narrows candidates before ranking, and the join back to
 chunk rows returns the right text. A stub would pass while any of those were
 wrong.
@@ -9,30 +9,32 @@ wrong.
 
 from __future__ import annotations
 
-import pathlib
 import typing
 
 import pytest
-import sqlite_vec
-from sqlalchemy import event
-from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy import insert, select, update
+from sqlmodel import Session
 
+from engine.database.bootstrap import upgrade_database
+from engine.database.db import create_database_engine
+from engine.database.vectors import EMBEDDING_DIMENSIONS, knowledge_vectors, pack_vector
 from engine.models.knowledge import KnowledgeChunkCreate
 from engine.models.sql.knowledge import (
     Knowledge,
     KnowledgeChunk,
-    KnowledgeChunkEmbedding,
     KnowledgeType,
 )
 from engine.repositories.knowledge_repo import KnowledgeRepo
-from engine.utils.vector import pack_vector
 
-_MODEL = "nomic-embed-text"
-_DIMENSIONS = 768
+if typing.TYPE_CHECKING:
+    import pathlib
+
+_MODEL = "test-model"
+_DIMENSIONS = EMBEDDING_DIMENSIONS
 
 
 def _vector(lead: float, second: float = 0.0) -> list[float]:
-    """A 768-wide vector that differs from its neighbours in two places."""
+    """A model-width vector that differs from its neighbours in two places."""
     values = [0.0] * _DIMENSIONS
     values[0] = lead
     values[1] = second
@@ -40,15 +42,8 @@ def _vector(lead: float, second: float = 0.0) -> list[float]:
 
 
 def _session(tmp_path: pathlib.Path) -> Session:
-    database = create_engine(f"sqlite:///{tmp_path / 'facts.db'}")
-
-    @event.listens_for(database, "connect")
-    def _load(dbapi_connection: object, _record: object) -> None:
-        dbapi_connection.enable_load_extension(True)  # noqa: FBT003
-        sqlite_vec.load(dbapi_connection)
-        dbapi_connection.enable_load_extension(False)  # noqa: FBT003
-
-    SQLModel.metadata.create_all(database)
+    database = create_database_engine(f"sqlite:///{tmp_path / 'facts.db'}")
+    upgrade_database(database)
     return Session(database)
 
 
@@ -78,12 +73,11 @@ def _manual(
         session.add(chunk)
         session.commit()
         session.refresh(chunk)
-        session.add(
-            KnowledgeChunkEmbedding(
+        session.exec(
+            insert(knowledge_vectors).values(
                 knowledge_chunk_id=typing.cast("int", chunk.id),
                 model=_MODEL,
-                dimensions=_DIMENSIONS,
-                vector=pack_vector(vector),
+                embedding=pack_vector(vector),
             ),
         )
     session.commit()
@@ -121,7 +115,7 @@ def test_search_can_be_restricted_to_one_manual(tmp_path: pathlib.Path) -> None:
         )
         found = _repo(session).search(
             _vector(1.0),
-            5,
+            1,
             knowledge_type=KnowledgeType.NUTRITION_CARE_MANUAL,
         )
 
@@ -136,8 +130,8 @@ def test_another_models_vectors_are_never_returned(tmp_path: pathlib.Path) -> No
             KnowledgeType.DIET_MANUAL,
             [("Embedded by another model", _vector(1.0))],
         )
-        session.exec(  # ty: ignore[no-matching-overload]
-            KnowledgeChunkEmbedding.__table__.update().values(model="some-other-model"),
+        session.exec(
+            update(knowledge_vectors).values(model="some-other-model"),
         )
         session.commit()
         assert _repo(session).search(_vector(1.0), 5) == []
@@ -243,3 +237,48 @@ def test_a_chunk_without_an_embedding_is_refused(tmp_path: pathlib.Path) -> None
                 [_chunk("a"), _chunk("b")],
                 [_vector(1.0)],
             )
+
+
+def test_bad_vector_does_not_destroy_existing_chunks_on_overwrite(
+    tmp_path: pathlib.Path,
+) -> None:
+    manual = tmp_path / "diet-manual.pdf"
+    manual.write_bytes(b"manual bytes")
+    with _session(tmp_path) as session:
+        repo = _repo(session)
+        repo.ingest(
+            repo.create_knowledge(manual, KnowledgeType.DIET_MANUAL),
+            [_chunk("Original passage")],
+            [_vector(1.0)],
+        )
+        with pytest.raises(ValueError, match="384 embedding dimensions"):
+            repo.ingest(
+                repo.create_knowledge(manual, KnowledgeType.DIET_MANUAL),
+                [_chunk("Replacement")],
+                [[1.0, 0.0]],
+                overwrite=True,
+            )
+        assert repo.search(_vector(1.0), 1)[0].chunk_text == "Original passage"
+
+
+def test_chunk_deletion_cleans_vectors_after_reopening_database(
+    tmp_path: pathlib.Path,
+) -> None:
+    with _session(tmp_path) as session:
+        _manual(
+            session,
+            KnowledgeType.DIET_MANUAL,
+            [("Stored passage", _vector(1.0))],
+        )
+    with _session(tmp_path) as session:
+        assert _repo(session).search(_vector(1.0), 1)[0].chunk_text == "Stored passage"
+        chunk = session.get(KnowledgeChunk, 1)
+        assert chunk is not None
+        session.delete(chunk)
+        session.commit()
+        assert (
+            session.connection()
+            .execute(select(knowledge_vectors.c.knowledge_chunk_id))
+            .all()
+            == []
+        )

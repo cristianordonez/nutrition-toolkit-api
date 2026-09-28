@@ -38,7 +38,9 @@ export type NCPNoteType =
   | "annual"
   | "quarterly"
   | "admission"
-  | "significant_change";
+  | "significant_change"
+  | "wound"
+  | "follow_up";
 
 export type GeneratedNCP = {
   person_id: number;
@@ -123,26 +125,6 @@ export function supportedPaths(paths: string[]): string[] {
   });
 }
 
-/** On-device extraction readiness for this machine. */
-export type LocalModelStatus = {
-  enabled: boolean;
-  ram_gb: number;
-  supported: boolean;
-  model: string | null;
-  approximate_download_gb: number | null;
-  ollama_running: boolean;
-  model_downloaded: boolean;
-  detail: string | null;
-};
-
-export const localModelStatus = () =>
-  call<LocalModelStatus>("local_model_status");
-
-export const localModelEnsure = () =>
-  call<{ model: string; downloaded: boolean; already_present: boolean }>(
-    "local_model_ensure",
-  );
-
 /** Daily nutrition needs from the shared calculator. */
 export type EnergyNeeds = {
   bmi: number;
@@ -218,8 +200,8 @@ export type UserSettings = {
   credentials: string | null;
   /** true forces dark, false forces light, null follows the OS. */
   dark_mode: boolean | null;
-  /** Whether a hosted model was requested. Not the same as it being in use. */
-  use_cloud_model: boolean;
+  /** The provider the user chose; it is always the one used. */
+  ai_provider: AIProvider;
 };
 
 /** Settings plus state the database does not store. */
@@ -227,16 +209,28 @@ export type SettingsView = {
   settings: UserSettings;
   /** Whether a token is in the OS keychain. The token itself never leaves it. */
   has_cloud_token: boolean;
-  /** The model an agent would actually use right now. */
-  active_provider: "ollama" | "openai";
 };
+
+/** Where inference runs. Only ever changed by the user. */
+export type AIProvider = "local" | "openai";
+
+/** Whether the selected provider can answer now. No URL, key or path. */
+export type AIStatus = {
+  provider: AIProvider;
+  status: "ready" | "unavailable" | "not_configured";
+  /** The model answering, when known: a file name or alias, never a path. */
+  model: string | null;
+  error: string | null;
+};
+
+export const aiStatus = () => call<AIStatus>("ai_status");
 
 export const getSettings = () => call<SettingsView>("get_settings");
 
 /** Fields left undefined are not changed. */
 export const updateSettings = (changes: {
   darkMode?: DarkMode;
-  useCloudModel?: "on" | "off";
+  aiProvider?: AIProvider;
   /** Goes straight to the OS keychain. "" removes the stored token. */
   cloudApiToken?: string;
 }) => call<SettingsView>("update_settings", { ...changes });

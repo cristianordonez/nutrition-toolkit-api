@@ -9,12 +9,12 @@ import typing
 from pydantic import BaseModel, Field
 
 from engine.controllers.base import BaseController
-from engine.controllers.session import controller_session
 from engine.controllers.uploads import (
     ReadableUpload,
     UploadRequirements,
     materialize_uploads,
 )
+from engine.database.sessions import controller_session
 from engine.models.base import ConsoleRenderableModel
 from engine.models.output import Output
 from engine.pipelines.person.ingestion.failure_recorder import (

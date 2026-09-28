@@ -7,7 +7,7 @@ import typing
 from engine.models.sql.knowledge import KnowledgeType
 
 from .extractors import DietManualExtractor, NutritionCareManualExtractor
-from .processing import KnowledgeContentProcessor
+from .processing.processing import KnowledgeContentProcessor
 
 if typing.TYPE_CHECKING:
     import pathlib

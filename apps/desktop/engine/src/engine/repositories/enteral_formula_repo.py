@@ -72,17 +72,25 @@ class EnteralFormulaRepo:
         existing = self.get_by_name(formula.name)
         if existing is not None and existing.catalog_version == version:
             return existing
-        row = existing or EnteralFormula(name=formula.name)
-        row.brand = formula.brand
-        row.brand_owner = formula.brand_owner
-        row.package_type = formula.package_type
-        row.serving_size = formula.serving_size
-        row.serving_unit = formula.serving_unit
-        row.liquid_consistency = formula.liquid_consistency
-        row.catalog_version = version
+        fields: dict[str, typing.Any] = {
+            "brand": formula.brand,
+            "brand_owner": formula.brand_owner,
+            "package_type": formula.package_type,
+            "serving_size": formula.serving_size,
+            "serving_unit": formula.serving_unit,
+            "liquid_consistency": formula.liquid_consistency,
+            "catalog_version": version,
+        }
+        if existing is None:
+            row = EnteralFormula(name=formula.name, **fields)
+        else:
+            row = existing
+            for field_name, value in fields.items():
+                setattr(row, field_name, value)
         # delete-orphan on the relationship removes the previous rows.
         row.nutrients = [
-            EnteralFormulaNutrient(
+            # formula_id is filled in from the relationship when flushed.
+            EnteralFormulaNutrient(  # ty: ignore[missing-argument]
                 ordinal=ordinal,
                 number=nutrient.number,
                 name=nutrient.name,

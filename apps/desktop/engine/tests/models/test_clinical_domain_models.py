@@ -8,6 +8,17 @@ from datetime import UTC, datetime
 
 import pytest
 
+from engine.models.clinical_facts import PersonDiet, PersonMedication
+from engine.models.clinical_vocab import (
+    AppetiteLevel,
+    ClinicalStatus,
+    FoodPreferenceReason,
+    FoodPreferenceType,
+    FoodPreferenceValue,
+    GISymptom,
+    NutritionGoalType,
+    ParenteralAccessRoute,
+)
 from engine.models.extracted_fact_create import (
     AllergyPayload,
     AppetitePayload,
@@ -20,17 +31,6 @@ from engine.models.extracted_fact_create import (
     NutritionGoalPayload,
     OralFeedingStatusPayload,
     ParenteralNutritionPayload,
-)
-from engine.models.clinical_facts import PersonDiet, PersonMedication
-from engine.models.clinical_vocab import (
-    AppetiteLevel,
-    ClinicalStatus,
-    FoodPreferenceReason,
-    FoodPreferenceType,
-    FoodPreferenceValue,
-    GISymptom,
-    NutritionGoalType,
-    ParenteralAccessRoute,
 )
 
 

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import os
 
-_TEST_SETTINGS = {
-    "NTK_OPEN_AI_API_KEY": "test-openai-key",
-}
+_TEST_SETTINGS: dict[str, str] = {}
 
 
 def pytest_configure() -> None:

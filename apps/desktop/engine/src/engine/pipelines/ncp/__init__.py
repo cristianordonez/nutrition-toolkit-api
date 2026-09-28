@@ -1,7 +1,7 @@
-"""Nutrition Care Process import workflow (device-local half)."""
+"""Nutrition Care Process workflows."""
 
 from __future__ import annotations
 
-from .ingest.import_pipeline import NCPImportPipeline
+from .ingest.ingest_pipeline import NCPIngestPipeline
 
-__all__ = ["NCPImportPipeline"]
+__all__ = ["NCPIngestPipeline"]

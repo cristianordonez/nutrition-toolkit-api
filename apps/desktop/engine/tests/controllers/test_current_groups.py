@@ -11,5 +11,5 @@ def test_current_controller_groups_expose_their_commands() -> None:
     tubefeed = TubefeedControllerGroup()
 
     assert len(documents.subcommands) == 1
-    assert len(ncp.subcommands) == 2  # noqa: PLR2004 - generate + import
+    assert len(ncp.subcommands) == 3  # noqa: PLR2004 - generate + ingest + search
     assert len(tubefeed.subcommands) == 2  # noqa: PLR2004 - calculate + formulas

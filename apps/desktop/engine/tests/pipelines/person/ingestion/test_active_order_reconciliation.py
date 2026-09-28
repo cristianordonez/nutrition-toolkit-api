@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import typing
 from datetime import UTC, date, datetime
 
@@ -406,7 +407,7 @@ def test_unresolved_person_does_not_modify_existing_orders(
         assert stored == {"Existing order": "active"}
 
 
-def test_parser_failure_before_reconciliation_leaves_repository_untouched(
+def test_a_parser_failure_skips_only_that_file(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -462,7 +463,138 @@ def test_parser_failure_before_reconciliation_leaves_repository_untouched(
         PccOrderReportExtractor,
     )
 
-    with pytest.raises(ValueError, match="parser failed"):
-        asyncio.run(service.ingest(paths))
+    result = asyncio.run(service.ingest(paths))
 
-    assert repository.load_calls == 0
+    # The first file was saved; the unreadable second file saved nothing and
+    # did not stop the run.
+    assert repository.load_calls == 1
+    assert len(result.documents) == 1
+
+
+def test_a_file_that_cannot_be_saved_does_not_sink_the_batch(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    paths = [tmp_path / "rejected.pdf", tmp_path / "kept.pdf"]
+    for path in paths:
+        with pymupdf.open() as document:
+            page = document.new_page()
+            page.insert_text((20, 40), "Order Listing Report")
+            page.insert_text((20, 60), "Order Status: Active")
+            document.save(path)
+
+    class Repository:
+        saved: typing.ClassVar[list[str]] = []
+
+        @staticmethod
+        def document_exists(_checksum: str) -> bool:
+            return False
+
+        @staticmethod
+        def document_ingestion_is_complete(_checksum: str) -> bool:
+            return False
+
+        def reconcile_active_order_documents(self, documents: list[typing.Any]) -> None:
+            name = documents[0].document.filename
+            if name == "rejected.pdf":
+                msg = "Cannot create a person for Jane Example"
+                raise ValueError(msg)
+            self.saved.append(name)
+
+        load_transformed_documents = reconcile_active_order_documents
+
+    class Service:
+        def __init__(self, person_repository: object) -> None:
+            self.repository = person_repository
+
+    service = PersonIngestionPipeline(
+        person_service=typing.cast("PersonService", Service(Repository())),
+    )
+
+    async def extract(
+        _path: pathlib.Path,
+        **_kwargs: object,
+    ) -> list[ExtractedFactCreate]:
+        return []
+
+    monkeypatch.setattr(service, "_extract_report", extract)
+    monkeypatch.setattr(service, "_find_extractor", PccOrderReportExtractor)
+
+    with caplog.at_level(logging.ERROR):
+        result = asyncio.run(service.ingest(paths))
+
+    assert Repository.saved == ["kept.pdf"]
+    assert [document.document.filename for document in result.documents] == [
+        "kept.pdf",
+    ]
+    assert "Could not ingest rejected.pdf (ValueError)" in caplog.text
+    # The error names the file, never a resident.
+    assert "Jane Example" not in caplog.text
+
+
+def test_facts_that_match_no_resident_skip_only_their_file(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    paths = [tmp_path / "unmatched.pdf", tmp_path / "kept.pdf"]
+    for path in paths:
+        with pymupdf.open() as document:
+            page = document.new_page()
+            page.insert_text((20, 40), "Order Listing Report")
+            page.insert_text((20, 60), "Order Status: Active")
+            document.save(path)
+
+    class Repository:
+        saved: typing.ClassVar[list[str]] = []
+
+        @staticmethod
+        def document_exists(_checksum: str) -> bool:
+            return False
+
+        @staticmethod
+        def document_ingestion_is_complete(_checksum: str) -> bool:
+            return False
+
+        def reconcile_active_order_documents(
+            self,
+            documents: list[typing.Any],
+        ) -> None:
+            self.saved.append(documents[0].document.filename)
+
+        load_transformed_documents = reconcile_active_order_documents
+
+    class Service:
+        def __init__(self, person_repository: object) -> None:
+            self.repository = person_repository
+
+    service = PersonIngestionPipeline(
+        person_service=typing.cast("PersonService", Service(Repository())),
+    )
+    real_transformer = service._fact_transformer()  # noqa: SLF001
+
+    class Transformer:
+        @staticmethod
+        def transform(path: pathlib.Path, *args: object, **kwargs: object) -> object:
+            if path.name == "unmatched.pdf":
+                msg = "Cannot create a person without first name, last name"
+                raise ValueError(msg)
+            return real_transformer.transform(path, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+
+    async def extract(
+        _path: pathlib.Path,
+        **_kwargs: object,
+    ) -> list[ExtractedFactCreate]:
+        return []
+
+    monkeypatch.setattr(service, "_extract_report", extract)
+    monkeypatch.setattr(service, "_find_extractor", PccOrderReportExtractor)
+    monkeypatch.setattr(service, "_fact_transformer", Transformer)
+
+    with caplog.at_level(logging.ERROR):
+        result = asyncio.run(service.ingest(paths))
+
+    assert Repository.saved == ["kept.pdf"]
+    assert len(result.documents) == 1
+    assert "Could not ingest unmatched.pdf (ValueError)" in caplog.text

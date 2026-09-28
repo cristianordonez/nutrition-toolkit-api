@@ -57,7 +57,14 @@ test = [
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-cov" },
 ]
-type = [{ name = "ty", specifier = ">=0.0.57" }]
+type = [
+    { name = "covdefaults", specifier = ">=2.3.0" },
+    { name = "coverage", specifier = ">=7.14.1" },
+    { name = "diff-cover", specifier = ">=10.3.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-cov" },
+    { name = "ty", specifier = ">=0.0.57" },
+]
 
 [[package]]
 name = "aiofile"
@@ -866,7 +873,9 @@ wheels = [
 name = "engine"
 source = { editable = "apps/desktop/engine" }
 dependencies = [
+    { name = "alembic" },
     { name = "httpx" },
+    { name = "httpx2" },
     { name = "keyring" },
     { name = "logfire" },
     { name = "openai" },
@@ -881,11 +890,14 @@ dependencies = [
     { name = "sqlite-vec" },
     { name = "sqlmodel" },
     { name = "tiktoken" },
+    { name = "tokenizers" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "alembic", specifier = ">=1.16.5" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "httpx2", specifier = ">=2.12" },
     { name = "keyring", specifier = ">=25.7.0" },
     { name = "logfire", specifier = ">=4.41.0" },
     { name = "openai", specifier = ">=3.3.0" },
@@ -900,6 +912,7 @@ requires-dist = [
     { name = "sqlite-vec", specifier = ">=0.1.9" },
     { name = "sqlmodel", specifier = ">=0.0.39" },
     { name = "tiktoken", specifier = ">=0.14.0" },
+    { name = "tokenizers", specifier = ">=0.23.1" },
 ]
 
 [[package]]

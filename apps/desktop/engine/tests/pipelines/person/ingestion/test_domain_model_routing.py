@@ -226,9 +226,13 @@ def test_api_fact_uses_the_same_normalization_and_provenance_path(
 
         fact = session.exec(select(ClinicalFact)).one()
         source = session.exec(select(ClinicalSource)).one()
-        medication = PersonRepo(session).get_clinical_records(
-            require_id(person.id),
-        ).medications[0]
+        medication = (
+            PersonRepo(session)
+            .get_clinical_records(
+                require_id(person.id),
+            )
+            .medications[0]
+        )
         assert medication.clinical_source_id == source.id
         assert fact.clinical_source_id == source.id
         assert fact.extraction_method is ExtractionMethod.API

@@ -26,19 +26,17 @@ from engine.agents.data_extraction_agent import (
     DataExtractionAgent,
     build_unknown_document_agent,
 )
-from engine.clients.ollama_client import OllamaClient
 from engine.controllers.base import BaseController
+from engine.models.ai import AIProvider, AIStatusValue
 from engine.models.base import ConsoleRenderableModel
 from engine.models.output import Output
-from engine.models.settings import SETTINGS
 from engine.pipelines.person.ingestion.extract.unknown_file import UnknownFileExtractor
-from engine.services.local_model import resolve_model
+from engine.services.ai.controller import ai_controller
 
 if typing.TYPE_CHECKING:
-    from engine.agents.data_extraction_agent import ExtractionProvider
     from engine.models.extracted_fact_create import ExtractedFactCreate
 
-_PROVIDERS: tuple[str, ...] = ("openai", "ollama")
+_PROVIDERS: tuple[str, ...] = tuple(provider.value for provider in AIProvider)
 
 
 class EvalExtractionOptions(BaseModel):
@@ -143,7 +141,7 @@ class EvalExtractionController(BaseController):
         """Run every provider over every document and collect the numbers."""
         runs = [
             await self._run_provider(
-                typing.cast("ExtractionProvider", provider),
+                AIProvider(provider),
                 options.files,
             )
             for provider in options.providers
@@ -155,28 +153,21 @@ class EvalExtractionController(BaseController):
         )
 
     @staticmethod
-    async def _preflight(provider: ExtractionProvider) -> str | None:
+    async def _preflight(provider: AIProvider) -> str | None:
         """Return why this provider cannot run, or None when it can.
 
         Worth checking up front because the extractor swallows per-chunk
         failures, so a provider that is simply switched off would otherwise
         report zero facts and read as a bad model rather than a missing one.
         """
-        if provider == "ollama":
-            client = OllamaClient(SETTINGS.ollama_host)
-            if not await client.is_available():
-                return f"Ollama is not running at {SETTINGS.ollama_host}."
-            model = resolve_model(override=SETTINGS.ollama_model)
-            if not await client.has_model(model):
-                return f"{model} is not downloaded. Run: engine localmodel ensure"
+        health = await ai_controller().health(provider)
+        if health.status is AIStatusValue.READY:
             return None
-        if not SETTINGS.open_ai_api_key:
-            return "NTK_OPEN_AI_API_KEY is not set."
-        return None
+        return health.error or f"{provider.value} is not available."
 
     async def _run_provider(
         self,
-        provider: ExtractionProvider,
+        provider: AIProvider,
         files: list[pathlib.Path],
     ) -> ProviderRun:
         """Run one provider over every document."""

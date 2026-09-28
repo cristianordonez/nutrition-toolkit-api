@@ -48,14 +48,15 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Run the `engine` CLI with `args` and capture its output.
+/// A `Command` that runs the `engine` CLI; callers append its arguments.
 ///
 /// Runs from the workspace root because `logfire.configure()` discovers
 /// `.logfire/` relative to the working directory, and points the engine at its
 /// own `.env` explicitly -- that file is otherwise resolved against the working
 /// directory too, so the documented `apps/desktop/engine/.env` would never be
-/// read from here.
-fn run(args: &[&str]) -> Result<EngineOutput, String> {
+/// read from here. The engine reaches Local AI at `NUTRITION_AI_LLAMA_URL`;
+/// nothing here starts llama-server.
+fn engine_command() -> Command {
     let root = workspace_root();
     let mut command = Command::new("uv");
     command.current_dir(&root);
@@ -66,9 +67,14 @@ fn run(args: &[&str]) -> Result<EngineOutput, String> {
     if engine_env.is_file() {
         command.env("NTK_CONFIG_FILE", &engine_env);
     }
+    command.args(["run", "--package", "engine", "engine"]);
+    command
+}
 
-    let output = command
-        .args(["run", "--package", "engine", "engine"])
+/// Run the `engine` CLI with `args` and capture its output.
+fn run(args: &[&str]) -> Result<EngineOutput, String> {
+    let root = workspace_root();
+    let output = engine_command()
         .args(args)
         .output()
         .map_err(|error| {
@@ -349,6 +355,8 @@ pub fn get_settings() -> Result<serde_json::Value, String> {
 /// device that has never visited Settings does. `None` leaves the setting
 /// untouched, so this command can grow more fields without a caller that
 /// omits one wiping it.
+/// `ai_provider` is "local" or "openai" -- always the user's
+/// explicit choice; a failing provider never switches to another.
 /// `cloud_api_token` is the user's own credential. It is passed straight
 /// through to the engine, which puts it in the OS keychain -- it is never
 /// written to the SQLite database and never read back out, so nothing downstream
@@ -356,15 +364,15 @@ pub fn get_settings() -> Result<serde_json::Value, String> {
 #[tauri::command(async)]
 pub fn update_settings(
     dark_mode: Option<String>,
-    use_cloud_model: Option<String>,
+    ai_provider: Option<String>,
     cloud_api_token: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut args = vec!["settings", "update"];
     if let Some(mode) = dark_mode.as_deref() {
         args.extend(["--dark-mode", mode]);
     }
-    if let Some(cloud) = use_cloud_model.as_deref() {
-        args.extend(["--use-cloud-model", cloud]);
+    if let Some(provider) = ai_provider.as_deref() {
+        args.extend(["--ai-provider", provider]);
     }
     if let Some(token) = cloud_api_token.as_deref() {
         args.extend(["--cloud-api-token", token]);
@@ -372,21 +380,11 @@ pub fn update_settings(
     run_json(&args)
 }
 
-/// Report whether on-device extraction is ready on this machine.
+/// Report whether the selected AI provider (Local AI or OpenAI) is ready.
+/// Never includes the server URL, a key or a model path.
 #[tauri::command(async)]
-pub fn local_model_status() -> Result<serde_json::Value, String> {
-    run_json(&["localmodel", "status"])
-}
-
-/// Download the on-device model if this machine does not have it yet.
-///
-/// Blocks for as long as the pull takes, which is minutes for a multi-gigabyte
-/// model. Progress currently goes to the engine's stderr rather than back to
-/// the UI; streaming it would mean emitting Tauri events from a spawned child
-/// instead of capturing output in one shot.
-#[tauri::command(async)]
-pub fn local_model_ensure() -> Result<serde_json::Value, String> {
-    run_json(&["localmodel", "ensure"])
+pub fn ai_status() -> Result<serde_json::Value, String> {
+    run_json(&["ai", "status"])
 }
 
 #[cfg(test)]
@@ -509,19 +507,15 @@ mod tests {
         );
     }
 
-    /// Status has to answer even with no Ollama installed, because the panel
-    /// renders on every app start regardless.
+    /// Status has to answer whether or not a llama-server is running, because
+    /// Settings asks for it every time it opens.
     #[test]
-    fn local_model_status_describes_this_machine() {
-        let value = local_model_status().expect("status should always answer");
-        assert!(
-            value.get("ram_gb").and_then(serde_json::Value::as_u64).is_some(),
-            "expected ram_gb, got: {value}"
-        );
-        for key in ["supported", "ollama_running", "model_downloaded"] {
+    fn ai_status_names_the_provider_and_its_state() {
+        let value = ai_status().expect("status should always answer");
+        for key in ["provider", "status"] {
             assert!(
-                value.get(key).and_then(serde_json::Value::as_bool).is_some(),
-                "expected boolean {key}, got: {value}"
+                value.get(key).and_then(serde_json::Value::as_str).is_some(),
+                "expected string {key}, got: {value}"
             );
         }
     }

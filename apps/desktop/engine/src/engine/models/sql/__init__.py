@@ -15,11 +15,9 @@ from .facility import Facility
 from .knowledge import (
     Knowledge,
     KnowledgeChunk,
-    KnowledgeChunkEmbedding,
     KnowledgeType,
 )
 from .ncp_note import NCPNote, NCPNoteStatus, NCPNoteType
-from .ncp_note_embedding import NCPNoteEmbedding
 from .person import Person
 from .settings import ApplicationSettings
 
@@ -36,10 +34,8 @@ __all__ = [
     "Facility",
     "Knowledge",
     "KnowledgeChunk",
-    "KnowledgeChunkEmbedding",
     "KnowledgeType",
     "NCPNote",
-    "NCPNoteEmbedding",
     "NCPNoteStatus",
     "NCPNoteType",
     "Person",

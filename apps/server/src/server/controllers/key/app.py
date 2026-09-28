@@ -6,12 +6,12 @@ import logging
 import typing
 
 from server.controllers.base import BaseControllerGroup
-from server.controllers.registry import register_command_group
 from server.controllers.key.create import CreateController
 from server.controllers.key.grant import GrantPermissionsController
 from server.controllers.key.list import ListController
 from server.controllers.key.revoke import RevokeController
 from server.controllers.key.revoke_permission import RevokePermissionsController
+from server.controllers.registry import register_command_group
 
 logger = logging.getLogger(__name__)
 

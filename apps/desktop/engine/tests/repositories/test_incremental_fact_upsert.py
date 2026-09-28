@@ -4,7 +4,6 @@ import typing
 from datetime import UTC, datetime
 
 import pytest
-from pydantic import BaseModel
 from sqlmodel import Session, SQLModel, create_engine
 
 from engine.models.clinical_facts import (
@@ -28,6 +27,8 @@ from engine.services.person.person_service import PersonService
 
 if typing.TYPE_CHECKING:
     import pathlib
+
+    from pydantic import BaseModel
 
 _OBSERVED_AT = datetime(2026, 8, 24, 22, 17, tzinfo=UTC)
 

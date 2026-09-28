@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from engine.agents.ncp_agent import NCPAgent
 from engine.controllers.base import BaseController
-from engine.controllers.session import controller_session
+from engine.database.sessions import controller_session
 from engine.models.base import ConsoleRenderableModel
 from engine.models.ncp_note import NCPNoteStatus, NCPNoteType
 from engine.models.output import Output
@@ -24,7 +24,8 @@ from engine.models.sql.ncp_note import NCPNote
 from engine.pipelines.ncp.create.context_budgeter import ContextBudgeter
 from engine.repositories.ncp_note_repo import NCPNoteRepo
 from engine.repositories.person_repo import PersonRepo
-from engine.services.ai_provider import configured_provider
+from engine.services.ai.controller import selected_provider
+from engine.services.embedding_service import EmbeddingService
 from engine.services.note_retrieval import NoteRetrievalService
 from engine.services.person.person_service import PersonService
 
@@ -140,10 +141,17 @@ class NCPGenerateController(BaseController):
         )
 
     async def _generate(self, request: NCPGenerationRequest) -> tuple[str, str]:
-        """Generate the note here, reporting which model produced it."""
-        agent = self.agent or NCPAgent()
-        note = await agent.run(request)
-        return note, configured_provider()
+        """Generate the note here, reporting which model produced it.
+
+        The agent's manual lookups search the local knowledge base, so it runs
+        inside a session of its own rather than the one that built the request.
+        """
+        with controller_session(self.session) as session:
+            agent = self.agent or NCPAgent(
+                knowledge_service=EmbeddingService(session),
+            )
+            note = await agent.run(request)
+        return note, selected_provider()
 
 
 __all__ = [

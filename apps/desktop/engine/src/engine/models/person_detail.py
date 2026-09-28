@@ -11,10 +11,6 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from engine.models.derived_calculations import (
-    ClinicalConflict,
-    DerivedPersonCalculations,
-)
 from engine.models.clinical_facts import (
     PersonAllergy,
     PersonAppetiteObservation,
@@ -37,6 +33,10 @@ from engine.models.clinical_facts import (
     PersonSupplement,
     PersonWeight,
     PersonWound,
+)
+from engine.models.derived_calculations import (
+    ClinicalConflict,
+    DerivedPersonCalculations,
 )
 from engine.models.sql.clinical_source import ClinicalSource
 

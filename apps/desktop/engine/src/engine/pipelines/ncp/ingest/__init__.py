@@ -1,7 +1,7 @@
-"""Nutrition Care Process import workflows."""
+"""Nutrition Care Process ingest workflows."""
 
 from __future__ import annotations
 
-from .import_pipeline import InvalidClinicalNoteReportError, NCPImportPipeline
+from .ingest_pipeline import InvalidClinicalNoteReportError, NCPIngestPipeline
 
-__all__ = ["InvalidClinicalNoteReportError", "NCPImportPipeline"]
+__all__ = ["InvalidClinicalNoteReportError", "NCPIngestPipeline"]

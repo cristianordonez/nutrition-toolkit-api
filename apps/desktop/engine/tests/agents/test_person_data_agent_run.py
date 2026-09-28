@@ -18,12 +18,12 @@ from engine.models.ai_extraction import (
     AIExtractedIdentity,
     AIUnknownDocumentFact,
 )
+from engine.models.clinical_vocab import AppetiteLevel, ClinicalStatus, DialysisType
 from engine.models.extracted_fact_create import (
     AppetitePayload,
     DialysisPayload,
     MealIntakePayload,
 )
-from engine.models.clinical_vocab import AppetiteLevel, ClinicalStatus, DialysisType
 
 
 class FakeAgent:

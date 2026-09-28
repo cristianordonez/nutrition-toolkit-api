@@ -21,4 +21,5 @@ class Settings(CustomBaseSettings):
     redis_dsn: RedisDsn = Field(description="Redis DSN.")
 
 
-SETTINGS = Settings()
+# Required fields are read from the environment or the .env file.
+SETTINGS = Settings()  # ty: ignore[missing-argument]

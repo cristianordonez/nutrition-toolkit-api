@@ -15,12 +15,11 @@ import pymupdf
 from pydantic import BaseModel
 
 from engine.agents.data_extraction_agent import (
-    DATA_EXTRACTION_MODEL,
     DataExtractionAgent,
     ExtractedClinicalFacts,
     ExtractionInput,
 )
-from engine.models.clinical_vocab import ClinicalStatus, NUTRITION_DOCUMENTATION_TERMS
+from engine.models.clinical_vocab import NUTRITION_DOCUMENTATION_TERMS, ClinicalStatus
 from engine.models.extracted_fact_create import (
     AllergyPayload,
     ClinicalFactPayload,
@@ -62,8 +61,11 @@ _SEX_RE = re.compile(
     r"\b(?:Sex|Gender)\s*:\s*(?P<sex>Female|Male|F|M)\b",
     flags=re.IGNORECASE,
 )
+#: The date is optional: a deidentified report redacts it and leaves only the
+#: time ("Effective Date: 08:45"). The label still starts every note, and a
+#: note boundary must not depend on a value that redaction removes.
 _EFFECTIVE_DATE_RE = re.compile(
-    r"^Effective Date\s*:\s*(?P<date>\d{1,2}/\d{1,2}/\d{4})",
+    r"^Effective Date\s*:\s*(?P<date>\d{1,2}/\d{1,2}/\d{4})?",
     flags=re.IGNORECASE,
 )
 _REPORT_DATE_RE = re.compile(
@@ -91,8 +93,14 @@ _NO_KNOWN_ALLERGIES = {
     "no known drug allergies",
 }
 _PAGE_RE = re.compile(r"(?m)^Page \d+ of \d+\s*$")
+#: The signature block PCC repeats under each note: an "Author" line followed,
+#: on the same or the next line, by "Signature:" and "[e-SIGNED]". The PDF's
+#: two columns interleave those pieces ("[e- Signature: ___" / "SIGNED]"), and
+#: redacting the author's name can take the colon after "Author" with it, so
+#: only the words are anchored, not their order.
 _TRAILING_SIGNATURE_RE = re.compile(
-    r"(?ms)\n?Author:.*?\[e-SIGNED\]\s*Signature:\s*(?:\*+|_+)\s*$",
+    r"(?m)\n?^Author\b(?=[^\n]*(?:\n[^\n]*)?Signature:)"
+    r"[^\n]*(?:\n[^\n]*)?SIGNED\][^\n]*$",
 )
 _AUTHOR_LINE_RE = re.compile(
     r"^Author\s*:\s*(?P<author>.*?)(?:\s*\[.*)?$",
@@ -107,6 +115,16 @@ _NOTE_TEXT_RE = re.compile(
     flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 _LINE_Y_TOLERANCE = 2.0
+#: Stands in for a black redaction box in a deidentified report, so a note
+#: reads "in effect [REDACTED]." rather than silently losing the span.
+_REDACTION_MARKER = "[REDACTED]"
+#: A redaction box is about one text line tall (9-13pt in PCC reports).
+#: Thinner black fills are the report's section rules, and taller ones are
+#: layout (table fills, banners), not a redacted span.
+_MIN_REDACTION_HEIGHT = 5.0
+_MAX_REDACTION_HEIGHT = 30.0
+#: Fill channels at or below this are black enough to be a redaction box.
+_REDACTION_MAX_CHANNEL = 0.1
 _HEADER_GAP_THRESHOLD = 10.0
 
 NUTRITION_TERMS = {
@@ -312,6 +330,8 @@ class PccProgressNotesExtractor(PersonExtractor):
             msg = "Progress-note extraction concurrency must be at least 1"
             raise ValueError(msg)
         self.concurrency = resolved_concurrency
+        #: The model that extracted this report's facts, recorded on each one.
+        self._model_name: str | None = None
         self._last_parsed_notes: list[ParsedProgressNote] | None = None
 
     def is_expected_format(self) -> bool:
@@ -661,6 +681,7 @@ class PccProgressNotesExtractor(PersonExtractor):
                 ai_fact,
                 person_id=prepared.person_id,
                 clinical_source_id=prepared.clinical_source_id,
+                model_name=self._model_name,
             )
             for ai_fact in extracted_clinical_facts.facts
         ]
@@ -677,6 +698,7 @@ class PccProgressNotesExtractor(PersonExtractor):
             ai_fact,
             person_id=progress_note.person_id,
             clinical_source_id=progress_note.id,
+            model_name=self._model_name,
         )
 
     @staticmethod
@@ -686,6 +708,7 @@ class PccProgressNotesExtractor(PersonExtractor):
         *,
         person_id: int | None,
         clinical_source_id: int | None,
+        model_name: str | None = None,
     ) -> ExtractedFactCreate:
         """Build the transient fact returned by a session-free worker."""
         logger.debug("AI Fact: %s", ai_fact)
@@ -700,7 +723,7 @@ class PccProgressNotesExtractor(PersonExtractor):
             payload=payload,
             confidence=ai_fact.confidence,
             confidence_reason=ai_fact.confidence_reason,
-            model_name=DATA_EXTRACTION_MODEL,
+            model_name=model_name,
             extraction_method=ExtractionMethod.AI,
             person_id=person_id,
             clinical_source_id=clinical_source_id,
@@ -752,9 +775,25 @@ class PccProgressNotesExtractor(PersonExtractor):
         )
         return result
 
-    def extract_nutrition_notes(self) -> list[ParsedProgressNote]:
-        """Parse only notes authored as nutrition or dietetics documentation."""
-        notes = self._parse_report_notes()
+    def extract_nutrition_notes(
+        self,
+        *,
+        deidentified: bool = False,
+    ) -> list[ParsedProgressNote]:
+        """Parse only notes authored as nutrition or dietetics documentation.
+
+        ``deidentified=True`` reads a report whose resident header has been
+        redacted. Identity is then neither parsed nor required: the redacted
+        fields are empty, and the header patterns would otherwise read past
+        them into the next field (an empty "Medical Record #" yields
+        "Gender"; an empty "Resident Name" runs into a diagnosis code). Each
+        black redaction box in the note text is kept as ``[REDACTED]``.
+        """
+        notes = self._parse_report_notes(
+            require_identity=not deidentified,
+            parse_identity=not deidentified,
+            mark_redactions=deidentified,
+        )
         result = [
             note
             for note in notes
@@ -770,9 +809,16 @@ class PccProgressNotesExtractor(PersonExtractor):
         self,
         *,
         require_identity: bool = True,
+        parse_identity: bool = True,
+        mark_redactions: bool = False,
     ) -> list[ParsedProgressNote]:
         """Parse every note in the report and validate person identity."""
-        notes = self._split_progress_notes(self._extract_document())
+        notes = self._split_progress_notes(
+            self._extract_document(
+                parse_identity=parse_identity,
+                mark_redactions=mark_redactions,
+            ),
+        )
         missing_person = (
             next(
                 (note for note in notes if note.source_person_identifier is None),
@@ -809,7 +855,12 @@ class PccProgressNotesExtractor(PersonExtractor):
             return ProgressNoteAction.FILTER
         return ProgressNoteAction.SEND_TO_AI
 
-    def _extract_document(self) -> list[ExtractedNote]:
+    def _extract_document(
+        self,
+        *,
+        parse_identity: bool = True,
+        mark_redactions: bool = False,
+    ) -> list[ExtractedNote]:
         extracted_pages: list[ExtractedNote] = []
         resident_identifier: str | None = None
         source_person_name: str | None = None
@@ -822,11 +873,15 @@ class PccProgressNotesExtractor(PersonExtractor):
         with pymupdf.open(self.path) as document:
             for page_index in range(document.page_count):
                 page = document.load_page(page_index)
-                lines = self._page_lines(page)
+                lines = self._page_lines(page, mark_redactions=mark_redactions)
                 raw_page_text = page.get_text("text")
-                parsed_person = self._parse_person(raw_page_text)
-                medical_record_identifier = self._parse_medical_record_identifier(
-                    raw_page_text,
+                parsed_person = (
+                    self._parse_person(raw_page_text) if parse_identity else None
+                )
+                medical_record_identifier = (
+                    self._parse_medical_record_identifier(raw_page_text)
+                    if parse_identity
+                    else None
                 )
                 if parsed_person is not None:
                     header_identifier, source_person_name = parsed_person
@@ -842,7 +897,7 @@ class PccProgressNotesExtractor(PersonExtractor):
                     resident_identifier = medical_record_identifier or header_identifier
                     date_of_birth = self._parse_date_of_birth(raw_page_text)
                     sex = self._parse_sex(raw_page_text)
-                else:
+                elif parse_identity:
                     resident_identifier = (
                         medical_record_identifier or resident_identifier
                     )
@@ -885,10 +940,16 @@ class PccProgressNotesExtractor(PersonExtractor):
         return extracted_pages
 
     @staticmethod
-    def _page_lines(page: pymupdf.Page) -> list[dict[str, float | str]]:
+    def _page_lines(
+        page: pymupdf.Page,
+        *,
+        mark_redactions: bool = False,
+    ) -> list[dict[str, float | str]]:
         grouped_words: list[list[Word]] = []
         line_tops: list[float] = []
-        words = page.get_text("words", sort=True)
+        words: list[Word] = page.get_text("words", sort=True)
+        if mark_redactions:
+            words = words + PccProgressNotesExtractor._redaction_words(page, words)
         for word in sorted(words, key=lambda item: (item[1], item[0])):
             y0 = float(word[1])
             if line_tops and abs(line_tops[-1] - y0) <= _LINE_Y_TOLERANCE:
@@ -907,6 +968,54 @@ class PccProgressNotesExtractor(PersonExtractor):
             }
             for line in grouped_words
         ]
+
+    @staticmethod
+    def _redaction_words(page: pymupdf.Page, words: list[Word]) -> list[Word]:
+        """Return a ``[REDACTED]`` word for each black box drawn over text.
+
+        Redaction removes the text and leaves a filled rectangle, often drawn
+        twice or as abutting pieces, so boxes on one line that touch are
+        merged into one span. Each span takes the vertical position of the
+        text line it covers, so it sorts into that line rather than its own.
+        """
+        boxes = sorted(
+            {
+                (rect.x0, rect.y0, rect.x1, rect.y1)
+                for drawing in page.get_drawings()
+                if (fill := drawing.get("fill")) is not None
+                and max(fill) <= _REDACTION_MAX_CHANNEL
+                and (
+                    _MIN_REDACTION_HEIGHT
+                    <= (rect := drawing["rect"]).height
+                    <= _MAX_REDACTION_HEIGHT
+                )
+                and rect.width > 0
+            },
+            key=lambda box: (box[1], box[0]),
+        )
+        spans: list[list[float]] = []
+        for x0, y0, x1, y1 in boxes:
+            last = spans[-1] if spans else None
+            if (
+                last is not None
+                and abs(last[1] - y0) <= _LINE_Y_TOLERANCE
+                and x0 <= last[2] + _LINE_Y_TOLERANCE
+            ):
+                last[2] = max(last[2], x1)
+                last[3] = max(last[3], y1)
+            else:
+                spans.append([x0, y0, x1, y1])
+
+        markers: list[Word] = []
+        for x0, y0, x1, y1 in spans:
+            middle = (y0 + y1) / 2
+            covered = next(
+                (word for word in words if word[1] <= middle <= word[3]),
+                None,
+            )
+            top, bottom = (covered[1], covered[3]) if covered else (y0, y1)
+            markers.append((x0, top, x1, bottom, _REDACTION_MARKER, -1, -1, -1))
+        return markers
 
     @staticmethod
     def _body_start_index(lines: list[dict[str, float | str]]) -> int:
@@ -958,7 +1067,7 @@ class PccProgressNotesExtractor(PersonExtractor):
             source_page=split_note.page_start,
             note_date=(
                 self._date_at_midnight(effective_date.group("date"))
-                if effective_date
+                if effective_date and effective_date.group("date")
                 else None
             ),
             note_type=note_type.group("type").strip() if note_type else None,
@@ -1077,7 +1186,7 @@ class PccProgressNotesExtractor(PersonExtractor):
         for date_format in ("%b %d, %Y", "%B %d, %Y", "%m/%d/%Y"):
             try:
                 return datetime.strptime(value, date_format).replace(tzinfo=UTC)
-            except ValueError:
+            except ValueError:  # noqa: PERF203 - a few known formats
                 continue
         return None
 
@@ -1122,6 +1231,7 @@ class PccProgressNotesExtractor(PersonExtractor):
     ) -> ExtractedClinicalFacts:
         """Run the agent and enforce its transient-fact result contract."""
         data_extraction_agent = DataExtractionAgent()
+        self._model_name = data_extraction_agent.fact_model_name
         return await data_extraction_agent.run(extraction_input)
 
     @staticmethod

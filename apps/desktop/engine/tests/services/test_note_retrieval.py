@@ -12,6 +12,7 @@ from engine.models.sql.ncp_note import NCPNote
 from engine.models.sql.person import Person
 from engine.repositories.person_repo import PersonRepo
 from engine.services.note_retrieval import NoteRetrievalService
+from engine.utils.misc import require_id
 
 
 def _session() -> Session:
@@ -60,7 +61,7 @@ def test_latest_finalized_ncp_is_previous_note() -> None:
             content="newer",
         )
 
-        previous = NoteRetrievalService(session).previous_note(person.id)
+        previous = NoteRetrievalService(session).previous_note(require_id(person.id))
 
         assert previous is not None
         assert previous.note_text == "newer"
@@ -73,7 +74,9 @@ def test_drafts_and_examples_are_not_previous_notes() -> None:
         _note(session, person.id, day=5, status=NCPNoteStatus.DRAFT)
         _note(session, None, day=6, status=NCPNoteStatus.EXAMPLE)
 
-        assert NoteRetrievalService(session).previous_note(person.id) is None
+        assert (
+            NoteRetrievalService(session).previous_note(require_id(person.id)) is None
+        )
 
 
 def test_another_persons_ncp_is_never_returned() -> None:
@@ -83,7 +86,9 @@ def test_another_persons_ncp_is_never_returned() -> None:
         other = repository.create(Person(name="D", person_identifier="D1"))
         _note(session, other.id, day=4, status=NCPNoteStatus.FINALIZED)
 
-        assert NoteRetrievalService(session).previous_note(subject.id) is None
+        assert (
+            NoteRetrievalService(session).previous_note(require_id(subject.id)) is None
+        )
 
 
 def test_progress_note_source_is_not_ncp_history() -> None:
@@ -102,4 +107,6 @@ def test_progress_note_source_is_not_ncp_history() -> None:
         )
         session.commit()
 
-        assert NoteRetrievalService(session).previous_note(person.id) is None
+        assert (
+            NoteRetrievalService(session).previous_note(require_id(person.id)) is None
+        )

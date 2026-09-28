@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import enum
 import types
 import typing
 from abc import ABC, abstractmethod
@@ -44,6 +45,13 @@ def _annotation_kwargs(annotation: object) -> dict[str, typing.Any]:
         return {"nargs": len(args), "type": args[0]}
     if origin is typing.Union or origin is types.UnionType:
         return _optional_kwargs(args[0])
+    return _scalar_kwargs(annotation)
+
+
+def _scalar_kwargs(annotation: object) -> dict[str, typing.Any]:
+    """Convert a plain value; an Enum also lists its values as choices."""
+    if isinstance(annotation, type) and issubclass(annotation, enum.Enum):
+        return {"type": annotation, "choices": list(annotation)}
     return {"type": annotation}
 
 
@@ -57,7 +65,7 @@ def _optional_kwargs(inner: object) -> dict[str, typing.Any]:
         # Literal is not callable, so this is a choices constraint just as a
         # bare Literal is.
         return {"choices": typing.get_args(inner)}
-    return {"type": inner}
+    return _scalar_kwargs(inner)
 
 
 class BaseController(ABC, typing.Generic[T]):

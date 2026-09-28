@@ -11,6 +11,7 @@ from engine.models.sql.ncp_note import NCPNote
 from engine.models.sql.person import Person
 from engine.repositories.ncp_note_repo import NCPNoteRepo
 from engine.repositories.person_repo import PersonRepo
+from engine.utils.misc import require_id
 
 
 def _session() -> Session:
@@ -44,7 +45,7 @@ def test_finalize_sets_status_and_timestamp() -> None:
             ),
         )
 
-        finalized = repository.finalize(draft.id)
+        finalized = repository.finalize(require_id(draft.id))
 
         assert finalized is draft
         assert finalized.status is NCPNoteStatus.FINALIZED
@@ -85,7 +86,7 @@ def test_latest_finalized_is_scoped_to_person() -> None:
             ),
         )
 
-        assert repository.latest_finalized(subject.id) is newest
+        assert repository.latest_finalized(require_id(subject.id)) is newest
 
 
 def test_list_examples_does_not_include_drafts_or_finalized_notes() -> None:

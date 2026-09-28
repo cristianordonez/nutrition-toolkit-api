@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import typing
 
-from engine.models.person_detail import PersonDetail
 from engine.models.person_summary import (
     MissingPersonData,
     PersonDataCategory,
@@ -14,6 +13,11 @@ from engine.models.person_summary import (
 
 if typing.TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from engine.models.person_detail import PersonDetail
+
+#: Weight change needs a current weight and at least one earlier one.
+_MIN_WEIGHT_HISTORY = 2
 
 
 class PersonSummaryService:
@@ -117,7 +121,10 @@ class PersonSummaryService:
                 label="Active medications",
                 count=len(detail.active_medications),
                 detail=cls._preview(
-                    medication.name for medication in detail.active_medications
+                    f"{medication.name} ({medication.indication})"
+                    if medication.indication
+                    else medication.name
+                    for medication in detail.active_medications
                 ),
             ),
             PersonDataCategory(
@@ -208,7 +215,7 @@ class PersonSummaryService:
     def _missing(detail: PersonDetail) -> list[MissingPersonData]:
         missing: list[MissingPersonData] = []
 
-        def add(condition: bool, key: str, label: str, reason: str) -> None:
+        def add(condition: bool, key: str, label: str, reason: str) -> None:  # noqa: FBT001 - local rule table
             if condition:
                 missing.append(
                     MissingPersonData(key=key, label=label, reason=reason),
@@ -245,7 +252,7 @@ class PersonSummaryService:
             "Nutrition needs and weight status cannot be calculated reliably.",
         )
         add(
-            len(detail.weights) < 2,
+            len(detail.weights) < _MIN_WEIGHT_HISTORY,
             "weight_history",
             "Prior weight history",
             "Weight change and clinical significance cannot be assessed.",

@@ -1,9 +1,10 @@
 """AI extraction of nutrition facts from document text.
 
-Runs on-device through Ollama by default, so a resident's documents are not
-sent anywhere. ``engine.services.ai_provider`` makes that choice for every
-agent alike; the prompt, agent wiring, and output schema are identical either
-way, only the model changes.
+Runs on-device by default -- on the local llama.cpp server -- so a resident's
+documents are not sent anywhere. The model comes from
+``engine.services.ai.controller.AIController``, which selects the provider for
+every agent alike; the prompt, agent wiring, and output schema are identical
+on every provider, and nothing here knows which one answered.
 
 Worth measuring before trusting: this schema is demanding -- a twelve-way
 discriminated union across ~23 nested definitions -- and a model that cannot
@@ -26,15 +27,17 @@ from engine.models.ai_extraction import (  # noqa: TC001
     AIExtractedFact,
     AIUnknownDocumentFact,
 )
-from engine.services.ai_provider import build_model as _build_model
-from engine.services.ai_provider import configured_provider as _configured_provider
+from engine.services.ai.boundary import recorded_name_of
+from engine.services.ai.controller import AIController, ai_controller
 
 if typing.TYPE_CHECKING:
     from pydantic_ai.models import Model
 
-logfire.instrument_pydantic_ai()
+    from engine.models.ai import AIProvider
 
-DATA_EXTRACTION_MODEL = "gpt-5.6-luna"
+# Traces keep timings and model names only. Prompts and completions hold
+# clinical data and must never be exported, whichever provider runs them.
+logfire.instrument_pydantic_ai(include_content=False, include_binary_content=False)
 
 _PROMPT_PATH = pathlib.Path(__file__).parent / "prompts" / "data_extraction_prompt.md"
 _instructions = _PROMPT_PATH.read_text(encoding="utf-8")
@@ -48,23 +51,18 @@ _instructions = _PROMPT_PATH.read_text(encoding="utf-8")
 _MODEL_RETRIES = 3
 
 
-#: Where inference runs. "openai" is hosted, "ollama" is on-device.
-ExtractionProvider = typing.Literal["openai", "ollama"]
+def build_model(
+    provider: AIProvider | None = None,
+    *,
+    ai: AIController | None = None,
+) -> Model:
+    """Return an extraction model from the AI controller.
 
-
-def configured_provider() -> ExtractionProvider:
-    """Return the provider the user's settings select."""
-    return _configured_provider()
-
-
-def build_model(provider: ExtractionProvider | None = None) -> Model:
-    """Build an extraction model, defaulting to the configured provider.
-
-    Delegates the choice to ``engine.services.ai_provider`` so extraction and
-    note generation can never disagree about where clinical data is sent,
-    while still naming the hosted model suited to extraction.
+    The controller picks the provider, so extraction and note generation can
+    never disagree about where clinical data is sent. ``provider`` overrides
+    the selection only for side-by-side comparisons.
     """
-    return _build_model(provider, cloud_model=DATA_EXTRACTION_MODEL)
+    return (ai or ai_controller()).model(provider=provider)
 
 
 class ExtractionInput(BaseModel):
@@ -90,11 +88,13 @@ class UnknownDocumentExtractionResult(BaseModel):
 
 
 def build_unknown_document_agent(
-    provider: ExtractionProvider | None = None,
+    provider: AIProvider | None = None,
+    *,
+    ai: AIController | None = None,
 ) -> Agent[None, UnknownDocumentExtractionResult]:
-    """Build an unknown-document agent bound to one provider."""
+    """Build an unknown-document agent on the controller's model."""
     agent = Agent(
-        build_model(provider),
+        build_model(provider, ai=ai),
         output_type=UnknownDocumentExtractionResult,
         instructions=_instructions,
         retries=_MODEL_RETRIES,
@@ -102,16 +102,20 @@ def build_unknown_document_agent(
     return typing.cast("Agent[None, UnknownDocumentExtractionResult]", agent)
 
 
-@functools.cache
-def _fact_extraction_agent() -> Agent[None, ExtractedClinicalFacts]:
-    """Return the shared narrative-fact extraction agent."""
+def _build_fact_agent(ai: AIController) -> Agent[None, ExtractedClinicalFacts]:
     agent = Agent(
-        build_model(),
+        build_model(ai=ai),
         output_type=ExtractedClinicalFacts,
         instructions=_instructions,
         retries=_MODEL_RETRIES,
     )
     return typing.cast("Agent[None, ExtractedClinicalFacts]", agent)
+
+
+@functools.cache
+def _fact_extraction_agent() -> Agent[None, ExtractedClinicalFacts]:
+    """Return the shared narrative-fact extraction agent."""
+    return _build_fact_agent(ai_controller())
 
 
 @functools.cache
@@ -128,22 +132,50 @@ class DataExtractionAgent:
         fact_agent: Agent[None, ExtractedClinicalFacts] | None = None,
         unknown_document_agent: Agent[None, UnknownDocumentExtractionResult]
         | None = None,
+        *,
+        ai: AIController | None = None,
     ) -> None:
-        """Store injected agents, building real ones only when first used."""
+        """Store injected agents, building real ones only when first used.
+
+        ``ai`` supplies the models; the process's controller when omitted.
+        """
         self._fact_agent = fact_agent
         self._unknown_document_agent = unknown_document_agent
+        self._ai = ai
 
     @property
     def fact_agent(self) -> Agent[None, ExtractedClinicalFacts]:
         """The narrative-fact agent, built on first use."""
-        return self._fact_agent or _fact_extraction_agent()
+        if self._fact_agent is None:
+            self._fact_agent = (
+                _fact_extraction_agent()
+                if self._ai is None
+                else _build_fact_agent(self._ai)
+            )
+        return self._fact_agent
+
+    @property
+    def fact_model_name(self) -> str | None:
+        """The model narrative facts are recorded as extracted by."""
+        return recorded_name_of(self.fact_agent.model)
+
+    @property
+    def unknown_document_model_name(self) -> str | None:
+        """The model unknown-document facts are recorded as extracted by."""
+        return recorded_name_of(self.unknown_document_agent.model)
 
     @property
     def unknown_document_agent(
         self,
     ) -> Agent[None, UnknownDocumentExtractionResult]:
         """The unknown-document agent, built on first use."""
-        return self._unknown_document_agent or _unknown_document_agent()
+        if self._unknown_document_agent is None:
+            self._unknown_document_agent = (
+                _unknown_document_agent()
+                if self._ai is None
+                else build_unknown_document_agent(ai=self._ai)
+            )
+        return self._unknown_document_agent
 
     async def run(
         self,

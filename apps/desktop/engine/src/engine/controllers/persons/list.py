@@ -7,7 +7,7 @@ import typing
 from pydantic import BaseModel
 
 from engine.controllers.base import BaseController
-from engine.controllers.session import controller_session
+from engine.database.sessions import controller_session
 from engine.models.base import ConsoleRenderableModel
 from engine.models.output import Output
 from engine.models.sql.person import Person  # noqa: TC001

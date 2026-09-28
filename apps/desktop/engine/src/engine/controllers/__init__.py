@@ -5,11 +5,11 @@ from __future__ import annotations
 import importlib
 
 _COMMAND_GROUP_MODULES = (
+    "engine.controllers.ai.app",
     "engine.controllers.calculate.app",
     "engine.controllers.demo.app",
     "engine.controllers.documents.app",
     "engine.controllers.eval.app",
-    "engine.controllers.localmodel.app",
     "engine.controllers.ncp.app",
     "engine.controllers.persons.app",
     "engine.controllers.settings.app",

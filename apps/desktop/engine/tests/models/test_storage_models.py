@@ -39,7 +39,9 @@ def test_ncp_notes_use_a_separate_table() -> None:
         "updated_at",
         "finalized_at",
     }
-    assert "ncp_note_embedding" in SQLModel.metadata.tables
+    assert "ncp_note_embedding" not in SQLModel.metadata.tables
+    assert "knowledge_chunk_embedding" not in SQLModel.metadata.tables
+    assert "embeddings" not in NCPNote.__dict__
     assert "clinical_source_embedding" not in SQLModel.metadata.tables
 
 

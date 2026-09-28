@@ -11,7 +11,7 @@ Two workspace packages, each with its own `pyproject.toml`, sharing one
 
 ```text
 apps/desktop/engine/ (import name: engine)  the product — SQLite, document extraction, on-device agents, CLI only
-apps/server/         (import name: server)  disconnected — Postgres/pgvector, FastAPI, knowledge-base RAG
+apps/server/         (import name: server)  disconnected — Postgres, FastAPI, API-key management only
 ```
 
 **`apps/desktop/engine`** is the whole running system. It owns all
@@ -29,24 +29,21 @@ not add a dependency on it from `engine`, and port from it rather than
 importing it.
 
 Vector search on-device uses `sqlite-vec`, loaded onto every connection by the
-`connect` hook in `engine.database.db`. Vectors are packed `float32` BLOBs in
-ordinary tables (`knowledge_chunk_embedding`, `ncp_note_embedding`), and
-search scores them in the query with `vec_distance_cosine`
-(`engine.utils.vector.cosine_distance`).
+`connect` hook in `engine.database.db`. Alembic creates `knowledge_chunk_vector`
+and `ncp_note_vector` as `vec0` virtual tables. They are the only embedding
+storage; there are no embedding SQLModel classes or duplicate BLOB tables.
 
-* There are no `vec0` virtual tables and no index to create, sync or drop.
-  `vec0` is a brute-force scan too, over a second copy of every vector; at the
-  corpus sizes the device holds the scalar function is just as fast. Do not
-  reintroduce one without a corpus large enough to measure the difference.
-* Every embedding row records the `model` that produced it, and search filters
-  on it. That is what stops one model's vectors ever being scored against
-  another's. Rows whose width does not match the query are skipped rather
-  than passed to sqlite-vec, which raises on a width mismatch.
-* Narrow candidates (e.g. to one manual) in the same query's `WHERE`, so
-  `LIMIT` counts only eligible rows.
+* Vector width is fixed at 384 for the local `all-MiniLM-L6-v2` embedding model.
+  Model or width changes require a new migration and re-embedding.
+* Every vector row records its model. Search filters by it and narrows eligible
+  source IDs inside the KNN query, before `k` limits the results.
+* Migration-owned source-table triggers remove vectors on deletion or changed
+  content. Repositories write vectors in the same transaction as their sources.
+* Keep vec0 tables and their shadow tables out of SQLModel metadata and Alembic
+  autogeneration. Their schema changes require manual migrations.
 * Clinical sources are provenance records and are never embedded. NCP style
   examples live in `ncp_note` with status `example`; their vectors live in
-  `ncp_note_embedding`. Bundled examples have null `person_id` and
+  `ncp_note_vector`. Bundled examples have null `person_id` and
   `facility_id`.
 
 **Cross-package rules:**
@@ -65,15 +62,25 @@ search scores them in the query with `vec_distance_cosine`
 
 ## Where inference runs
 
-On-device by default, through Ollama. `engine.services.ai_provider` makes that
-choice once for every agent, so extraction and note generation can never
-disagree about where a resident's record is sent.
+Exactly two providers, chosen by the user in Settings (`settings.ai_provider`):
+`local` (default) -- a llama.cpp `llama-server` on this machine, reached at
+`NUTRITION_AI_LLAMA_URL` -- or `openai` (hosted, with the user's own token in
+the OS keychain via `engine.services.credentials`, never in SQLite). See
+[docs/local-ai.md](docs/local-ai.md).
 
-A hosted model is used only when the user has both switched it on in Settings
-and stored their own API token, which lives in the OS keychain
-(`engine.services.credentials`) and never in SQLite. Missing either one
-falls back on-device rather than failing: the safe direction for clinical data
-is to keep it on the machine.
+`engine.services.ai.controller.AIController` is the single place a provider is
+chosen; agents ask it for a pydantic-ai `Model` (or `chat()`) and never know
+which provider answered. Never put provider- or llama.cpp-specific logic in an
+agent.
+
+* A failing provider raises; never fall back to the other one, and never
+  choose OpenAI on the user's behalf. OpenAI selected without a token is a
+  configuration error, not a switch.
+* The engine never starts, stops or locates llama-server; it only consumes
+  the URL, which must be loopback. The
+  desktop runtime will own the server's lifecycle.
+* Never log or put in an error a prompt, completion, resident detail or raw
+  provider output. Agent tracing runs with `include_content=False`.
 
 Patient-specific deterministic calculations (tube-feed rate/formula selection,
 energy needs, parenteral nutrition) never involve a model at all. They run
@@ -284,8 +291,8 @@ to the model provider, and only when a hosted model is switched on.
 
 ## Database Migrations
 
-Alembic manages schema for `apps/server`'s Postgres database only — it lives
-in `apps/server/alembic/`, not at the repository root. See
+Alembic manages each app's schema with independent environments and histories.
+The server's Postgres migrations live in `apps/server/alembic/`. See
 [`apps/server/alembic/README.md`](apps/server/alembic/README.md) for the
 full workflow and rules; the short version:
 
@@ -298,9 +305,24 @@ full workflow and rules; the short version:
 * Use manual Alembic operations when PostgreSQL-specific behavior is not represented correctly by autogenerate.
 * Do not use `alembic stamp` as a substitute for running migrations unless the schema is already verified to match the target revision.
 
-`apps/desktop/engine` uses one SQLite database for clinical data, local
-reference data, and non-secret application settings. It has no migration
-tooling. `create_all` bootstraps a fresh database but never alters existing
-tables. During this pre-release refactor the database is reset when the schema
-changes; do not add Alembic to the engine -- it is configured for the server's
-Postgres only.
+`apps/desktop/engine` uses one SQLite database for clinical data, local reference
+data, and non-secret settings. Its revisions live in
+`engine/database/migrations/`; `database/bootstrap.py` upgrades to head and seeds
+defaults at CLI startup. `database/db.py` configures connections only, and
+`database/sessions.py` owns session boundaries used by controllers and services.
+
+A fresh install starts from `engine/assets/reference/facts.db`, which
+`initialize_database()` copies into place only when the user's database file
+does not exist, then migrates like any other. It holds reference data only --
+knowledge base, NCP examples, their vectors, the formula catalog -- and is
+built from a curated database by `scripts/build_reference_database.py`, which
+refuses any file with person, facility, document or clinical rows. It is
+committed to git and required by wheel and PyInstaller builds; rebuild and
+commit it after changing the knowledge base or NCP examples.
+
+The repository-root and engine-package-root `alembic.ini` files are development
+entry points for the desktop database. Runtime bootstrap uses a programmatic
+Alembic Config and packaged revisions. Never use `create_all()` for the running
+application, import current models from a revision, or silently stamp/reset an
+unversioned database. See the desktop migrations README for development commands
+and the initial-schema boundary for legacy databases.

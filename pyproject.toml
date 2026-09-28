@@ -33,6 +33,8 @@ fix = [
     "ruff>=0.15.16",
 ]
 type = [
+    # ty also checks both apps' tests, which import pytest.
+    { include-group = "test" },
     "ty>=0.0.57",
 ]
 
@@ -88,11 +90,15 @@ src.include = [
     "apps/server/tests",
     "apps/desktop/engine/tests",
 ]
+# PyInstaller is present only when freezing the engine, never in this env.
+# `tests.*` holds shared test helpers; each app has its own `tests` package, so
+# neither is added as a root (they would shadow each other).
+analysis.allowed-unresolved-imports = [ "PyInstaller.**", "tests.**" ]
 
 [tool.codespell]
 count = true
 quiet-level = 3
-ignore-words-list = "abl,abd,ehr,gir,practioner,selectin,tge"
+ignore-words-list = "abl,abd,datas,ehr,gir,practioner,selectin,tge"
 
 [tool.pytest]
 # No default `testpaths`: always pass an explicit path (e.g.

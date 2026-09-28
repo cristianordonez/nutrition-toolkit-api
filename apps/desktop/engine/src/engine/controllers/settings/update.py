@@ -7,11 +7,12 @@ import typing
 from pydantic import BaseModel, Field
 
 from engine.controllers.base import BaseController
-from engine.controllers.session import settings_session
 from engine.controllers.settings.show import SettingsResult
+from engine.database.sessions import settings_session
+from engine.models.ai import AIProvider  # noqa: TC001 - Pydantic field type
 from engine.models.output import Output
 from engine.repositories.settings_repo import SettingsRepo
-from engine.services.credentials import set_cloud_token
+from engine.services.credentials import has_cloud_token, set_cloud_token
 
 if typing.TYPE_CHECKING:
     from sqlmodel import Session
@@ -28,10 +29,6 @@ _DARK_MODE_VALUES: dict[str, bool | None] = {
 }
 
 
-#: Whether a setting is being switched on or off.
-Toggle = typing.Literal["on", "off"]
-
-
 class SettingsUpdateOptions(BaseModel):
     """The settings to change. Anything left unset is untouched."""
 
@@ -39,9 +36,12 @@ class SettingsUpdateOptions(BaseModel):
         default=None,
         description="Force dark ('on'), force light ('off'), or follow the OS",
     )
-    use_cloud_model: Toggle | None = Field(
+    ai_provider: AIProvider | None = Field(
         default=None,
-        description="Send inference to a hosted model instead of on-device",
+        description=(
+            "Where inference runs: 'local' (llama.cpp on this machine) "
+            "or 'openai' (hosted, with your own API token)"
+        ),
     )
     cloud_api_token: str | None = Field(
         default=None,
@@ -68,8 +68,8 @@ class SettingsUpdateController(BaseController):
         changes: dict[str, object] = {}
         if options.dark_mode is not None:
             changes["dark_mode"] = _DARK_MODE_VALUES[options.dark_mode]
-        if options.use_cloud_model is not None:
-            changes["use_cloud_model"] = options.use_cloud_model == "on"
+        if options.ai_provider is not None:
+            changes["ai_provider"] = options.ai_provider
 
         # The token never reaches SQLite -- it goes to the OS keychain,
         # and only a boolean "is one stored" is ever reported back.
@@ -83,7 +83,10 @@ class SettingsUpdateController(BaseController):
             # should do.
             stored = repository.update(**changes) if changes else repository.get()
         return Output(
-            result=SettingsResult(settings=stored),
+            result=SettingsResult(
+                settings=stored,
+                has_cloud_token=has_cloud_token(),
+            ),
             controller=self.name,
             exit_code=0,
         )
@@ -93,5 +96,4 @@ __all__ = [
     "DarkMode",
     "SettingsUpdateController",
     "SettingsUpdateOptions",
-    "Toggle",
 ]

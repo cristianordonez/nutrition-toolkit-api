@@ -40,7 +40,6 @@ def test_wound_report_uses_report_end_date_as_observed_at(
     assert payload.observed_at == datetime(2026, 8, 26, tzinfo=UTC)
 
 
-
 def test_wound_report_without_date_is_rejected(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -125,7 +124,8 @@ def test_reimported_wound_observation_updates_existing_row(
         repository.load_transformed_documents([documents[1]])
 
         person = repository.get_by_identifier("RES1")
-        assert person is not None and person.id is not None
+        assert person is not None
+        assert person.id is not None
         wounds = repository.get_clinical_records(person.id).wounds
         assert len(wounds) == 1
         assert wounds[0].wound_number == "16"

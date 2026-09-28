@@ -12,6 +12,7 @@ from engine.repositories.clinical_source_repo import ClinicalSourceRepo
 from engine.repositories.person_repo import PersonRepo
 from engine.services.person.detail_builder import PersonDetailBuilder
 from engine.services.person.person_service import PersonService
+from engine.utils.misc import require_id
 
 if typing.TYPE_CHECKING:
     import pathlib
@@ -37,14 +38,15 @@ def test_ingestion_builds_a_generation_request_from_persisted_data(
 
         assert len(result.documents) == 1
         person = PersonRepo(session).get_by_identifier("R1")
-        assert person is not None and person.id is not None
+        assert person is not None
+        assert person.id is not None
         stored_weight = PersonRepo(session).get_weights_by_person_ids([person.id])[0]
         assert stored_weight.weight_lb == EXPECTED_WEIGHT
 
     with Session(db_engine, expire_on_commit=False) as session:
         person = PersonRepo(session).get_by_identifier("R1")
         assert person is not None
-        records = PersonRepo(session).get_clinical_records(person.id)
+        records = PersonRepo(session).get_clinical_records(require_id(person.id))
         detail = PersonDetailBuilder().build(person, records)
 
         budget_result = ContextBudgeter().budget(

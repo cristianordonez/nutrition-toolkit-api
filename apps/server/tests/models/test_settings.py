@@ -27,7 +27,7 @@ def test_settings_loads_environment_variables(
         "NTK_DATABASE_URL",
         DEFAULT_DATABASE_URL,
     )
-    settings = Settings()
+    settings = Settings()  # ty: ignore[missing-argument] - read from env
     assert settings.database_url == PostgresDsn(DEFAULT_DATABASE_URL)
     assert settings.port == DEFAULT_PORT
 
@@ -45,5 +45,5 @@ def test_settings_uses_env_file(
         "NTK_PORT",
     ]:
         monkeypatch.delenv(key, raising=False)
-    settings = Settings()
+    settings = Settings()  # ty: ignore[missing-argument] - read from env
     assert settings.port == DEFAULT_PORT

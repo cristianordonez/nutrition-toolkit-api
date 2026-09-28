@@ -38,6 +38,9 @@ _ICD10_CODE_RE = re.compile(r"[A-Z]\d{2}(?:\.\d{1,4})?")
 #: that follows it is the rest of the phone number.
 _AREA_CODE_RE = re.compile(r"\d{3}")
 _PHONE_NUMBER_RE = re.compile(r"\d{3}[-.\s]\d{4}\b")
+#: A resident's name has no digits and no "Label :" -- an address or a
+#: labelled header line has one or the other.
+_NOT_A_PERSON_NAME_RE = re.compile(r"[\d:]")
 _REPORT_DATE_RE = re.compile(
     r"\bDate\s*:\s*(?P<date>"
     r"\d{1,2}/\d{1,2}/\d{4}"
@@ -367,15 +370,21 @@ class PccOrderReportExtractor(PersonExtractor):
         * a coded diagnosis -- ``Illness, unspecified (R69)`` -- because an
           ICD-10 code reads as an identifier;
         * a clinic address -- ``OLSEN, EDISON, NJ (732) 549-3286`` -- because
-          a telephone area code does too.
+          a telephone area code does too. When the rest of the number wraps
+          to the next line -- ``118 &104, Edison, NJ 08837 Phone: (732)`` --
+          nothing after the area code shows it is a phone number;
+        * a labelled header line -- ``Physician : Dr. A. Smith, MD 1.1 (9)``.
 
-        Neither the name nor the order can rule these out: the name is free
-        text, and a resident row may legitimately carry no order at all, with
-        the order following on the next line. So the identifier is what gets
-        checked, by rejecting the two shapes that are known not to be one.
+        The order cannot rule these out: a resident row may legitimately carry
+        no order at all, with the order following on the next line. So the
+        identifier is checked against the shapes known not to be one, and the
+        name must be free of digits and "Label :" colons, which a resident's
+        name never has and addresses and labelled lines do.
         """
         identifier = person_match.group("id").strip()
         order = person_match.group("order").strip()
+        if _NOT_A_PERSON_NAME_RE.search(person_match.group("name")):
+            return False
         if _ICD10_CODE_RE.fullmatch(identifier):
             return False
         return not (
@@ -411,7 +420,7 @@ class PccOrderReportExtractor(PersonExtractor):
                     normalized,
                     format_string,
                 ).date()
-            except ValueError:
+            except ValueError:  # noqa: PERF203 - a few known formats
                 continue
         return None
 
@@ -430,7 +439,7 @@ class PccOrderReportExtractor(PersonExtractor):
                     normalized,
                     format_string,
                 ).time()
-            except ValueError:
+            except ValueError:  # noqa: PERF203 - a few known formats
                 continue
         return None
 

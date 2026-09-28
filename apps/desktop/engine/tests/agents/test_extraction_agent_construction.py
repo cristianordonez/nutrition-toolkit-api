@@ -1,4 +1,4 @@
-"""The extraction agents can actually be built.
+"""The extraction agents can actually be built, on either provider.
 
 Every other test in this suite injects a stub agent, which is right -- they
 are testing extraction logic, not pydantic-ai. The cost is that nothing
@@ -9,51 +9,51 @@ chunk, after the document had already been read. These build the real thing.
 
 from __future__ import annotations
 
-import typing
-
 import pytest
 
 from engine.agents import data_extraction_agent
 from engine.agents.data_extraction_agent import (
+    DataExtractionAgent,
     UnknownDocumentExtractionResult,
     build_unknown_document_agent,
 )
-from engine.services import ai_provider
+from engine.models.ai import AIProvider
+from engine.models.settings import LocalAISettings
+from engine.services.ai.controller import AIController
+from engine.services.ai.local_provider import LocalAIProvider
+from engine.services.ai.openai_provider import OpenAIProvider
 
-if typing.TYPE_CHECKING:
-    from engine.agents.data_extraction_agent import ExtractionProvider
 
-_PROVIDERS: tuple[ExtractionProvider, ...] = ("openai", "ollama")
-
-
-@pytest.fixture(autouse=True)
-def _api_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Give the hosted provider a token so construction is not the thing tested."""
-    monkeypatch.setattr(
-        ai_provider,
-        "get_cloud_token",
-        lambda: "test-token-not-used",
+def _controller(selected: AIProvider) -> AIController:
+    """Both real providers; building a model contacts neither."""
+    return AIController(
+        LocalAIProvider(LocalAISettings(_env_file=None)),  # ty: ignore[unknown-argument]
+        OpenAIProvider(token=lambda: "test-token-not-used"),
+        selected=lambda: selected,
     )
 
 
-@pytest.mark.parametrize("provider", _PROVIDERS)
-def test_the_unknown_document_agent_builds(provider: ExtractionProvider) -> None:
-    agent = build_unknown_document_agent(provider)
+@pytest.mark.parametrize("provider", list(AIProvider))
+def test_the_unknown_document_agent_builds(provider: AIProvider) -> None:
+    agent = build_unknown_document_agent(ai=_controller(provider))
 
     assert agent.output_type is UnknownDocumentExtractionResult
 
 
-def test_the_narrative_fact_agent_builds() -> None:
+@pytest.mark.parametrize("provider", list(AIProvider))
+def test_the_narrative_fact_agent_builds(provider: AIProvider) -> None:
+    assert DataExtractionAgent(ai=_controller(provider)).fact_agent is not None
+
+
+def test_the_default_agent_builds_without_a_running_server() -> None:
     data_extraction_agent._fact_extraction_agent.cache_clear()  # noqa: SLF001
 
     assert data_extraction_agent._fact_extraction_agent() is not None  # noqa: SLF001
 
 
-@pytest.mark.parametrize("provider", _PROVIDERS)
-def test_a_schema_violation_is_sent_back_to_the_model(
-    provider: ExtractionProvider,
-) -> None:
-    """One omitted field must not cost a whole 600-token window of a document."""
-    agent = build_unknown_document_agent(provider)
+@pytest.mark.parametrize("provider", list(AIProvider))
+def test_a_schema_violation_is_sent_back_to_the_model(provider: AIProvider) -> None:
+    """One omitted field must not cost a whole window of a document."""
+    agent = build_unknown_document_agent(ai=_controller(provider))
 
     assert agent._max_output_retries > 1  # noqa: SLF001

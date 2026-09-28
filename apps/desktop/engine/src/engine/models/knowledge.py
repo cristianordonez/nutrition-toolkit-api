@@ -34,6 +34,7 @@ class KnowledgeSectionType(StrEnum):
     CONTENT = "content"
     REFERENCES = "references"
     TABLE_OF_CONTENTS = "table_of_contents"
+    METADATA = "metadata"
 
 
 class ExtractedKnowledgePage(BaseModel):
@@ -41,6 +42,8 @@ class ExtractedKnowledgePage(BaseModel):
 
     page_number: int = Field(ge=1)
     text: str
+    section_path: tuple[str, ...] = ()
+    """Article hierarchy from the PDF outline, including continuation pages."""
 
 
 class KnowledgeChunkCreate(BaseModel):
@@ -55,6 +58,7 @@ class KnowledgeChunkCreate(BaseModel):
     section_title: str | None = None
     source_page_start: int = Field(ge=1)
     source_page_end: int = Field(ge=1)
+    section_path: str | None = None
 
     @model_validator(mode="after")
     def validate_page_range(self) -> KnowledgeChunkCreate:

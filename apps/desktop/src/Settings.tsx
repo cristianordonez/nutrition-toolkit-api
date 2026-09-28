@@ -1,11 +1,57 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  type AIProvider,
+  type AIStatus,
   type DarkMode,
   type SettingsView,
+  aiStatus,
   getSettings,
   resolveTheme,
   updateSettings,
 } from "./engine";
+
+/** One line saying whether the selected provider can answer now. */
+function statusLine(status: AIStatus | null): string {
+  if (!status) return "Checking…";
+  if (status.status !== "ready") return status.error ?? "Not available";
+  return status.model ? `Ready · Model: ${status.model}` : "Ready";
+}
+
+function ProviderOption({
+  value,
+  selected,
+  title,
+  hint,
+  detail,
+  disabled,
+  onSelect,
+}: {
+  value: AIProvider;
+  selected: boolean;
+  title: string;
+  hint: string;
+  detail: string;
+  disabled: boolean;
+  onSelect: (value: AIProvider) => void;
+}) {
+  return (
+    <label className={`choice${selected ? " choice--on" : ""}`}>
+      <input
+        type="radio"
+        name="ai-provider"
+        value={value}
+        checked={selected}
+        disabled={disabled}
+        onChange={() => onSelect(value)}
+      />
+      <span className="setting__text">
+        <span className="setting__label">{title}</span>
+        <span className="setting__hint">{hint}</span>
+        <span className="setting__hint">{detail}</span>
+      </span>
+    </label>
+  );
+}
 
 /**
  * Apply a stored appearance choice to the document.
@@ -49,12 +95,21 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState("");
+  const [status, setStatus] = useState<AIStatus | null>(null);
+
+  const refreshStatus = useCallback(() => {
+    setStatus(null);
+    aiStatus()
+      .then(setStatus)
+      .catch((caught: Error) => setError(caught.message));
+  }, []);
 
   useEffect(() => {
     getSettings()
       .then(setView)
       .catch((caught: Error) => setError(caught.message));
-  }, []);
+    refreshStatus();
+  }, [refreshStatus]);
 
   async function save(changes: Parameters<typeof updateSettings>[0]) {
     if (saving) return;
@@ -64,6 +119,9 @@ export function SettingsPage() {
       const updated = await updateSettings(changes);
       setView(updated);
       applyTheme(updated.settings.dark_mode);
+      if (changes.aiProvider || changes.cloudApiToken !== undefined) {
+        refreshStatus();
+      }
     } catch (caught) {
       setError((caught as Error).message);
     } finally {
@@ -76,11 +134,13 @@ export function SettingsPage() {
   const followingSystem = settings?.dark_mode === null;
   const busy = !view || saving;
 
-  // What the user asked for is not always what runs: enabling the hosted model
-  // without a stored token falls back on-device, and saying so plainly is the
-  // point of showing the active provider rather than just the switch.
-  const cloudRequested = settings?.use_cloud_model ?? false;
-  const usingCloud = view?.active_provider === "openai";
+  const provider = settings?.ai_provider ?? "local";
+  // Status describes the selected provider only.
+  const statusFor = (value: AIProvider) =>
+    value === provider ? `Status: ${statusLine(status)}` : "";
+  const selectProvider = (value: AIProvider) => {
+    if (value !== provider) void save({ aiProvider: value });
+  };
 
   return (
     <div className="app__columns">
@@ -121,28 +181,33 @@ export function SettingsPage() {
 
         <h2 className="panel__title panel__title--spaced">AI model</h2>
 
-        <div className="setting">
-          <div className="setting__text">
-            <span className="setting__label">Use a cloud model</span>
-            <span className="setting__hint">
-              {usingCloud
-                ? "Resident data is sent to the hosted model."
-                : cloudRequested
-                  ? "Enabled, but no API token is stored — running on-device."
-                  : "Everything runs on this device. Nothing is sent out."}
-            </span>
-          </div>
-          <Switch
-            checked={cloudRequested}
-            label="Use a cloud model"
+        <div className="choices" role="radiogroup" aria-label="AI provider">
+          <ProviderOption
+            value="local"
+            selected={provider === "local"}
+            title="Local AI"
+            hint="Runs entirely on this device."
+            detail={statusFor("local")}
             disabled={busy}
-            onChange={() =>
-              save({ useCloudModel: cloudRequested ? "off" : "on" })
+            onSelect={selectProvider}
+          />
+          <ProviderOption
+            value="openai"
+            selected={provider === "openai"}
+            title="OpenAI"
+            hint="Uses the OpenAI API. Resident data is sent to OpenAI."
+            detail={
+              statusFor("openai") ||
+              (view?.has_cloud_token
+                ? "API token stored."
+                : "Needs your own API token.")
             }
+            disabled={busy}
+            onSelect={selectProvider}
           />
         </div>
 
-        {cloudRequested && (
+        {provider === "openai" && (
           <div className="tokenbox">
             <label className="field">
               <span className="field__label">
@@ -192,8 +257,12 @@ export function SettingsPage() {
         <h2 className="panel__title">Where your data goes</h2>
         <p className="hint">
           Extraction and note generation run on this device by default, so a
-          resident's record never leaves it. Turning on a cloud model sends
-          that record to a hosted model instead, and needs your own API token.
+          resident's record never leaves it. Choosing OpenAI sends that record
+          to a hosted model instead, and needs your own API token.
+        </p>
+        <p className="hint">
+          If the chosen provider is unavailable, the app says so and stops. It
+          never switches to another provider on its own.
         </p>
         <p className="hint">
           The token is kept in your operating system's keychain, not in the
@@ -203,7 +272,11 @@ export function SettingsPage() {
         {view && (
           <dl className="result">
             <dt>Running on</dt>
-            <dd>{usingCloud ? "Hosted model" : "This device (Ollama)"}</dd>
+            <dd>
+              {provider === "openai"
+                ? "Hosted model (OpenAI)"
+                : "This device (Local AI)"}
+            </dd>
           </dl>
         )}
       </section>

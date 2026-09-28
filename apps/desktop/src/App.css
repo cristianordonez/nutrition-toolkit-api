@@ -298,18 +298,6 @@ body {
   overflow-wrap: anywhere;
 }
 
-.local__line {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 0 5px;
-  font-size: 12px;
-}
-
-.local__label {
-  color: var(--text-muted);
-}
-
 .panel__heading {
   display: flex;
   align-items: baseline;
@@ -431,12 +419,16 @@ body {
   border-color: var(--text-muted);
 }
 
-.resident__context {
-  width: 100%;
+/* A selected resident's own assessment type and context, under their row. */
+.resident__options {
+  display: flex;
   margin: -1px 0 6px;
+}
+
+.resident__type,
+.resident__context {
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 0 0 7px 7px;
   border-top: 0;
   background: var(--surface);
   color: var(--text);
@@ -444,6 +436,19 @@ body {
   font-size: 12px;
 }
 
+.resident__type {
+  flex: none;
+  border-radius: 0 0 0 7px;
+}
+
+.resident__context {
+  flex: 1;
+  min-width: 0;
+  border-left: 0;
+  border-radius: 0 0 7px 0;
+}
+
+.resident__type:focus-visible,
 .resident__context:focus-visible {
   outline: none;
   border-color: var(--text-muted);
@@ -902,4 +907,29 @@ body {
   margin-left: -18px;
   opacity: 0.75;
   font-style: italic;
+}
+
+/* AI provider choice in Settings. */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.choice input {
+  margin-top: 3px;
+}
+
+.choice--on {
+  border-color: var(--ready);
 }

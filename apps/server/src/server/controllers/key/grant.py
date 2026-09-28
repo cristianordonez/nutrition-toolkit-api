@@ -4,9 +4,9 @@ import logging
 
 from pydantic import BaseModel, Field
 
+from server.controllers.key.base import APIKeyController
 from server.models.base import ConsoleRenderableModel
 from server.models.output import Output
-from server.controllers.key.base import APIKeyController
 
 logger = logging.getLogger(__name__)
 

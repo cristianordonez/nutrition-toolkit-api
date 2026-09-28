@@ -4,12 +4,7 @@ from __future__ import annotations
 
 import importlib
 
-_COMMAND_GROUP_MODULES = (
-    "server.controllers.ncp.app",
-    "server.controllers.calculate.app",
-    "server.controllers.key.app",
-    "server.controllers.knowledge.app",
-)
+_COMMAND_GROUP_MODULES = ("server.controllers.key.app",)
 
 
 def load_command_groups() -> None:

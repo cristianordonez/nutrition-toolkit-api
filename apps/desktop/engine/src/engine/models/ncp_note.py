@@ -6,12 +6,17 @@ from enum import StrEnum
 
 
 class NCPNoteType(StrEnum):
-    """Supported Nutrition Care Process assessment categories."""
+    """Supported Nutrition Care Process Note categories."""
 
+    ADMISSION = "admission"
+    READMISSION = "readmission"
+    SIGNIFICANT_CHANGE = "significant_change"
+    WOUND = "wound"
     ANNUAL = "annual"
     QUARTERLY = "quarterly"
-    ADMISSION = "admission"
-    SIGNIFICANT_CHANGE = "significant_change"
+    FOLLOW_UP = "follow_up"
+    PAYER_CHANGE = "payer_change"
+    HIGH_RISK = "high_risk"
 
 
 class NCPNoteStatus(StrEnum):
